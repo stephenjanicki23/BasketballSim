@@ -23,6 +23,7 @@ from bballsim.ratings import (
     ATTRIBUTE_GROUPS,
     ATTRIBUTE_LABELS,
     HiddenAttributes,
+    LEAGUE_AVERAGE,
     Ratings,
     SCALE_MAX,
     SCALE_MIN,
@@ -31,6 +32,8 @@ from bballsim.ratings import (
     normalize,
     overall,
     personality_label,
+    tier_label,
+    to_display,
 )
 
 ALL_COMPOSITES = [
@@ -86,9 +89,26 @@ class TestAttributeSchema(unittest.TestCase):
         )
 
     def test_normalize_and_advantage(self):
-        self.assertAlmostEqual(normalize(50.0), 0.0)
-        self.assertAlmostEqual(normalize(100.0), 1.0)
-        self.assertAlmostEqual(advantage(75.0, 50.0), 0.5)
+        self.assertAlmostEqual(normalize(LEAGUE_AVERAGE), 0.0)
+        self.assertAlmostEqual(normalize(SCALE_MAX), 1.0)
+        self.assertAlmostEqual(advantage(15.0, LEAGUE_AVERAGE), 0.5)
+
+    def test_scale_is_one_to_twenty(self):
+        self.assertEqual((SCALE_MIN, LEAGUE_AVERAGE, SCALE_MAX), (1.0, 10.0, 20.0))
+
+    def test_tier_labels_cover_the_whole_scale(self):
+        self.assertEqual(tier_label(20), "Generational")
+        self.assertEqual(tier_label(16.5), "All-Star")
+        self.assertEqual(tier_label(12), "Average starter")
+        self.assertEqual(tier_label(10), "Rotation player")
+        self.assertEqual(tier_label(2), "Amateur")
+        for value in range(1, 21):
+            self.assertTrue(tier_label(value))
+
+    def test_display_scale_conversion(self):
+        self.assertEqual(to_display(14.4), 14)
+        self.assertEqual(to_display(10.0, scale=100), 50)
+        self.assertEqual(to_display(SCALE_MAX, scale=100), 100)
 
 
 class TestComposites(unittest.TestCase):
@@ -107,13 +127,13 @@ class TestComposites(unittest.TestCase):
         # A typo in a blend would raise here rather than silently reading 50.
         blank = Player(id="x", first_name="Test", last_name="Player")
         for composite in ALL_COMPOSITES:
-            self.assertAlmostEqual(composite(blank), 50.0, places=6, msg=composite.__name__)
+            self.assertAlmostEqual(composite(blank), LEAGUE_AVERAGE, places=6, msg=composite.__name__)
 
     def test_composites_respond_to_their_inputs(self):
         low = Player(id="low", first_name="Low", last_name="Rim")
         high = copy.deepcopy(low)
         for key in ("layups", "close_shot", "dunking", "finishing_through_contact"):
-            setattr(high.ratings, key, 95.0)
+            setattr(high.ratings, key, 19.0)
         self.assertGreater(C.shooting_rim(high), C.shooting_rim(low))
         # ...and only to their inputs: rim finishing is not a three-point skill.
         self.assertAlmostEqual(C.shooting_corner_three(high), C.shooting_corner_three(low))
@@ -126,7 +146,7 @@ class TestComposites(unittest.TestCase):
     def test_overall_is_position_aware(self):
         big = Player(id="c", first_name="Big", last_name="Man", position=Position.C)
         for key in ("rim_protection", "defensive_rebounding", "interior_defense", "blocks"):
-            setattr(big.ratings, key, 90.0)
+            setattr(big.ratings, key, 18.0)
         self.assertGreater(overall(big.ratings, "C"), overall(big.ratings, "PG"))
 
 
@@ -136,9 +156,9 @@ class TestPersonality(unittest.TestCase):
         self.assertNotIn("personality", HiddenAttributes.attribute_names())
 
     def test_model_professional_and_volatile_are_distinguishable(self):
-        ratings = Ratings(competitive_drive=90)
-        pro = HiddenAttributes(professionalism=90, ambition=70, temperament=80)
-        volatile = HiddenAttributes(professionalism=40, ambition=85, temperament=20)
+        ratings = Ratings(competitive_drive=18)
+        pro = HiddenAttributes(professionalism=18, ambition=14, temperament=16)
+        volatile = HiddenAttributes(professionalism=8, ambition=17, temperament=4)
         self.assertEqual(personality_label(ratings, pro), "Model Professional")
         self.assertEqual(personality_label(ratings, volatile), "Volatile")
 
@@ -244,8 +264,8 @@ class TestRatingsDriveOutcomes(unittest.TestCase):
             "mid_range", "fadeaway", "three_point", "catch_and_shoot",
             "pull_up_shooting", "off_ball_shooting",
         )
-        self.apply(good, shooting, 88.0)
-        self.apply(bad, shooting, 35.0)
+        self.apply(good, shooting, 17.0)
+        self.apply(bad, shooting, 5.0)
 
         good_points, bad_points = self.paired(good, bad, opponent, lambda r: r.home_score)
         self.assertGreater(good_points, bad_points + 15)
@@ -255,8 +275,8 @@ class TestRatingsDriveOutcomes(unittest.TestCase):
         soft = copy.deepcopy(anchored)
         rim = ("rim_protection", "interior_defense", "blocks", "post_defense",
                "help_defense", "defensive_iq")
-        self.apply(anchored, rim, 92.0)
-        self.apply(soft, rim, 30.0)
+        self.apply(anchored, rim, 18.0)
+        self.apply(soft, rim, 4.0)
 
         strong_allowed, soft_allowed = self.paired(
             anchored, soft, weak, lambda r: r.away_score
@@ -267,8 +287,8 @@ class TestRatingsDriveOutcomes(unittest.TestCase):
         secure, opponent = make_teams(2)
         loose = copy.deepcopy(secure)
         keys = ("ball_handling", "dribbling", "decision_making", "composure", "focus")
-        self.apply(secure, keys, 92.0)
-        self.apply(loose, keys, 25.0)
+        self.apply(secure, keys, 18.0)
+        self.apply(loose, keys, 4.0)
 
         secure_tov, loose_tov = self.paired(
             secure, loose, opponent, lambda r: r.home_box.total("turnovers")
@@ -281,7 +301,7 @@ class TestRatingsDriveOutcomes(unittest.TestCase):
         base, opponent = make_teams(2)
         defensive = copy.deepcopy(base)
         self.apply(defensive, ("perimeter_defense", "interior_defense",
-                               "shot_contest", "rim_protection"), 95.0)
+                               "shot_contest", "rim_protection"), 19.0)
 
         scored_def, scored_base = self.paired(
             defensive, base, opponent, lambda r: r.home_score
@@ -291,8 +311,8 @@ class TestRatingsDriveOutcomes(unittest.TestCase):
     def test_all_round_better_team_wins_almost_always(self):
         strong, weak = make_teams(2)
         every = Ratings.attribute_names()
-        self.apply(strong, every, 85.0)
-        self.apply(weak, every, 40.0)
+        self.apply(strong, every, 17.0)
+        self.apply(weak, every, 5.0)
 
         wins = sum(
             1 for i in range(20)

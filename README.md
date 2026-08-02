@@ -16,7 +16,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 39 tests
+python3 -m unittest discover -s tests    # 42 tests
 ```
 
 In the browser: the left column is the schedule, click any game to open the
@@ -26,8 +26,27 @@ forward, and **Tracker speed** to control how fast the play-by-play reveals
 
 ## Ratings
 
-Every player carries **81 visible attributes** and **15 hidden ones**, on a 1–99
-scale where 50 is league average. Visible attributes live in `Ratings`, grouped
+Every player carries **81 visible attributes** and **15 hidden ones**, on a
+**1–20 scale** — Football Manager style, not 0–100:
+
+| | | | |
+|---|---|---|---|
+| **20** Generational | **14–15** High-end starter | **10–11** Rotation player | **4–5** G League |
+| **18–19** Elite NBA | **12–13** Average starter | **8–9** Bench player | **1–3** Amateur |
+| **16–17** All-Star | | **6–7** Fringe NBA | |
+
+Twenty steps rather than a hundred because a point has to *mean* something.
+14 → 15 is a real upgrade; players come out spiky instead of clustered in the
+80s; and a scouting report reads as strengths and weaknesses rather than noise.
+`tier_label()` maps any value to the table above, and `to_display()` will render
+on 0–100 if an audience expects it — storage is always 1–20.
+
+Values are stored as floats and clamped, not rounded. The UI rounds; the
+fractional headroom is what a development system needs to move a player from 14
+to 15 across a season rather than in one jump. Chemistry stays on its own
+0–100 axis, because it measures a relationship rather than an ability.
+
+Visible attributes live in `Ratings`, grouped
 for display into Shooting, Playmaking, Finishing, Defense, Rebounding,
 Athleticism, Basketball IQ, Intangibles, Mental, and Guard/Wing/Big skills.
 Hidden attributes live in `HiddenAttributes` — potential, injury proneness,
@@ -120,18 +139,23 @@ Simulated across a placeholder league, per team-game:
 
 | | sim | NBA (recent) |
 |---|---|---|
-| Points | 108.5 | 114 |
-| Possessions | 100.8 | 99 |
-| FG% / 3P% / FT% | .429 / .351 / .792 | .472 / .366 / .783 |
-| AST / TOV / REB | 23.6 / 14.7 / 53.2 | 26.5 / 13.5 / 53 |
-| STL / BLK / PF | 9.1 / 5.1 / 18.6 | 7.5 / 5.0 / 19 |
-| OREB% | .242 | .235 |
-| Score SD / mean margin | 14.4 / 16.1 | ~13 / ~11.5 |
+| Points | 109.4 | 114 |
+| Possessions | 100.1 | 99 |
+| FG% / 3P% / FT% | .433 / .361 / .776 | .472 / .366 / .783 |
+| AST / TOV / REB | 22.1 / 13.6 / 54.0 | 26.5 / 13.5 / 53 |
+| STL / BLK / PF | 8.4 / 5.3 / 19.1 | 7.5 / 5.0 / 19 |
+| OREB% | .256 | .235 |
+| Score SD / mean margin | 16.2 / 17.3 | ~13 / ~11.5 |
+
+The scale change from 0–99 to 1–20 moved almost none of these, because the
+engine works in normalized units — `(rating − average) / average` — rather than
+raw points. Only two constants were expressed in rating points and had to move
+with the scale: the nightly form swing, and the placeholder generator.
 
 Close enough to feel like basketball. Every constant that produces those
 numbers is at the top of `bballsim/engine/possession.py`.
 
-One known gap: **games are more spread out than real ones** — mean margin 16.1
+One known gap: **games are more spread out than real ones** — mean margin 17.3
 against a real 11.5, so blowouts show up more often than they should. That is
 what you get when every possession is an independent coin flip. Real games
 correlate: pace is shared, leads change how both teams play, garbage time pulls
@@ -159,7 +183,7 @@ with a cursor and appends whatever comes back.
 
 ```
 bballsim/
-  ratings.py       81 visible + 15 hidden attributes, the 1-99 scale, groups,
+  ratings.py       81 visible + 15 hidden attributes, the 1-20 scale, tiers,
                    display labels, derived personality, positional overall
   composites.py    attributes -> the ~25 numbers a possession reads
   tendencies       (in ratings.py) what a player wants to do vs. how good he is

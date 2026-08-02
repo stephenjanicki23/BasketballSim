@@ -26,7 +26,7 @@ from .. import composites as C
 from ..chemistry import ChemistryProfile
 from ..chemistry import evaluate as evaluate_chemistry
 from ..models import Lineup, Player
-from ..ratings import advantage, normalize
+from ..ratings import SCALE_MAX, advantage, fraction, normalize
 from ..tactics import defensive_effect, offensive_effect, slider_mod
 from .events import EventType, ShotZone, format_clock
 from .rng import SimRandom
@@ -37,7 +37,7 @@ from .state import GameState, TeamState
 # average defence with neutral tactics.
 # --------------------------------------------------------------------------
 
-BASE_POSSESSION_SECONDS = 15.0
+BASE_POSSESSION_SECONDS = 14.2
 POSSESSION_SECONDS_SPREAD = 5.5
 MIN_POSSESSION_SECONDS = 2.5
 
@@ -76,7 +76,7 @@ BASE_ASSIST_RATE = 0.60          # share of made field goals that are assisted
 BASE_OFF_REBOUND_RATE = 0.268
 BASE_BLOCK_RATE = 0.058          # of two-point attempts
 BASE_SHOOTING_FOUL_RATE = 0.105
-BASE_NON_SHOOTING_FOUL_RATE = 0.105
+BASE_NON_SHOOTING_FOUL_RATE = 0.120
 BASE_FT_PCT = 0.737
 
 CHEMISTRY_TURNOVER_SENSITIVITY = 0.045
@@ -96,8 +96,10 @@ CLUTCH_SHOOTING_SWING = 0.055
 CLUTCH_TURNOVER_SWING = 0.035
 
 # Consistency (hidden) sets how far a player's night drifts from his rating.
+# Expressed as a share of the scale so it survives a scale change: 0.09 of
+# 1-20 is a swing of about 1.8 points, roughly one tier on a bad night.
 # Drawn once per game in `PossessionEngine.set_form`.
-MAX_FORM_SWING = 9.0
+MAX_FORM_SWING = 0.09 * SCALE_MAX
 
 
 @dataclass
@@ -131,7 +133,7 @@ class PossessionEngine:
         """
         for player in players:
             spread = MAX_FORM_SWING * (1.0 - normalize(player.hidden.consistency) * 0.7)
-            self.form[player.id] = self.rng.gauss(0.0, max(1.0, spread))
+            self.form[player.id] = self.rng.gauss(0.0, max(0.2, spread))
 
     def _skill(self, player: Player, composite) -> float:
         """A composite, adjusted for tonight's form."""
@@ -400,7 +402,7 @@ class PossessionEngine:
         return self.rng.weighted_choice(off.lineup.players, weights)
 
     def _usage_weight(self, player: Player) -> float:
-        base = 0.35 + player.tendencies.usage / 100.0
+        base = 0.35 + fraction(player.tendencies.usage)
         # Creators and finishers command more of the offence than their raw
         # tendency alone suggests.
         skill = 1.0 + normalize(C.shot_creation(player)) * 0.20
@@ -411,14 +413,14 @@ class PossessionEngine:
         three_push = (
             slider_mod(off.tactics.three_point_emphasis) * 0.30
             + offensive_effect(off.tactics, "three_rate")
-            + (shooter.tendencies.three_point_rate - 50.0) / 100.0 * 0.60
+            + normalize(shooter.tendencies.three_point_rate) * 0.30
         )
         rim_push = (
             offensive_effect(off.tactics, "rim_rate")
-            + (shooter.tendencies.rim_rate - 50.0) / 100.0 * 0.60
+            + normalize(shooter.tendencies.rim_rate) * 0.30
             + normalize(shooter.ratings.acceleration) * 0.15
         )
-        post_push = (shooter.tendencies.post_up_rate - 50.0) / 100.0 * 0.50
+        post_push = normalize(shooter.tendencies.post_up_rate) * 0.25
 
         rim_push -= defensive_effect(deff.tactics, "rim_pct") * -1.0
         rim_push -= slider_mod(deff.tactics.help_intensity) * 0.15
@@ -523,7 +525,7 @@ class PossessionEngine:
             return None
         candidates = [p for p in off.lineup if p.id != shooter.id]
         weights = [
-            0.2 + normalize(self._skill(p, C.playmaking)) + p.tendencies.pass_first / 200.0
+            0.2 + normalize(self._skill(p, C.playmaking)) + fraction(p.tendencies.pass_first) * 0.5
             for p in candidates
         ]
         return self.rng.weighted_choice(candidates, weights)
@@ -621,7 +623,7 @@ class PossessionEngine:
         composite = C.offensive_rebounding if offensive else C.defensive_rebounding
         rebounder = self.rng.weighted_choice(
             side.lineup.players,
-            [0.25 + normalize(self._skill(p, composite)) + p.tendencies.crash_glass / 300.0
+            [0.25 + normalize(self._skill(p, composite)) + fraction(p.tendencies.crash_glass) / 3.0
              for p in side.lineup],
         )
         line = side.state.box.line(rebounder.id, rebounder.name)

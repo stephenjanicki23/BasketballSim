@@ -19,9 +19,16 @@ from dataclasses import dataclass
 
 from . import composites as C
 from .models import Lineup, Team
-from .ratings import normalize
+from .ratings import fraction, normalize
 
+# Chemistry is stored 0-100 rather than on the 1-20 rating scale: it measures a
+# relationship, not an ability, and never appears in a scout's attribute list.
 NEUTRAL_CHEMISTRY = 50.0
+
+
+def normalize_chemistry(value: float) -> float:
+    """0-100 chemistry -> the same -1..+1 units the engine works in."""
+    return (value - NEUTRAL_CHEMISTRY) / NEUTRAL_CHEMISTRY
 
 
 @dataclass
@@ -77,7 +84,7 @@ def evaluate(team: Team, lineup: Lineup) -> ChemistryProfile:
         for j in range(i + 1, len(ids))
     ]
     pair_average = sum(pairs) / len(pairs) if pairs else NEUTRAL_CHEMISTRY
-    relational = normalize(0.4 * team.team_chemistry + 0.6 * pair_average)
+    relational = normalize_chemistry(0.4 * team.team_chemistry + 0.6 * pair_average)
 
     # Character: who these five are, rather than how long they have played
     # together. Leadership is weighted toward the best leader on the floor --
@@ -98,7 +105,7 @@ def evaluate(team: Team, lineup: Lineup) -> ChemistryProfile:
     # Spacing: how many of the five can genuinely shoot it, weighted by how
     # willing they are to. One non-shooter is survivable, three is not.
     shooters = [
-        normalize(C.spacing(p)) * (0.5 + p.tendencies.three_point_rate / 100.0)
+        normalize(C.spacing(p)) * (0.5 + fraction(p.tendencies.three_point_rate))
         for p in lineup
     ]
     spacing = sum(shooters) / 5.0

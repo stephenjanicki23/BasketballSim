@@ -5,8 +5,20 @@ Two dataclasses hold everything a player is:
     Ratings           81 visible attributes -- what a scout can see
     HiddenAttributes  15 hidden attributes -- personality, ceiling, fragility
 
-Scale is 1-99 throughout:
-    20 = unplayable   50 = league average   75 = All-Star   90+ = MVP tier
+Scale is 1-20 throughout, Football Manager style:
+
+    20      generational        12-13   average starter     6-7   fringe NBA
+    18-19   elite NBA           10-11   rotation player     4-5   G League
+    16-17   All-Star             8-9    bench player        1-3   amateur
+    14-15   high-end starter
+
+Twenty steps rather than a hundred because one point has to *mean* something:
+14 -> 15 is a real upgrade, players end up spiky rather than clustered in the
+80s, and a scout's report reads as strengths and weaknesses instead of noise.
+
+Values are stored as floats and clamped, not rounded. The UI rounds for
+display; the fractional headroom is what a development system will need to
+move a player from 14 to 15 over a season rather than in one jump.
 
 The engine never reads a raw attribute directly. `bballsim/composites.py`
 rolls these into the ~25 numbers a possession actually needs, which is the
@@ -17,9 +29,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 
-LEAGUE_AVERAGE = 50.0
-SCALE_MIN = 1.0
-SCALE_MAX = 99.0
+# 10 is the league-average *player*; an average starter sits at 12-13.
+LEAGUE_AVERAGE = 10.0
+SCALE_MIN = 1.0        # the tier table bottoms out at 1; 0 would mean "absent"
+SCALE_MAX = 20.0
 
 
 def clamp(value: float, low: float = SCALE_MIN, high: float = SCALE_MAX) -> float:
@@ -27,7 +40,7 @@ def clamp(value: float, low: float = SCALE_MIN, high: float = SCALE_MAX) -> floa
 
 
 def normalize(rating: float) -> float:
-    """Map a 1-99 rating onto roughly -1.0 .. +1.0, centred on league average.
+    """Map a 1-20 rating onto roughly -0.9 .. +1.0, centred on league average.
 
     The engine works in these normalized units so probability modifiers read
     as "how much does a full scale of talent move this outcome".
@@ -40,9 +53,20 @@ def advantage(offense: float, defense: float) -> float:
     return normalize(offense) - normalize(defense)
 
 
+def fraction(value: float) -> float:
+    """A rating as 0.0-1.0 of the scale.
+
+    Used where the engine wants a share rather than an edge -- how much of the
+    offence a player wants, how hard he crashes the glass. Going through this
+    helper rather than dividing by a literal is what let the scale change from
+    0-99 to 1-20 without touching a probability.
+    """
+    return value / SCALE_MAX
+
+
 @dataclass
 class Ratings:
-    """Visible attributes, on the 1-99 scale.
+    """Visible attributes, on the 1-20 scale.
 
     Flat rather than nested: the engine references these constantly and
     grouping is handled by ATTRIBUTE_GROUPS below, which is display metadata.
@@ -180,7 +204,7 @@ class Tendencies:
 
     Kept apart from Ratings on purpose: a low-usage elite shooter and a
     high-volume chucker can share a three_point rating and behave nothing
-    alike. Values are 1-99 and the engine turns them into selection weights.
+    alike. Values are 1-20 and the engine turns them into selection weights.
     """
 
     usage: float = LEAGUE_AVERAGE           # share of possessions he wants
@@ -367,6 +391,40 @@ DISPLAY_OVERRIDES: dict[str, str] = {
 }
 
 
+# --------------------------------------------------------------------------
+# What a number means. Used for tooltips, scout reports and the roster UI --
+# a 1-20 scale is only an improvement if the tiers are legible.
+# --------------------------------------------------------------------------
+
+RATING_TIERS: tuple[tuple[float, str], ...] = (
+    (20.0, "Generational"),
+    (18.0, "Elite NBA"),
+    (16.0, "All-Star"),
+    (14.0, "High-end starter"),
+    (12.0, "Average starter"),
+    (10.0, "Rotation player"),
+    (8.0, "Bench player"),
+    (6.0, "Fringe NBA"),
+    (4.0, "G League"),
+    (1.0, "Amateur"),
+)
+
+
+def tier_label(rating: float) -> str:
+    for floor, label in RATING_TIERS:
+        if rating >= floor:
+            return label
+    return RATING_TIERS[-1][1]
+
+
+def to_display(rating: float, scale: int = 20) -> int:
+    """Render a rating on the 1-20 scale, or on 0-100 for audiences that
+    expect it. Storage is always 1-20; this is presentation only."""
+    if scale == 100:
+        return round(rating / SCALE_MAX * 100)
+    return round(rating)
+
+
 def display_name(key: str) -> str:
     return DISPLAY_OVERRIDES.get(key, key.replace("_", " ").title())
 
@@ -384,29 +442,31 @@ def personality_label(ratings: Ratings, hidden: HiddenAttributes) -> str:
     determination = ratings.competitive_drive
     loyalty = hidden.loyalty
 
+    # Thresholds are on the 1-20 scale: 16 = "elite for this trait",
+    # 14 = strong, 11 = above average, 7 = a genuine flaw.
     # Temperament gates first: a volatile player is volatile no matter how
     # driven he is, which is exactly why the label is worth knowing.
-    if temperament <= 30 and ambition >= 70:
+    if temperament <= 6 and ambition >= 14:
         return "Volatile"
-    if temperament <= 35:
+    if temperament <= 7:
         return "Temperamental"
-    if professionalism <= 30:
+    if professionalism <= 6:
         return "Casual"
-    if professionalism >= 80 and determination >= 80 and temperament >= 70:
+    if professionalism >= 16 and determination >= 16 and temperament >= 14:
         return "Model Professional"
-    if ratings.leadership >= 75 and hidden.locker_room_presence >= 70:
+    if ratings.leadership >= 15 and hidden.locker_room_presence >= 14:
         return "Born Leader"
-    if professionalism >= 70 and determination >= 70:
+    if professionalism >= 14 and determination >= 14:
         return "Professional"
-    if determination >= 80 and ambition >= 75:
+    if determination >= 16 and ambition >= 15:
         return "Driven"
-    if ambition >= 80 and loyalty <= 35:
+    if ambition >= 16 and loyalty <= 7:
         return "Ambitious"
-    if loyalty >= 80 and professionalism >= 60:
+    if loyalty >= 16 and professionalism >= 12:
         return "Loyal"
-    if determination >= 65:
+    if determination >= 13:
         return "Determined"
-    if temperament >= 70 and professionalism >= 55:
+    if temperament >= 14 and professionalism >= 11:
         return "Level Headed"
     return "Balanced"
 

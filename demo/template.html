@@ -542,6 +542,7 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 .scouting .attr-heading { color: var(--away); }
 .composite-group .attr-heading { color: var(--home); }
 
+.squad-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .scout-switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .scout-switch input { accent-color: var(--accent); }
 
@@ -767,10 +768,19 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
       <div class="card">
         <div class="card-head">
           <h2>Squad</h2>
-          <label class="scout-switch">
-            <input type="checkbox" id="scout-toggle" />
-            <span>Show scouted attributes</span>
-          </label>
+          <div class="squad-controls">
+            <label class="scout-switch" for="scale-toggle">
+              <span>Scale</span>
+              <select id="scale-toggle" aria-label="Rating display scale">
+                <option value="20" selected>1–20</option>
+                <option value="100">0–100</option>
+              </select>
+            </label>
+            <label class="scout-switch">
+              <input type="checkbox" id="scout-toggle" />
+              <span>Show scouted attributes</span>
+            </label>
+          </div>
         </div>
         <div class="squad-layout">
           <ul id="roster-list" class="roster-list"></ul>
@@ -783,6 +793,7 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
               <div class="profile-badges">
                 <span class="chip"><span class="chip-label">Personality</span><span class="chip-value" id="profile-personality">—</span></span>
                 <span class="chip"><span class="chip-label">Overall</span><span class="chip-value" id="profile-ovr">—</span></span>
+                <span class="chip"><span class="chip-label">Tier</span><span class="chip-value" id="profile-tier">—</span></span>
               </div>
             </div>
             <div id="attribute-groups" class="attr-grid"></div>
@@ -790,7 +801,11 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
           </div>
         </div>
         <p class="note">
-          81 visible attributes on a 1–99 scale where 50 is league average. The
+          81 visible attributes on a <strong>1–20 scale</strong>, Football Manager style:
+          20 is generational, 16–17 an All-Star, 12–13 an average starter, 10–11 a
+          rotation player, 4–5 G League. Twenty steps rather than a hundred so one
+          point means something — 14 → 15 is a real upgrade, and players come out
+          spiky rather than clustered. Hover any value for its tier. The
           engine never reads one directly — <strong>composites</strong> blend them into the
           ~25 numbers a possession turns on, so no single attribute dominates and
           balance lives in one file. Tick <em>scouted attributes</em> to reveal the 14

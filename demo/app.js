@@ -208,6 +208,7 @@ const state = {
   teamId: null,
   playerId: null,
   showHidden: false,
+  displayScale: 20,
   lastTick: 0,
   frame: null,
 };
@@ -720,6 +721,11 @@ function renderTeams() {
     renderPlayer();
   });
 
+  $("#scale-toggle").addEventListener("change", (e) => {
+    state.displayScale = Number(e.target.value);
+    renderTeamDetail();
+  });
+
   renderTeamDetail();
 }
 
@@ -767,7 +773,9 @@ function renderTeamDetail() {
     nameWrap.appendChild(el("span", "player-name", player.name));
     nameWrap.appendChild(el("span", "roster-meta", `${player.age} · ${player.personality}`));
     row.appendChild(nameWrap);
-    row.appendChild(el("span", "roster-ovr", String(Math.round(player.ovr))));
+    const ovrCell = el("span", "roster-ovr", String(displayValue(player.ovr)));
+    ovrCell.title = `${player.ovr.toFixed(1)} — ${tierLabel(player.ovr)}`;
+    row.appendChild(ovrCell);
 
     const open = () => { state.playerId = player.id; renderTeamDetail(); };
     row.addEventListener("click", open);
@@ -790,7 +798,8 @@ function renderPlayer() {
   $("#profile-name").textContent = player.name;
   $("#profile-meta").textContent =
     `${player.pos} · ${player.age} years · ${formatHeight(player.height)} · ${player.weight} lb · #${player.jersey}`;
-  $("#profile-ovr").textContent = String(Math.round(player.ovr));
+  $("#profile-ovr").textContent = String(displayValue(player.ovr));
+  $("#profile-tier").textContent = tierLabel(player.ovr);
   $("#profile-personality").textContent = player.personality;
 
   const groups = $("#attribute-groups");
@@ -833,15 +842,30 @@ function attributeColumn(title, keys, values, names, extraClass) {
   return wrap;
 }
 
+/* Storage is always 1-20. `displayScale` only changes presentation. */
+function displayValue(value) {
+  const { max } = state.data.scale;
+  return state.displayScale === 100 ? Math.round((value / max) * 100) : Math.round(value);
+}
+
+function tierLabel(value) {
+  for (const [floor, label] of state.data.scale.tiers) {
+    if (value >= floor) return label;
+  }
+  return state.data.scale.tiers[state.data.scale.tiers.length - 1][1];
+}
+
 function attributeRow(label, value, key) {
+  const { min, max } = state.data.scale;
   const row = el("li", "attr-row");
   row.appendChild(el("span", "attr-name", label));
-  const chip = el("span", "attr-value", String(Math.round(value)));
+  const chip = el("span", "attr-value", String(displayValue(value)));
   // One hue, light to dark: magnitude reads down the column at a glance.
-  chip.style.setProperty("--heat", String(Math.max(0, Math.min(1, (value - 30) / 60))));
-  if (value >= 80) chip.classList.add("is-elite");
+  const heat = (value - min) / (max - min);
+  chip.style.setProperty("--heat", String(Math.max(0, Math.min(1, heat))));
+  if (value >= 16) chip.classList.add("is-elite");
   row.appendChild(chip);
-  row.title = `${label}: ${Math.round(value)}`;
+  row.title = `${label}: ${value.toFixed(1)} / ${max} — ${tierLabel(value)}`;
   return row;
 }
 

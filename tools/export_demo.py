@@ -31,6 +31,10 @@ from bballsim.ratings import (
     ATTRIBUTE_GROUPS,
     ATTRIBUTE_LABELS,
     HiddenAttributes,
+    LEAGUE_AVERAGE,
+    RATING_TIERS,
+    SCALE_MAX,
+    SCALE_MIN,
     Ratings,
     display_name,
 )
@@ -115,11 +119,11 @@ def export_team(league: League, team) -> dict:
                 "jersey": p.jersey,
                 "ovr": p.overall,
                 "personality": p.personality,
-                "ratings": {k: round(v) for k, v in p.ratings.to_dict().items()},
-                "tendencies": {k: round(v) for k, v in p.tendencies.to_dict().items()},
+                "ratings": {k: round(v, 1) for k, v in p.ratings.to_dict().items()},
+                "tendencies": {k: round(v, 1) for k, v in p.tendencies.to_dict().items()},
                 # Normally invisible. Shipped so the demo can show what a
                 # scouting report would eventually reveal.
-                "hidden": {k: round(v) for k, v in p.hidden.to_dict().items()},
+                "hidden": {k: round(v, 1) for k, v in p.hidden.to_dict().items()},
                 "composites": {k: round(fn(p), 1) for k, fn in EXPORTED_COMPOSITES.items()},
             }
             for p in team.players
@@ -205,6 +209,12 @@ def main() -> None:
         "attributeNames": {k: display_name(k) for k in Ratings.attribute_names()},
         "hiddenNames": {k: display_name(k) for k in HiddenAttributes.attribute_names()},
         "compositeOrder": list(EXPORTED_COMPOSITES),
+        "scale": {
+            "min": SCALE_MIN,
+            "max": SCALE_MAX,
+            "average": LEAGUE_AVERAGE,
+            "tiers": [[floor, label] for floor, label in RATING_TIERS],
+        },
         "teams": [export_team(league, t) for t in league.teams.values()],
         "games": [export_game(g, league) for g in finals],
         "standings": league.standings_table(),

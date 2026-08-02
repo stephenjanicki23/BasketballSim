@@ -13,7 +13,7 @@ from __future__ import annotations
 import random
 
 from .models import Player, Position, Team
-from .ratings import HiddenAttributes, Ratings, Tendencies
+from .ratings import HiddenAttributes, Ratings, Tendencies, clamp
 from .tactics import DefensiveScheme, OffensiveScheme, Tactics
 
 _TEAM_NAMES = [
@@ -63,88 +63,88 @@ _FIRST_NAMES = [
 
 _POSITION_PROFILE: dict[Position, dict[str, float]] = {
     Position.PG: {
-        "close_shot": -4, "layups": 6, "dunking": -22, "three_point": 8,
-        "free_throws": 8, "off_ball_shooting": -2,
-        "finishing_through_contact": -10, "floater": 12, "euro_step": 10,
-        "post_moves": -22, "post_footwork": -22, "post_hook": -24, "fadeaway": -4,
-        "passing": 18, "ball_handling": 20, "dribbling": 20, "court_vision": 18,
-        "pick_and_roll_handler": 18, "decision_making": 10, "creativity": 12,
-        "assist_iq": 16,
-        "perimeter_defense": 6, "interior_defense": -20, "help_defense": -6,
-        "blocks": -22, "steals": 8, "switchability": -6, "post_defense": -22,
-        "rim_protection": -26, "shot_contest": -4,
-        "offensive_rebounding": -18, "defensive_rebounding": -16,
-        "boxing_out": -14, "rebound_positioning": -10, "rebound_timing": -8,
-        "speed": 12, "acceleration": 14, "agility": 14, "quickness": 16,
-        "strength": -14, "balance": 6,
-        "pick_and_roll_creation": 18, "isolation": 8, "pull_up_shooting": 10,
-        "transition_play": 14, "pace_control": 18,
-        "catch_and_shoot": 2, "cutting": -6, "off_ball_movement": -4,
-        "wing_defense": -6, "transition_finishing": 4,
-        "screen_setting": -18, "roll_man": -22, "passing_from_post": -12,
-        "offensive_awareness": 8, "spatial_awareness": 8,
+        "close_shot": -0.8, "layups": 1.2, "dunking": -4.4, "three_point": 1.6,
+        "free_throws": 1.6, "off_ball_shooting": -0.4,
+        "finishing_through_contact": -2.0, "floater": 2.4, "euro_step": 2.0,
+        "post_moves": -4.4, "post_footwork": -4.4, "post_hook": -4.8, "fadeaway": -0.8,
+        "passing": 3.6, "ball_handling": 4.0, "dribbling": 4.0, "court_vision": 3.6,
+        "pick_and_roll_handler": 3.6, "decision_making": 2.0, "creativity": 2.4,
+        "assist_iq": 3.2,
+        "perimeter_defense": 1.2, "interior_defense": -4.0, "help_defense": -1.2,
+        "blocks": -4.4, "steals": 1.6, "switchability": -1.2, "post_defense": -4.4,
+        "rim_protection": -5.2, "shot_contest": -0.8,
+        "offensive_rebounding": -3.6, "defensive_rebounding": -3.2,
+        "boxing_out": -2.8, "rebound_positioning": -2.0, "rebound_timing": -1.6,
+        "speed": 2.4, "acceleration": 2.8, "agility": 2.8, "quickness": 3.2,
+        "strength": -2.8, "balance": 1.2,
+        "pick_and_roll_creation": 3.6, "isolation": 1.6, "pull_up_shooting": 2.0,
+        "transition_play": 2.8, "pace_control": 3.6,
+        "catch_and_shoot": 0.4, "cutting": -1.2, "off_ball_movement": -0.8,
+        "wing_defense": -1.2, "transition_finishing": 0.8,
+        "screen_setting": -3.6, "roll_man": -4.4, "passing_from_post": -2.4,
+        "offensive_awareness": 1.6, "spatial_awareness": 1.6,
     },
     Position.SG: {
-        "three_point": 14, "mid_range": 12, "free_throws": 6,
-        "off_ball_shooting": 12, "shot_selection": 2,
-        "layups": 4, "euro_step": 6, "fadeaway": 4,
-        "post_moves": -16, "post_hook": -18, "post_footwork": -16,
-        "ball_handling": 8, "dribbling": 8, "passing": 2, "court_vision": 2,
-        "perimeter_defense": 6, "interior_defense": -14, "blocks": -16,
-        "steals": 4, "rim_protection": -20, "post_defense": -16,
-        "offensive_rebounding": -12, "defensive_rebounding": -10, "boxing_out": -8,
-        "speed": 8, "acceleration": 8, "agility": 8, "quickness": 8, "strength": -6,
-        "pull_up_shooting": 12, "catch_and_shoot": 14, "isolation": 6,
-        "off_ball_movement": 10, "transition_play": 6,
-        "screen_setting": -12, "roll_man": -16, "passing_from_post": -8,
+        "three_point": 2.8, "mid_range": 2.4, "free_throws": 1.2,
+        "off_ball_shooting": 2.4, "shot_selection": 0.4,
+        "layups": 0.8, "euro_step": 1.2, "fadeaway": 0.8,
+        "post_moves": -3.2, "post_hook": -3.6, "post_footwork": -3.2,
+        "ball_handling": 1.6, "dribbling": 1.6, "passing": 0.4, "court_vision": 0.4,
+        "perimeter_defense": 1.2, "interior_defense": -2.8, "blocks": -3.2,
+        "steals": 0.8, "rim_protection": -4.0, "post_defense": -3.2,
+        "offensive_rebounding": -2.4, "defensive_rebounding": -2.0, "boxing_out": -1.6,
+        "speed": 1.6, "acceleration": 1.6, "agility": 1.6, "quickness": 1.6, "strength": -1.2,
+        "pull_up_shooting": 2.4, "catch_and_shoot": 2.8, "isolation": 1.2,
+        "off_ball_movement": 2.0, "transition_play": 1.2,
+        "screen_setting": -2.4, "roll_man": -3.2, "passing_from_post": -1.6,
     },
     Position.SF: {
-        "three_point": 6, "mid_range": 4, "layups": 6,
-        "finishing_through_contact": 6, "offensive_versatility": 10,
-        "off_ball_shooting": 6,
-        "perimeter_defense": 6, "wing_defense": 12, "switchability": 8,
-        "defensive_rebounding": 2, "help_defense": 4,
-        "cutting": 10, "off_ball_movement": 8, "transition_finishing": 8,
-        "catch_and_shoot": 6,
-        "post_moves": -4, "post_hook": -6, "rim_protection": -8,
-        "screen_setting": -4, "roll_man": -6,
+        "three_point": 1.2, "mid_range": 0.8, "layups": 1.2,
+        "finishing_through_contact": 1.2, "offensive_versatility": 2.0,
+        "off_ball_shooting": 1.2,
+        "perimeter_defense": 1.2, "wing_defense": 2.4, "switchability": 1.6,
+        "defensive_rebounding": 0.4, "help_defense": 0.8,
+        "cutting": 2.0, "off_ball_movement": 1.6, "transition_finishing": 1.6,
+        "catch_and_shoot": 1.2,
+        "post_moves": -0.8, "post_hook": -1.2, "rim_protection": -1.6,
+        "screen_setting": -0.8, "roll_man": -1.2,
     },
     Position.PF: {
-        "close_shot": 8, "layups": 6, "dunking": 12,
-        "finishing_through_contact": 12, "post_moves": 10, "post_footwork": 10,
-        "post_hook": 8, "three_point": -6, "off_ball_shooting": -4,
-        "ball_handling": -14, "dribbling": -14, "passing": -6,
-        "court_vision": -6, "pick_and_roll_handler": -14, "assist_iq": -6,
-        "interior_defense": 12, "help_defense": 8, "blocks": 10,
-        "post_defense": 12, "rim_protection": 8, "perimeter_defense": -4,
-        "offensive_rebounding": 12, "defensive_rebounding": 14,
-        "boxing_out": 14, "rebound_positioning": 12, "rebound_timing": 10,
-        "strength": 14, "vertical_leap": 8, "speed": -6, "quickness": -8,
-        "agility": -6,
-        "screen_setting": 12, "roll_man": 12, "passing_from_post": 6,
-        "isolation": -8, "pull_up_shooting": -8, "pick_and_roll_creation": -14,
-        "pace_control": -10, "cutting": 4,
+        "close_shot": 1.6, "layups": 1.2, "dunking": 2.4,
+        "finishing_through_contact": 2.4, "post_moves": 2.0, "post_footwork": 2.0,
+        "post_hook": 1.6, "three_point": -1.2, "off_ball_shooting": -0.8,
+        "ball_handling": -2.8, "dribbling": -2.8, "passing": -1.2,
+        "court_vision": -1.2, "pick_and_roll_handler": -2.8, "assist_iq": -1.2,
+        "interior_defense": 2.4, "help_defense": 1.6, "blocks": 2.0,
+        "post_defense": 2.4, "rim_protection": 1.6, "perimeter_defense": -0.8,
+        "offensive_rebounding": 2.4, "defensive_rebounding": 2.8,
+        "boxing_out": 2.8, "rebound_positioning": 2.4, "rebound_timing": 2.0,
+        "strength": 2.8, "vertical_leap": 1.6, "speed": -1.2, "quickness": -1.6,
+        "agility": -1.2,
+        "screen_setting": 2.4, "roll_man": 2.4, "passing_from_post": 1.2,
+        "isolation": -1.6, "pull_up_shooting": -1.6, "pick_and_roll_creation": -2.8,
+        "pace_control": -2.0, "cutting": 0.8,
     },
     Position.C: {
-        "close_shot": 14, "layups": 8, "dunking": 20,
-        "finishing_through_contact": 16, "post_moves": 16, "post_footwork": 16,
-        "post_hook": 18, "floater": -4,
-        "three_point": -20, "mid_range": -12, "free_throws": -12,
-        "off_ball_shooting": -14, "fadeaway": -6,
-        "ball_handling": -22, "dribbling": -22, "passing": -8,
-        "court_vision": -10, "pick_and_roll_handler": -22, "assist_iq": -8,
-        "creativity": -8,
-        "interior_defense": 20, "rim_protection": 20, "post_defense": 20,
-        "blocks": 20, "help_defense": 10, "perimeter_defense": -14,
-        "switchability": -12, "steals": -8,
-        "offensive_rebounding": 18, "defensive_rebounding": 20,
-        "boxing_out": 18, "rebound_positioning": 16, "rebound_timing": 14,
-        "strength": 20, "vertical_leap": 8, "speed": -14, "quickness": -16,
-        "agility": -14, "acceleration": -12,
-        "screen_setting": 20, "roll_man": 20, "passing_from_post": 12,
-        "isolation": -16, "pull_up_shooting": -18, "pick_and_roll_creation": -22,
-        "transition_play": -12, "pace_control": -14, "cutting": -4,
-        "wing_defense": -14,
+        "close_shot": 2.8, "layups": 1.6, "dunking": 4.0,
+        "finishing_through_contact": 3.2, "post_moves": 3.2, "post_footwork": 3.2,
+        "post_hook": 3.6, "floater": -0.8,
+        "three_point": -4.0, "mid_range": -2.4, "free_throws": -2.4,
+        "off_ball_shooting": -2.8, "fadeaway": -1.2,
+        "ball_handling": -4.4, "dribbling": -4.4, "passing": -1.6,
+        "court_vision": -2.0, "pick_and_roll_handler": -4.4, "assist_iq": -1.6,
+        "creativity": -1.6,
+        "interior_defense": 4.0, "rim_protection": 4.0, "post_defense": 4.0,
+        "blocks": 4.0, "help_defense": 2.0, "perimeter_defense": -2.8,
+        "switchability": -2.4, "steals": -1.6,
+        "offensive_rebounding": 3.6, "defensive_rebounding": 4.0,
+        "boxing_out": 3.6, "rebound_positioning": 3.2, "rebound_timing": 2.8,
+        "strength": 4.0, "vertical_leap": 1.6, "speed": -2.8, "quickness": -3.2,
+        "agility": -2.8, "acceleration": -2.4,
+        "screen_setting": 4.0, "roll_man": 4.0, "passing_from_post": 2.4,
+        "isolation": -3.2, "pull_up_shooting": -3.6, "pick_and_roll_creation": -4.4,
+        "transition_play": -2.4, "pace_control": -2.8, "cutting": -0.8,
+        "wing_defense": -2.8,
     },
 }
 
@@ -177,14 +177,32 @@ def _make_player(
     first_name: str,
     last_name: str,
 ) -> Player:
-    """tier is 0..1 -- how good this player is relative to his team's roster."""
-    skill_base = 42 + tier * 36        # bench guys sit near 42, best player near 78
-    character_base = rng.gauss(52, 9)  # independent of on-court ability
+    """tier is 0..1 -- how good this player is relative to his team's roster.
+
+    On the 1-20 scale the tiers are the point: a roster's best player lands
+    around 15-17 (high-end starter to All-Star), his rotation sits at 10-12,
+    and the twelfth man is an 8 who can do one thing. Players are given a
+    handful of spikes and holes rather than a flat profile, because a scale
+    this short is only useful if it produces obvious strengths and weaknesses.
+    """
+    skill_base = 7.5 + tier * 7.0      # twelfth man ~7.5, best player ~14.5
+    character_base = rng.gauss(10.5, 2.0)  # independent of on-court ability
     profile = _POSITION_PROFILE[position]
 
+    # Specialisation: a few attributes he is known for, a few he cannot do.
+    skills = [n for n in Ratings.attribute_names() if n not in _CHARACTER_ATTRIBUTES]
+    spikes = set(rng.sample(skills, rng.randint(3, 6)))
+    holes = set(rng.sample([n for n in skills if n not in spikes], rng.randint(3, 6)))
+
     def draw(attribute: str) -> float:
-        base = character_base if attribute in _CHARACTER_ATTRIBUTES else skill_base
-        return max(15.0, min(96.0, rng.gauss(base + profile.get(attribute, 0.0), 7.0)))
+        if attribute in _CHARACTER_ATTRIBUTES:
+            return clamp(rng.gauss(character_base, 1.6))
+        base = skill_base + profile.get(attribute, 0.0)
+        if attribute in spikes:
+            base += rng.uniform(1.8, 3.6)
+        elif attribute in holes:
+            base -= rng.uniform(1.8, 3.6)
+        return clamp(rng.gauss(base, 1.3))
 
     ratings = Ratings(**{name: draw(name) for name in Ratings.attribute_names()})
 
@@ -192,33 +210,33 @@ def _make_player(
     # Young players have room to grow; a 33-year-old is what he is.
     growth_left = max(0.0, (28 - age) / 8.0)
 
-    def bounded_gauss(mu: float, sigma: float, low: float = 5.0, high: float = 95.0) -> float:
-        return max(low, min(high, rng.gauss(mu, sigma)))
+    def gauss(mu: float, sigma: float) -> float:
+        return clamp(rng.gauss(mu, sigma))
 
     hidden = HiddenAttributes(
-        potential_ability=max(skill_base, min(99.0, skill_base + growth_left * rng.uniform(4, 26))),
-        injury_proneness=bounded_gauss(45, 16),
-        consistency=bounded_gauss(52 + tier * 10, 14, 10.0),
-        big_game_performance=bounded_gauss(50 + tier * 8, 15, 10.0),
-        development_rate=bounded_gauss(52, 15, 10.0),
-        learning_ability=bounded_gauss(52, 15, 10.0),
-        loyalty=bounded_gauss(50, 18),
-        ambition=bounded_gauss(55, 17),
-        professionalism=bounded_gauss(character_base, 14),
-        temperament=bounded_gauss(character_base, 15),
-        adaptability=bounded_gauss(52, 14, 10.0),
-        leadership_influence=bounded_gauss(ratings.leadership, 11),
-        media_handling=bounded_gauss(50, 17),
-        locker_room_presence=bounded_gauss(character_base, 13),
+        potential_ability=clamp(skill_base + growth_left * rng.uniform(0.8, 5.5)),
+        injury_proneness=gauss(9.0, 3.2),
+        consistency=gauss(10.5 + tier * 2.0, 2.8),
+        big_game_performance=gauss(10.0 + tier * 1.6, 3.0),
+        development_rate=gauss(10.5, 3.0),
+        learning_ability=gauss(10.5, 3.0),
+        loyalty=gauss(10.0, 3.6),
+        ambition=gauss(11.0, 3.4),
+        professionalism=gauss(character_base, 2.8),
+        temperament=gauss(character_base, 3.0),
+        adaptability=gauss(10.5, 2.8),
+        leadership_influence=gauss(ratings.leadership, 2.2),
+        media_handling=gauss(10.0, 3.4),
+        locker_room_presence=gauss(character_base, 2.6),
     )
 
     tendencies = Tendencies(
-        usage=max(15.0, min(95.0, rng.gauss(35 + tier * 40, 8))),
-        three_point_rate=bounded_gauss(ratings.three_point, 12),
-        rim_rate=bounded_gauss((ratings.layups + ratings.close_shot) / 2, 12),
-        post_up_rate=bounded_gauss(ratings.post_moves, 12),
-        pass_first=bounded_gauss(ratings.passing, 12),
-        crash_glass=bounded_gauss(ratings.offensive_rebounding, 12),
+        usage=gauss(7.0 + tier * 8.0, 1.6),
+        three_point_rate=gauss(ratings.three_point, 2.4),
+        rim_rate=gauss((ratings.layups + ratings.close_shot) / 2, 2.4),
+        post_up_rate=gauss(ratings.post_moves, 2.4),
+        pass_first=gauss(ratings.passing, 2.4),
+        crash_glass=gauss(ratings.offensive_rebounding, 2.4),
     )
 
     return Player(
@@ -274,7 +292,7 @@ def make_team(
             defensive_pressure=rng.uniform(30, 70),
             help_intensity=rng.uniform(30, 70),
         ),
-        team_chemistry=rng.uniform(40, 70),
+        team_chemistry=rng.uniform(40, 70),  # 0-100, not a player rating
     )
     team.depth_chart = [p.id for p in team.players]
     return team
