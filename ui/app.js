@@ -220,6 +220,9 @@ const state = {
   // game that is still being played.
   source: null,
   livePoll: null,
+  // Which attribute sections are expanded. Kept on the app rather than the
+  // DOM so it survives clicking down the roster.
+  openGroups: new Set(),
 };
 
 const REDUCED_MOTION = typeof matchMedia === "function"
@@ -1140,8 +1143,11 @@ function renderPlayer() {
 
   const groups = $("#attribute-groups");
   groups.textContent = "";
+  const summaries = player.groupStars || {};
   for (const [group, keys] of Object.entries(state.data.attributeGroups)) {
-    groups.appendChild(attributeColumn(group, keys, player.ratings, state.data.attributeNames));
+    groups.appendChild(attributeColumn(
+      group, keys, player.ratings, state.data.attributeNames, null, summaries[group],
+    ));
   }
 
   const scouting = $("#scouting");
@@ -1154,14 +1160,11 @@ function renderPlayer() {
     );
     scouting.appendChild(abilityPanel(player));
 
-    const composites = el("div", "attr-group composite-group");
-    composites.appendChild(el("h4", "attr-heading", "Engine composites"));
-    const listEl = el("ul", "attr-list");
-    for (const key of state.data.compositeOrder) {
-      listEl.appendChild(attributeRow(key, player.composites[key], key));
-    }
-    composites.appendChild(listEl);
-    scouting.appendChild(composites);
+    scouting.appendChild(attributeColumn(
+      "Engine composites", state.data.compositeOrder, player.composites,
+      Object.fromEntries(state.data.compositeOrder.map((k) => [k, k])),
+      "composite-group",
+    ));
   }
 }
 
@@ -1226,9 +1229,32 @@ function starRow(value, className) {
   return wrap;
 }
 
-function attributeColumn(title, keys, values, names, extraClass) {
-  const wrap = el("div", "attr-group" + (extraClass ? ` ${extraClass}` : ""));
-  wrap.appendChild(el("h4", "attr-heading", title));
+/* A collapsible section: heading and star rating always visible, the
+ * attributes behind a disclosure. `<details>` rather than a click handler, so
+ * keyboard, screen readers and browser find-in-page all work without help.
+ *
+ * `summary` is optional -- the scouted and composite panels have no star
+ * rating, and open with just their heading. */
+function attributeColumn(title, keys, values, names, extraClass, summary) {
+  const wrap = el("details", "attr-group" + (extraClass ? ` ${extraClass}` : ""));
+  wrap.open = state.openGroups.has(title);
+  wrap.addEventListener("toggle", () => {
+    // Remembered per section, so opening Shooting on one player leaves it open
+    // as you click down the roster.
+    if (wrap.open) state.openGroups.add(title);
+    else state.openGroups.delete(title);
+  });
+
+  const head = el("summary", "attr-heading");
+  head.appendChild(el("span", "attr-heading-name", title));
+  if (summary) {
+    const stars = starRow(summary.stars, "is-compact");
+    stars.title = `${summary.stars} stars — ${summary.tier}`;
+    head.appendChild(stars);
+    head.appendChild(el("span", "attr-heading-value", String(displayValue(summary.average))));
+  }
+  wrap.appendChild(head);
+
   const listEl = el("ul", "attr-list");
   for (const key of keys) {
     listEl.appendChild(attributeRow(names[key] || titleCase(key), values[key], key));

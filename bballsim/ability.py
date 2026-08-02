@@ -30,7 +30,7 @@ import random
 from dataclasses import dataclass
 from enum import Enum
 
-from .ratings import SCALE_MAX, SCALE_MIN, Ratings, clamp
+from .ratings import RATING_TIERS, SCALE_MAX, SCALE_MIN, Ratings, clamp
 
 CA_MIN = 0.0
 CA_MAX = 200.0
@@ -70,6 +70,20 @@ def stars(ca: float) -> float:
     """CA as a 0.5-5.0 star rating, in half-star steps."""
     for index, (floor, _label) in enumerate(CA_TIERS):
         if ca >= floor:
+            return MAX_STARS - index * 0.5
+    return MIN_STARS
+
+
+def stars_from_rating(rating: float) -> float:
+    """A 1-20 rating as 0.5-5.0 stars, in half-star steps.
+
+    The same trick as `stars()`, against the attribute tier table rather than
+    the CA one: both have ten tiers with the same labels, so the two star
+    scales mean the same thing. Fed a group average, this is what puts a star
+    rating on "Shooting" without inventing a second vocabulary for it.
+    """
+    for index, (floor, _label) in enumerate(RATING_TIERS):
+        if rating >= floor:
             return MAX_STARS - index * 0.5
     return MIN_STARS
 

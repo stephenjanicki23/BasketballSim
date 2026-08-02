@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 226 tests
+python3 -m unittest discover -s tests    # 233 tests
 ```
 
 In the browser: four tabs — **Games** (schedule and the live tracker),
@@ -252,6 +252,24 @@ Three things are worth knowing about how the list was resolved:
 Position-specific skills are stored for *every* player, not just that position.
 A centre with real Isolation is a matchup problem, and the engine would rather
 know about it than treat the attribute as absent.
+
+### Reading 81 attributes
+
+Eighty-one numbers is a reference table, not a summary, so the squad page
+leads with **a star rating per group** — Shooting ★★★★, Playmaking ★★★½ — and
+each group expands to the attributes behind it. Sections are collapsed by
+default, remember what you opened as you click down the roster, and are built
+on `<details>`/`<summary>`, so keyboard, screen readers and find-in-page work
+without any help from us.
+
+The group value is a plain **average of the attributes listed underneath**, put
+through the same tier-to-stars mapping as everything else — `stars_from_rating`
+against `RATING_TIERS`, which has the same ten tiers with the same labels as the
+CA table, so four stars means All-Star either way. Deliberately *not* the
+engine's composite weighting: a composite answers "how well does he finish at
+the rim", which is a different question from "what is his Shooting section
+worth", and a heading whose number disagreed with the rows under it would be
+worse than no heading. A test asserts the two agree.
 
 ## Star ratings and player identity
 

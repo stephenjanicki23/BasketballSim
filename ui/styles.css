@@ -593,20 +593,72 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 .muted-line { margin: 3px 0 0; font: 500 11px/1.5 var(--mono); color: var(--muted); letter-spacing: .04em; }
 .profile-badges { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* Attribute sections are collapsed to a heading and a star rating, and open
+   on demand. Two columns while closed so the summary fits on one screen; a
+   section that is open takes the full width, because eight attributes in a
+   178px column is a worse read than a wide list. */
 .attr-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 4px 22px;
+  align-items: start;
 }
-.attr-group { break-inside: avoid; margin-bottom: 12px; }
+.attr-group {
+  break-inside: avoid;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.attr-group[open] {
+  grid-column: 1 / -1;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom-color: var(--hairline);
+}
+.attr-group[open] .attr-list {
+  columns: 178px auto;
+  column-gap: 22px;
+}
+
 .attr-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
   font: 600 9px/1.6 var(--mono);
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--accent);
-  padding-bottom: 4px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--hairline);
+  padding: 5px 0;
+  list-style: none;          /* the default triangle, replaced below */
+}
+.attr-heading::-webkit-details-marker { display: none; }
+/* A caret that turns, so "there is more here" is visible without hovering. */
+.attr-heading::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform .12s ease;
+  flex: 0 0 auto;
+}
+.attr-group[open] > .attr-heading::before { transform: rotate(90deg); }
+.attr-heading:hover { color: var(--ink); }
+.attr-heading:hover::before { color: var(--accent); }
+.attr-heading-name { flex: 1 1 auto; min-width: 0; }
+.attr-heading-value {
+  font: 600 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--muted);
+  min-width: 22px;
+  text-align: right;
+}
+.attr-group[open] > .attr-heading { border-bottom: 1px solid var(--hairline); }
+
+@media (prefers-reduced-motion: reduce) {
+  .attr-heading::before { transition: none; }
 }
 .attr-list { list-style: none; margin: 0; padding: 0; }
 .attr-row {

@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bballsim import composites as C
+from bballsim.api.payload import group_summaries
 from bballsim.ability import (
     Ability,
     Archetype,
@@ -28,7 +29,9 @@ from bballsim.ability import (
     generate_ratings,
     make_ability,
     scout,
+    CA_TIERS,
     star_tier,
+    stars_from_rating,
     stars,
 )
 from bballsim.biography import make_biography
@@ -40,6 +43,7 @@ from bballsim.models import Lineup, Player, Position
 from bballsim.placeholder import make_teams
 from bballsim.ratings import (
     ATTRIBUTE_GROUPS,
+    RATING_TIERS,
     ATTRIBUTE_LABELS,
     HiddenAttributes,
     LEAGUE_AVERAGE,
@@ -801,3 +805,79 @@ class TestLeagueComposition(unittest.TestCase):
             for box in (result.home_box, result.away_box):
                 self.assertGreater(box.possessions, 78)
                 self.assertLess(box.possessions, 125)
+
+
+class TestGroupStarRatings(unittest.TestCase):
+    """A star rating per attribute group, so a squad page leads with a summary
+    instead of 81 numbers."""
+
+    def test_a_rating_maps_onto_the_same_ten_tiers_as_ca(self):
+        """Both tier tables have ten entries with the same labels, so both star
+        scales mean the same thing -- four stars is an All-Star either way."""
+        self.assertEqual(len(RATING_TIERS), len(CA_TIERS))
+        self.assertEqual(
+            [label for _floor, label in RATING_TIERS],
+            [label for _floor, label in CA_TIERS],
+        )
+        for floor, label in RATING_TIERS:
+            self.assertEqual(star_tier(stars_from_rating(floor)), label, floor)
+
+    def test_the_scale_runs_from_half_a_star_to_five(self):
+        self.assertEqual(stars_from_rating(20.0), 5.0)
+        self.assertEqual(stars_from_rating(1.0), 0.5)
+        self.assertEqual(stars_from_rating(0.0), 0.5)
+        self.assertEqual(stars_from_rating(999.0), 5.0)
+
+    def test_stars_never_fall_as_a_rating_rises(self):
+        previous = 0.0
+        value = 0.0
+        while value <= 20.0:
+            current = stars_from_rating(value)
+            self.assertGreaterEqual(current, previous, value)
+            previous = current
+            value += 0.25
+
+    def test_every_group_gets_a_summary(self):
+        player = make_teams(1)[0].players[0]
+        summaries = group_summaries(player.ratings)
+        self.assertEqual(set(summaries), set(ATTRIBUTE_GROUPS))
+        for group, summary in summaries.items():
+            self.assertIn("stars", summary, group)
+            self.assertIn("average", summary, group)
+            self.assertIn("tier", summary, group)
+
+    def test_the_summary_is_the_average_of_the_rows_beneath_it(self):
+        """The heading must agree with what it is summarising, or it is worse
+        than no heading at all."""
+        player = make_teams(1)[0].players[0]
+        summaries = group_summaries(player.ratings)
+        for group, keys in ATTRIBUTE_GROUPS.items():
+            shown = [getattr(player.ratings, key) for key in keys]
+            self.assertAlmostEqual(
+                summaries[group]["average"], sum(shown) / len(shown), places=1, msg=group
+            )
+            self.assertEqual(
+                summaries[group]["stars"],
+                stars_from_rating(sum(shown) / len(shown)),
+                group,
+            )
+
+    def test_a_stronger_group_earns_more_stars(self):
+        weak, strong = make_teams(1)[0].players[0], make_teams(1)[0].players[0]
+        for key in ATTRIBUTE_GROUPS["Shooting"]:
+            setattr(weak.ratings, key, 5.0)
+            setattr(strong.ratings, key, 18.0)
+        self.assertLess(
+            group_summaries(weak.ratings)["Shooting"]["stars"],
+            group_summaries(strong.ratings)["Shooting"]["stars"],
+        )
+        self.assertEqual(group_summaries(strong.ratings)["Shooting"]["stars"], 4.5)
+        self.assertEqual(group_summaries(weak.ratings)["Shooting"]["stars"], 1.0)
+
+    def test_a_summary_and_its_tier_label_agree(self):
+        for player in make_teams(1)[0].players:
+            for group, summary in group_summaries(player.ratings).items():
+                self.assertEqual(
+                    summary["tier"], star_tier(summary["stars"]),
+                    f"{player.name} {group}",
+                )

@@ -21,7 +21,7 @@ Two rules keep this honest:
 from __future__ import annotations
 
 from .. import composites as C
-from ..ability import CA_MAX, CA_TIERS, scout
+from ..ability import CA_MAX, CA_TIERS, scout, stars_from_rating
 from ..chemistry import evaluate as evaluate_chemistry
 from ..coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
 from ..league.calendar import GameStatus
@@ -37,6 +37,7 @@ from ..ratings import (
     SCALE_MIN,
     Ratings,
     display_name,
+    tier_label,
 )
 
 # The composites the engine actually reads, exported alongside the raw
@@ -126,6 +127,34 @@ def team_summary(team) -> dict:
     }
 
 
+def group_summaries(ratings) -> dict[str, dict]:
+    """A star rating for each attribute group, so a squad page can be read.
+
+    Eighty-one numbers is a reference table, not a summary; a manager wants to
+    know a player shoots at four stars and can open the group if he cares which
+    eight attributes say so.
+
+    The value is a plain **average of the attributes in that group** -- the ones
+    actually listed underneath -- put through the same tier-to-stars mapping as
+    everything else. Deliberately not the engine's composite weighting: a
+    composite answers "how well does he finish at the rim", which is a different
+    question from "what is his Shooting section worth", and showing a heading
+    whose number disagreed with the rows under it would be worse than useless.
+    """
+    summaries = {}
+    for group, keys in ATTRIBUTE_GROUPS.items():
+        values = [getattr(ratings, key) for key in keys if hasattr(ratings, key)]
+        if not values:
+            continue
+        average = sum(values) / len(values)
+        summaries[group] = {
+            "average": round(average, 1),
+            "stars": stars_from_rating(average),
+            "tier": tier_label(average),
+        }
+    return summaries
+
+
 def player_detail(player) -> dict:
     return {
         "id": player.id,
@@ -151,6 +180,9 @@ def player_detail(player) -> dict:
         "tendencies": {k: round(v, 1) for k, v in player.tendencies.to_dict().items()},
         "hidden": {k: round(v, 1) for k, v in player.hidden.to_dict().items()},
         "composites": {k: round(fn(player), 1) for k, fn in EXPORTED_COMPOSITES.items()},
+        # One star rating per attribute group, so the squad page leads with a
+        # summary and the 81 numbers sit behind it.
+        "groupStars": group_summaries(player.ratings),
     }
 
 
