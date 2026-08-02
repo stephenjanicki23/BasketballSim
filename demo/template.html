@@ -1,0 +1,697 @@
+<title>Basketball Manager — Game Tracker</title>
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens. The page is a scorer's table: warm umber neutrals (hardwood,
+ * leather) rather than cold grey, amber reserved strictly for chrome,
+ * and a validated blue/red diverging pair carrying home vs away.
+ * ------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --ground:    #EFECE6;
+  --panel:     #FCFBF9;
+  --raised:    #F4F1EB;
+  --hairline:  #DFD8CE;
+  --hairline-soft: #EAE4DA;
+  --ink:       #191612;
+  --ink-2:     #4A4239;
+  --muted:     #6B635A;
+  --accent:    #A85F14;
+  --accent-ink:#FFFFFF;
+  --home:      #2a78d6;
+  --away:      #e34948;
+  --live:      #0ca30c;
+  --shadow:    0 1px 2px rgba(25, 22, 18, .06), 0 8px 24px rgba(25, 22, 18, .05);
+
+  --sans: ui-sans-serif, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --rail-width: 300px;
+  --gap: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --ground:    #121110;
+    --panel:     #1B1917;
+    --raised:    #241F1B;
+    --hairline:  #332C26;
+    --hairline-soft: #262019;
+    --ink:       #F2EEE7;
+    --ink-2:     #C6BCB0;
+    --muted:     #968C82;
+    --accent:    #E08A2B;
+    --accent-ink:#1B1207;
+    --home:      #3987e5;
+    --away:      #e66767;
+    --live:      #3BC24A;
+    --shadow:    0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .3);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground:    #121110;
+  --panel:     #1B1917;
+  --raised:    #241F1B;
+  --hairline:  #332C26;
+  --hairline-soft: #262019;
+  --ink:       #F2EEE7;
+  --ink-2:     #C6BCB0;
+  --muted:     #968C82;
+  --accent:    #E08A2B;
+  --accent-ink:#1B1207;
+  --home:      #3987e5;
+  --away:      #e66767;
+  --live:      #3BC24A;
+  --shadow:    0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .3);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ground:    #EFECE6;
+  --panel:     #FCFBF9;
+  --raised:    #F4F1EB;
+  --hairline:  #DFD8CE;
+  --hairline-soft: #EAE4DA;
+  --ink:       #191612;
+  --ink-2:     #4A4239;
+  --muted:     #6B635A;
+  --accent:    #A85F14;
+  --accent-ink:#FFFFFF;
+  --home:      #2a78d6;
+  --away:      #e34948;
+  --live:      #0ca30c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+/* Scorer's-table micro-labels: the vernacular of a stat sheet. */
+.label {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+button, select, input { font-family: inherit; color: inherit; }
+
+button {
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 7px 11px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: border-color .12s, background .12s;
+}
+button:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+select {
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+/* ---------------- boot ---------------- */
+#boot {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+}
+#boot .label { letter-spacing: .2em; }
+#boot-status { color: var(--muted); font-size: 13px; max-width: 42ch; }
+
+/* ---------------- masthead ---------------- */
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 11px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--hairline);
+}
+.wordmark { display: flex; align-items: baseline; gap: 10px; }
+.wordmark h1 { font-size: 15px; }
+.wordmark .label { letter-spacing: .16em; }
+
+.nav { display: flex; gap: 2px; margin-left: auto; }
+.nav-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.nav-tab:hover { color: var(--ink); border-color: var(--hairline); }
+.nav-tab.is-active {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---------------- layout ---------------- */
+.view[hidden] { display: none; }
+.games-layout {
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  gap: var(--gap);
+  padding: var(--gap);
+  align-items: start;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* ---------------- schedule rail ---------------- */
+#schedule {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: calc(100vh - 118px);
+  overflow-y: auto;
+}
+.rail-date {
+  position: sticky;
+  top: 0;
+  background: var(--raised);
+  border-bottom: 1px solid var(--hairline);
+  padding: 6px 14px;
+  font: 600 10px/1.6 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fixture {
+  display: grid;
+  gap: 2px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--hairline-soft);
+  cursor: pointer;
+}
+.fixture:hover { background: var(--raised); }
+.fixture.is-selected {
+  background: var(--raised);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.fixture-side {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+}
+.fixture-side.is-winner { color: var(--ink); }
+.fixture-abbr { font: 600 10px/1.4 var(--mono); letter-spacing: .1em; }
+.fixture-team { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fixture-score { font: 600 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+.fixture-side.is-winner .fixture-score { color: var(--ink); }
+
+/* ---------------- scoreboard ---------------- */
+.scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px 14px;
+  background: var(--raised);
+  border-bottom: 1px solid var(--hairline);
+}
+.board-side { display: grid; gap: 3px; min-width: 0; }
+.board-side.home { justify-items: end; text-align: right; }
+.board-abbr {
+  font: 700 13px/1 var(--mono);
+  letter-spacing: .16em;
+}
+.board-side.away .board-abbr { color: var(--away); }
+.board-side.home .board-abbr { color: var(--home); }
+.board-city {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-score {
+  font: 700 40px/1 var(--mono);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.board-side.is-leading .board-score { color: var(--ink); }
+.board-score.just-scored { animation: score-pop .5s ease-out; }
+@keyframes score-pop {
+  0%   { color: var(--accent); transform: translateY(-2px); }
+  100% { color: inherit; transform: none; }
+}
+
+.board-middle { display: grid; justify-items: center; gap: 3px; }
+.board-period { font: 600 10px/1 var(--mono); letter-spacing: .16em; color: var(--muted); }
+.board-clock {
+  font: 500 22px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.state-pill {
+  font: 600 9px/1 var(--mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+.state-pill.is-live {
+  color: var(--live);
+  border-color: var(--live);
+}
+
+/* ---------------- transport ---------------- */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+.transport .grow { flex: 1 1 160px; display: flex; align-items: center; gap: 8px; min-width: 140px; }
+#scrub {
+  flex: 1;
+  accent-color: var(--accent);
+  min-width: 100px;
+}
+#tipoff-label { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: .04em; }
+
+/* ---------------- game flow chart ---------------- */
+.flow-wrap { padding: 12px 14px 8px; border-bottom: 1px solid var(--hairline); }
+.flow-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.flow-legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-swatch { width: 9px; height: 9px; border-radius: 2px; }
+.legend-swatch.home { background: var(--home); }
+.legend-swatch.away { background: var(--away); }
+.legend-text { font: 500 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+#flow-label { font: 600 12px/1 var(--mono); font-variant-numeric: tabular-nums; }
+#flow-readout { font: 500 11px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+#flow-peak { font: 500 10px/1 var(--mono); color: var(--muted); letter-spacing: .06em; }
+
+#flow { display: block; width: 100%; height: 132px; touch-action: none; cursor: crosshair; }
+#flow-home-area { fill: var(--home); opacity: .20; clip-path: url(#clip-above); }
+#flow-away-area { fill: var(--away); opacity: .20; clip-path: url(#clip-below); }
+#flow-line { fill: none; stroke: var(--ink-2); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+#flow-zero { stroke: var(--hairline); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.flow-period { stroke: var(--hairline); stroke-width: 1; stroke-dasharray: 2 4; vector-effect: non-scaling-stroke; }
+#flow-cursor { stroke: var(--accent); stroke-width: 1; opacity: 0; vector-effect: non-scaling-stroke; }
+
+/* ---------------- tabs & panes ---------------- */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.tracker-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 7px 10px 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.tracker-tab:hover { color: var(--ink); border-color: transparent; }
+.tracker-tab.is-active { color: var(--ink); border-bottom-color: var(--accent); }
+
+/* ---------------- play-by-play ---------------- */
+#feed {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 56vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column-reverse;
+}
+.play {
+  display: grid;
+  grid-template-columns: 74px 62px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.play-clock, .play-score {
+  font: 500 11px/1.5 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.play-text { font-size: 13px; color: var(--ink-2); }
+.play.is-score .play-text { color: var(--ink); }
+.play.is-big .play-text { font-weight: 600; }
+.play.is-meta .play-text { color: var(--muted); font-style: italic; }
+/* A 2px inset rule, not a full tint: identity without shouting. */
+.play.side-home { box-shadow: inset 2px 0 0 var(--home); }
+.play.side-away { box-shadow: inset 2px 0 0 var(--away); }
+.play.is-new { animation: play-in .28s ease-out; }
+@keyframes play-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------------- tables ---------------- */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  text-align: right;
+  padding: 5px 7px;
+  font: 500 12px/1.5 var(--mono);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--hairline-soft);
+  white-space: nowrap;
+}
+thead th {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom-color: var(--hairline);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+.col-name, th.col-name { text-align: left; font-family: var(--sans); }
+td.col-name { display: flex; align-items: baseline; gap: 8px; }
+.player-pos {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .1em;
+  color: var(--muted);
+  min-width: 20px;
+}
+.player-name { font: 400 13px/1.5 var(--sans); }
+tfoot td {
+  font-weight: 700;
+  border-top: 1px solid var(--hairline);
+  border-bottom: none;
+  color: var(--ink);
+}
+tbody tr.is-on-court .player-name { color: var(--ink); font-weight: 500; }
+tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+.box-team { padding: 12px 14px 18px; }
+.box-heading { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; }
+.box-dot { width: 9px; height: 9px; border-radius: 2px; }
+.box-dot.side-home { background: var(--home); }
+.box-dot.side-away { background: var(--away); }
+.box-name { font-size: 13px; font-weight: 600; }
+.box-points { font: 700 15px/1 var(--mono); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+/* ---------------- standings ---------------- */
+.sheet { padding: 14px; }
+.col-rank { color: var(--muted); width: 28px; }
+.diff-positive { color: var(--home); }
+.diff-negative { color: var(--away); }
+
+/* ---------------- teams ---------------- */
+.team-layout { display: grid; gap: var(--gap); padding: var(--gap); }
+.tactics-grid { padding: 14px; display: grid; gap: 14px; }
+.scheme-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.chip {
+  display: grid;
+  gap: 3px;
+  padding: 8px 12px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+}
+.chip-label { font: 600 9px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.chip-value { font-size: 13px; font-weight: 600; }
+
+.sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 20px; }
+.slider { display: grid; grid-template-columns: 1fr 96px 26px; align-items: center; gap: 10px; }
+.slider-label { font-size: 12px; color: var(--ink-2); }
+.slider-track { height: 5px; border-radius: 3px; background: var(--hairline); overflow: hidden; }
+.slider-fill { display: block; height: 100%; background: var(--accent); }
+.slider-value { font: 500 11px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+
+#roster .group-head {
+  text-align: center;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink-2);
+  letter-spacing: .16em;
+}
+#roster th.rot-head { font-size: 9px; letter-spacing: .1em; text-align: right; }
+#roster tr.is-starter .player-name { font-weight: 600; }
+#roster .col-ovr { font-weight: 700; }
+/* Rating heat: one hue, light to dark, so magnitude reads down a column. */
+#roster td.rating {
+  background: color-mix(in srgb, var(--accent) calc(var(--heat, 0) * 26%), transparent);
+  color: var(--ink-2);
+}
+
+.note {
+  padding: 12px 14px;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.note strong { color: var(--ink-2); font-weight: 600; }
+.note code {
+  font: 500 11px/1 var(--mono);
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
+@media (max-width: 900px) {
+  .games-layout { grid-template-columns: minmax(0, 1fr); }
+  #schedule { max-height: 260px; }
+  .board-score { font-size: 32px; }
+  .play { grid-template-columns: 66px 56px minmax(0, 1fr); gap: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+</style>
+
+<div id="boot">
+  <span class="label">Basketball Manager</span>
+  <p id="boot-status">Unpacking the season…</p>
+</div>
+
+<div id="app" hidden>
+  <header class="masthead">
+    <div class="wordmark">
+      <h1>Basketball Manager</h1>
+      <span class="label" id="season-label"></span>
+    </div>
+    <nav class="nav" role="tablist" aria-label="Views">
+      <button class="nav-tab is-active" role="tab" aria-selected="true" data-view="games">Games</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
+    </nav>
+  </header>
+
+  <!-- Games ------------------------------------------------------- -->
+  <section class="view games-layout" data-view="games" role="tabpanel" aria-label="Games">
+    <div class="card">
+      <div class="card-head">
+        <h2>Schedule</h2>
+        <span class="label">Final</span>
+      </div>
+      <ul id="schedule"></ul>
+    </div>
+
+    <div class="card">
+      <div class="scoreboard">
+        <div class="board-side away">
+          <span class="board-abbr" id="away-abbr">—</span>
+          <span class="board-city" id="away-city"></span>
+          <span class="board-score" id="away-score">0</span>
+        </div>
+        <div class="board-middle">
+          <span class="board-period" id="period">Q1</span>
+          <span class="board-clock" id="clock">12:00</span>
+          <span class="state-pill" id="game-state">Live</span>
+        </div>
+        <div class="board-side home">
+          <span class="board-abbr" id="home-abbr">—</span>
+          <span class="board-city" id="home-city"></span>
+          <span class="board-score" id="home-score">0</span>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button id="play" aria-pressed="false"><span id="play-icon">▶</span><span id="play-text">Play</span></button>
+        <button id="restart" title="Back to tip-off">↺ Tip-off</button>
+        <button id="to-final">Jump to final</button>
+        <label class="label" for="speed">Speed</label>
+        <select id="speed" aria-label="Playback speed">
+          <option value="1">Real time</option>
+          <option value="8">8×</option>
+          <option value="30" selected>30×</option>
+          <option value="120">120×</option>
+        </select>
+        <span class="grow">
+          <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the game" />
+        </span>
+        <span id="tipoff-label"></span>
+      </div>
+
+      <div class="flow-wrap">
+        <div class="flow-head">
+          <div class="flow-legend">
+            <span class="label">Game flow</span>
+            <span class="legend-item"><span class="legend-swatch away"></span><span class="legend-text" id="flow-away-name">Away leads</span></span>
+            <span class="legend-item"><span class="legend-swatch home"></span><span class="legend-text" id="flow-home-name">Home leads</span></span>
+            <span id="flow-label"></span>
+          </div>
+          <span id="flow-readout"></span>
+        </div>
+        <svg id="flow" viewBox="0 0 1000 132" preserveAspectRatio="none" role="img"
+             aria-label="Score margin over the course of the game">
+          <defs>
+            <clipPath id="clip-above"><rect x="0" y="0" width="1000" height="66" /></clipPath>
+            <clipPath id="clip-below"><rect x="0" y="66" width="1000" height="66" /></clipPath>
+          </defs>
+          <g id="flow-periods"></g>
+          <path id="flow-home-area" d="" />
+          <path id="flow-away-area" d="" />
+          <path id="flow-zero" d="" />
+          <path id="flow-line" d="" />
+          <line id="flow-cursor" x1="0" x2="0" y1="0" y2="0" />
+        </svg>
+        <div style="display:flex;justify-content:flex-end"><span id="flow-peak"></span></div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Game detail">
+        <button class="tracker-tab is-active" role="tab" aria-selected="true" data-tab="pbp">Play-by-play</button>
+        <button class="tracker-tab" role="tab" aria-selected="false" data-tab="box">Box score</button>
+      </div>
+
+      <div id="pane-pbp"><ul id="feed"></ul></div>
+      <div id="pane-box" hidden><div id="box"></div></div>
+
+      <p class="note">
+        Every line above came out of the possession engine — shot selection from
+        ratings and tendencies, make probability from the shooter's edge over his
+        defender, assists, rebounds and fouls attributed to real players. The box
+        score is rebuilt live from that same event stream rather than read off a
+        stored total; <code>demo/verify.mjs</code> checks the rebuild against the
+        engine's own box score for all 28 games.
+      </p>
+    </div>
+  </section>
+
+  <!-- Standings --------------------------------------------------- -->
+  <section class="view" data-view="standings" role="tabpanel" aria-label="Standings" hidden>
+    <div class="team-layout">
+      <div class="card">
+        <div class="card-head">
+          <h2>Standings</h2>
+          <span class="label">One round robin</span>
+        </div>
+        <div class="sheet table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-rank">#</th>
+                <th class="col-name">Team</th>
+                <th>W</th><th>L</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th>
+              </tr>
+            </thead>
+            <tbody id="standings-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Teams ------------------------------------------------------- -->
+  <section class="view" data-view="teams" role="tabpanel" aria-label="Teams" hidden>
+    <div class="team-layout">
+      <div class="card">
+        <div class="card-head">
+          <h2>Tactics</h2>
+          <select id="team-picker" aria-label="Choose a team"></select>
+        </div>
+        <div class="tactics-grid" id="tactics"></div>
+        <p class="note">
+          These are the inputs the engine reads on every possession. Schemes carry
+          explicit effect tables — <strong>pace and space</strong> lifts three-point rate and
+          pushes tempo while thinning the offensive glass; <strong>drop coverage</strong> trades
+          three-point defence for rim protection. The sliders layer on top of that.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Roster</h2>
+          <span class="label">Bold = starters</span>
+        </div>
+        <div class="sheet table-scroll">
+          <table id="roster"></table>
+        </div>
+        <p class="note">
+          Ratings are on a 0–99 scale where 50 is league average. Tendencies (how
+          often a player <em>wants</em> the ball, and from where) are stored separately from
+          ability, so a low-usage elite shooter and a high-volume chucker can share a
+          three-point rating and behave nothing alike.
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script id="payload" type="text/plain">{{PAYLOAD}}</script>
+<script>{{APP_JS}}</script>

@@ -26,11 +26,27 @@ _TEAM_NAMES = [
     ("Grandview", "Skyline", "GVS"),
 ]
 
+# Deliberately long: the league needs a unique surname per player so the
+# play-by-play never reads "D. Reyes blocks D. Reyes's shot".
 _SURNAMES = [
     "Alder", "Brook", "Calloway", "Dunmore", "Ellery", "Fenwick", "Gale",
     "Hollis", "Ingram", "Jarvis", "Kessler", "Larkin", "Mercer", "Nash",
     "Oakes", "Prescott", "Quill", "Reyes", "Sparrow", "Thorne", "Underhill",
-    "Vance", "Whitlock", "Yarrow",
+    "Vance", "Whitlock", "Yarrow", "Ashcroft", "Bellamy", "Cardew", "Dashiell",
+    "Everly", "Fairbank", "Gossard", "Halloway", "Isley", "Jessup", "Kingsley",
+    "Lathrop", "Marchetti", "Norwood", "Ostrander", "Pemberton", "Quintero",
+    "Ravenel", "Sedgwick", "Tillman", "Ulmer", "Verlander", "Wexford",
+    "Yates", "Ziegler", "Ainsworth", "Bramwell", "Colvin", "Denholm",
+    "Eastwick", "Falkner", "Granger", "Hawthorne", "Ives", "Joplin",
+    "Kirkwood", "Lindqvist", "Merriweather", "Nordstrom", "Osgood",
+    "Pennington", "Quarles", "Rockwell", "Sandoval", "Trueblood", "Ulrich",
+    "Vandermeer", "Wolcott", "Yeardley", "Zabala", "Amberly", "Blackwood",
+    "Castellan", "Doverly", "Ellsworth", "Fitzhugh", "Galbraith", "Hartsock",
+    "Inglewood", "Jansen", "Keswick", "Loudermilk", "Mainwaring", "Netherton",
+    "Oxley", "Pathmore", "Quilliam", "Rutherford", "Stillwell", "Tanaka",
+    "Uxbridge", "Vasquez", "Wentworth", "Yorke", "Zamora", "Abernathy",
+    "Braddock", "Chaudhry", "Delacroix", "Emberly", "Fontaine", "Greaves",
+    "Hallowell", "Ibarra", "Jelani", "Kowalczyk", "Lundqvist", "Moreau",
 ]
 
 _FIRST_NAMES = [
@@ -108,9 +124,16 @@ def _make_player(
     )
 
 
-def make_team(rng: random.Random, city: str, name: str, abbreviation: str) -> Team:
-    # Unique surnames per roster so the play-by-play never gets ambiguous.
-    surnames = rng.sample(_SURNAMES, len(_ROSTER_SHAPE))
+def make_team(
+    rng: random.Random,
+    city: str,
+    name: str,
+    abbreviation: str,
+    surnames: list[str] | None = None,
+) -> Team:
+    # Surnames come from a league-wide pool when one is supplied, so no two
+    # players anywhere share a name.
+    surnames = surnames or rng.sample(_SURNAMES, len(_ROSTER_SHAPE))
     first_names = rng.sample(_FIRST_NAMES, len(_ROSTER_SHAPE))
 
     players: list[Player] = []
@@ -147,4 +170,13 @@ def make_team(rng: random.Random, city: str, name: str, abbreviation: str) -> Te
 
 def make_teams(count: int = 8, seed: int = 7) -> list[Team]:
     rng = random.Random(seed)
-    return [make_team(rng, *_TEAM_NAMES[i % len(_TEAM_NAMES)]) for i in range(min(count, len(_TEAM_NAMES)))]
+    count = min(count, len(_TEAM_NAMES))
+    needed = count * len(_ROSTER_SHAPE)
+    if needed > len(_SURNAMES):
+        raise ValueError(f"need {needed} unique surnames, pool has {len(_SURNAMES)}")
+    pool = rng.sample(_SURNAMES, needed)
+    size = len(_ROSTER_SHAPE)
+    return [
+        make_team(rng, *_TEAM_NAMES[i], surnames=pool[i * size:(i + 1) * size])
+        for i in range(count)
+    ]
