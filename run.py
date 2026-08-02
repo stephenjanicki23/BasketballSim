@@ -5,8 +5,9 @@
     python3 run.py sim            simulate one game and print the play-by-play
     python3 run.py season         simulate the whole schedule, print standings
 
-The league built here uses PLACEHOLDER teams and players from
-`bballsim/placeholder.py`. Replace `build_league` with real data loading.
+Teams, players and coaches are loaded from `data/league.json` -- the same
+league every run, on every machine. `bballsim/placeholder.py` only generated
+it once, via `tools/make_league.py`, and is not consulted here.
 """
 
 from __future__ import annotations
@@ -17,12 +18,13 @@ from datetime import datetime, timedelta, timezone
 from bballsim.engine.game import GameSimulator
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
-from bballsim.placeholder import make_teams
+from bballsim.roster import load_teams
 
 
 def build_league(team_count: int = 30) -> League:
-    league = League(name="Placeholder Basketball League", season="2026-27")
-    for team in make_teams(team_count):
+    saved = load_teams(team_count)
+    league = League(name=saved.name, season=saved.season)
+    for team in saved.teams:
         league.add_team(team)
 
     now = datetime.now(timezone.utc)
@@ -58,7 +60,7 @@ def command_serve(args: argparse.Namespace) -> None:
 
 
 def command_sim(args: argparse.Namespace) -> None:
-    teams = make_teams(2)
+    teams = load_teams(2).teams
     result = GameSimulator("exhibition", home=teams[0], away=teams[1], seed=args.seed).simulate()
 
     for event in result.events:

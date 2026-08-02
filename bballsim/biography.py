@@ -128,6 +128,13 @@ class DraftInfo:
             "label": self.label,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "DraftInfo":
+        """Only the three stored fields; `undrafted` and `label` derive."""
+        return cls(
+            year=data["year"], round=data.get("round"), pick=data.get("pick")
+        )
+
 
 @dataclass
 class Biography:

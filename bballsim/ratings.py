@@ -225,6 +225,11 @@ class Tendencies:
     def to_dict(self) -> dict[str, float]:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
+    @classmethod
+    def from_dict(cls, data: dict[str, float]) -> "Tendencies":
+        known = set(cls.attribute_names())
+        return cls(**{k: v for k, v in data.items() if k in known})
+
 
 @dataclass
 class HiddenAttributes:

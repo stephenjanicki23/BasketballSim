@@ -29,7 +29,7 @@ from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
 from bballsim.models import Lineup
 from bballsim.league.stats import STAT_COLUMNS
-from bballsim.placeholder import make_teams
+from bballsim.roster import load_teams
 from bballsim.ratings import (
     ATTRIBUTE_GROUPS,
     ATTRIBUTE_LABELS,
@@ -85,8 +85,11 @@ DETAILED_GAMES = 30
 
 
 def build_season(team_count: int = 30, season_start_days_ago: int = 30) -> League:
-    league = League(name="Placeholder Basketball League", season="2026-27")
-    for team in make_teams(team_count):
+    # The saved league, not a freshly generated one -- the demo has to show the
+    # same 360 players as the app.
+    saved = load_teams(team_count)
+    league = League(name=saved.name, season=saved.season)
+    for team in saved.teams:
         league.add_team(team)
 
     start = (datetime.now(timezone.utc) - timedelta(days=season_start_days_ago)).date()
