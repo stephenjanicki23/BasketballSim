@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 220 tests
+python3 -m unittest discover -s tests    # 226 tests
 ```
 
 In the browser: four tabs — **Games** (schedule and the live tracker),
@@ -57,7 +57,7 @@ short version: `render.yaml` in the root is a blueprint Render reads directly,
 and two properties of the app shape it — the league lives **in memory**, so it
 runs as exactly one instance and must never autoscale; and it **writes as you
 play**, so it needs a mounted disk (`BBALLSIM_DATA_DIR` points at it, and first
-boot seeds it from the committed `data/`, never overwriting a live save).
+boot seeds it from the committed `data/`).
 
 Being hosted put three things on the server that a laptop did not need:
 
@@ -149,6 +149,18 @@ real-time calendar means. `--force --start <date>` re-anchors it.
 `run.py serve` loads it and writes results back as they are played and on the
 way out. Play some games, quit, restart, and the table is where you left it.
 Pass `--no-save` to leave the file alone.
+
+**A deploy replaces a season built on a superseded calendar.** Not overwriting
+a live save is the right default, and it was wrong the first time the calendar
+changed: the disk kept an 870-game season while the app had been rebuilt around
+1,230 fixtures, so the deployed page went on showing games and standings that no
+longer corresponded to anything. Results are keyed by fixture id, so a save from
+a different calendar is not a season in progress — it is a season of a different
+competition. Each season file now carries a `schedule` fingerprint of its
+fixture ids; when it differs from the committed one the save is replaced, and
+when it matches it is left alone. `BBALLSIM_RESET_SEASON=1` forces a wipe by
+hand. The roster is never replaced either way — development and chemistry live
+there and have no calendar.
 
 What the season file stores is deliberately narrow:
 

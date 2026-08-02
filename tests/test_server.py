@@ -11,6 +11,7 @@ Run with:  python3 -m unittest discover -s tests -v
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -28,7 +29,7 @@ from bballsim.api.server import serve
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
 from bballsim.roster import load_teams
-from bballsim.save import BUNDLED_DATA_DIR, seed_data_dir
+from bballsim.save import BUNDLED_DATA_DIR, schedule_fingerprint, seed_data_dir
 
 
 def a_league(team_count: int = 6) -> League:
@@ -212,21 +213,113 @@ class TestSeedingAMountedDisk(unittest.TestCase):
             seed_data_dir(target)
             self.assertEqual(seed_data_dir(target), [])
 
-    def test_a_played_season_is_never_overwritten_by_a_deploy(self):
-        """The failure this guards against loses somebody's season."""
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / "var-data"
-            seed_data_dir(target)
-            (target / "season.json").write_text('{"version": 1, "games": []}')
-
-            seed_data_dir(target)   # a redeploy
-            self.assertEqual(
-                json.loads((target / "season.json").read_text())["games"], []
-            )
+    # "A played season is never overwritten" used to be asserted here with a
+    # season whose fixture list was empty. That is now exactly the case a
+    # deploy *should* replace -- a save whose fixtures do not match the
+    # committed calendar. The rule it was protecting, stated precisely, is
+    # TestAStaleSeasonIsReplacedOnDeploy.test_a_season_on_the_current_calendar_is_kept.
 
     def test_seeding_the_bundled_directory_itself_is_a_no_op(self):
         """Running locally, source and destination are the same place."""
         self.assertEqual(seed_data_dir(BUNDLED_DATA_DIR), [])
+
+
+class TestAStaleSeasonIsReplacedOnDeploy(unittest.TestCase):
+    """Never overwriting a save is right until the calendar changes underneath
+    it. Results are keyed by fixture id, so a season played on a schedule this
+    build no longer has is not a season in progress -- its standings refer to
+    games that do not exist. Those get replaced; anything else is kept."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.disk = Path(self.tmp.name) / "var-data"
+        seed_data_dir(self.disk)
+        self.season = self.disk / "season.json"
+        os.environ.pop("BBALLSIM_RESET_SEASON", None)
+
+    def tearDown(self):
+        os.environ.pop("BBALLSIM_RESET_SEASON", None)
+        self.tmp.cleanup()
+
+    def write_season_file(self, games, schedule=None):
+        data = json.loads(self.season.read_text())
+        data["games"] = games
+        if schedule is None:
+            data.pop("schedule", None)
+        else:
+            data["schedule"] = schedule
+        self.season.write_text(json.dumps(data))
+
+    def test_the_committed_season_carries_a_schedule_stamp(self):
+        self.assertTrue(json.loads(self.season.read_text()).get("schedule"))
+
+    def test_a_season_on_the_current_calendar_is_kept(self):
+        """The case that must not regress: games you have played survive."""
+        data = json.loads(self.season.read_text())
+        data["games"][0]["status"] = "final"   # pretend something was played
+        self.season.write_text(json.dumps(data))
+
+        self.assertEqual(seed_data_dir(self.disk), [])
+        self.assertEqual(
+            json.loads(self.season.read_text())["games"][0]["status"], "final"
+        )
+
+    def test_a_season_from_a_superseded_calendar_is_replaced(self):
+        fresh = json.loads(self.season.read_text())
+        self.write_season_file(fresh["games"][:40], schedule="a-different-calendar")
+
+        written = seed_data_dir(self.disk)
+        self.assertEqual([p.name for p in written], ["season.json"])
+        restored = json.loads(self.season.read_text())
+        self.assertEqual(len(restored["games"]), len(fresh["games"]))
+        self.assertEqual(restored["schedule"], fresh["schedule"])
+
+    def test_an_unstamped_season_is_judged_on_its_fixtures(self):
+        """Files written before the stamp existed still have to be caught."""
+        fresh = json.loads(self.season.read_text())
+        self.write_season_file(fresh["games"][:40], schedule=None)
+        self.assertEqual([p.name for p in seed_data_dir(self.disk)], ["season.json"])
+
+        # ...and an unstamped file whose fixtures *do* match is left alone.
+        self.write_season_file(fresh["games"], schedule=None)
+        self.assertEqual(seed_data_dir(self.disk), [])
+
+    def test_the_reset_switch_forces_a_wipe(self):
+        for value in ("1", "true", "YES"):
+            data = json.loads(self.season.read_text())
+            data["games"][0]["status"] = "final"
+            self.season.write_text(json.dumps(data))
+
+            os.environ["BBALLSIM_RESET_SEASON"] = value
+            self.assertEqual([p.name for p in seed_data_dir(self.disk)],
+                             ["season.json"], value)
+            self.assertEqual(
+                json.loads(self.season.read_text())["games"][0]["status"],
+                "scheduled", value,
+            )
+            os.environ.pop("BBALLSIM_RESET_SEASON")
+
+    def test_the_roster_is_never_replaced(self):
+        """Players and coaches have no calendar, and a deploy must not reset
+        them -- development and chemistry live there."""
+        league = self.disk / "league.json"
+        data = json.loads(league.read_text())
+        data["name"] = "edited in place"
+        league.write_text(json.dumps(data))
+
+        os.environ["BBALLSIM_RESET_SEASON"] = "1"
+        seed_data_dir(self.disk)
+        self.assertEqual(json.loads(league.read_text())["name"], "edited in place")
+
+    def test_the_fingerprint_tracks_the_fixture_list(self):
+        games = json.loads(self.season.read_text())["games"]
+        self.assertEqual(schedule_fingerprint(games), schedule_fingerprint(games))
+        self.assertNotEqual(
+            schedule_fingerprint(games), schedule_fingerprint(games[:-1])
+        )
+        # Order must not matter; what was played must not either.
+        shuffled = list(reversed(games))
+        self.assertEqual(schedule_fingerprint(games), schedule_fingerprint(shuffled))
 
 
 if __name__ == "__main__":

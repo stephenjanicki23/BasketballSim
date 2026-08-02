@@ -50,10 +50,17 @@ since that save are lost. Paying for Starter avoids both problems.
    Basketball Manager shell running at http://0.0.0.0:10000
    ```
 
-   Those two lines appear **only on the first boot**. The disk starts empty, so
-   the league and the fixture list are copied across from the copies committed
-   in `data/`. After that the disk is the truth and seeding never overwrites it
-   — a redeploy leaves a season you have been playing exactly where it was.
+   Those lines appear **only on the first boot**. The disk starts empty, so the
+   league and the fixture list are copied across from the copies committed in
+   `data/`. After that the disk is the truth: a redeploy leaves a season you
+   have been playing exactly where it was.
+
+   The one exception is when the **calendar itself** has changed. Results are
+   keyed by fixture id, so a season played on a schedule this build no longer
+   has is not a season in progress — its standings refer to games that do not
+   exist. Each season file carries a fingerprint of its fixture list, and a
+   deploy replaces the save when that no longer matches, logging
+   `installed season.json -> /var/data/season.json`.
 
 4. **Open the URL.** Render gives you `basketball-manager-xxxx.onrender.com`.
    You get the whole app, not just the tracker: Games, Stats, Standings and
@@ -86,10 +93,13 @@ configure beyond DNS.
   exits. An idle server writes nothing.
 - **Logs** — a save prints `saved N played of 1230 fixtures … (sim date …)`, so
   the logs tell you the season is being kept.
-- **Resetting the season** — delete `/var/data/season.json` from a Render shell
-  and restart; the next boot re-seeds it from the committed fixture list, with
-  every result, standing and stat wiped. Deleting `league.json` too resets the
-  players and coaches.
+- **Resetting the season** — set `BBALLSIM_RESET_SEASON=1` in the service's
+  environment and redeploy: the next boot wipes every result, standing and stat
+  back to the committed fixture list. **Remove the variable afterwards**, or
+  every future deploy wipes the season again. (Deleting
+  `/var/data/season.json` from a Render shell and restarting does the same
+  thing.) The roster is never touched by either; to reset players and coaches,
+  delete `/var/data/league.json`.
 - **The clock is real time.** Games tip off at their real 8am, 1pm and 7pm
   Pacific slots, three a day per team. The service has to be *running* at those
   times to play them — which is another reason the free tier's sleep-when-idle

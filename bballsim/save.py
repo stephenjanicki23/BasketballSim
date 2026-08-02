@@ -86,26 +86,70 @@ LEAGUE_PATH = data_dir() / "league.json"
 SEASON_PATH = data_dir() / "season.json"
 
 
-def seed_data_dir(target: Path | None = None) -> list[Path]:
-    """Copy the bundled league and season into the data directory, once.
+def schedule_fingerprint(games) -> str:
+    """A digest of *which fixtures exist*, ignoring anything played.
 
-    A mounted disk starts empty, so first boot has nothing to load. Existing
-    files are never overwritten -- a deploy must not wipe the season somebody
-    has been playing. Returns the files actually copied.
+    Results are stored against fixture ids, so a saved season is only meaningful
+    against the calendar it was played on. When the calendar is rebuilt -- a
+    different game count, different days, different ids -- the old save is not
+    "a season in progress", it is a season of a different competition, and
+    keeping it would leave standings referring to games that no longer exist.
+    """
+    ids = sorted(g.id if hasattr(g, "id") else g["id"] for g in games)
+    return hashlib.blake2b("|".join(ids).encode("utf-8"), digest_size=8).hexdigest()
+
+
+def _season_schedule_id(path: Path) -> str | None:
+    """The fingerprint recorded in a season file, or None if unreadable."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    stamped = data.get("schedule")
+    if stamped:
+        return stamped
+    # Written before the stamp existed: derive it from the fixtures themselves.
+    return schedule_fingerprint(data.get("games", []))
+
+
+def seed_data_dir(target: Path | None = None) -> list[Path]:
+    """Put the bundled league and season on the data directory.
+
+    A mounted disk starts empty, so first boot has nothing to load. After that
+    the disk is the truth and a deploy must not wipe a season somebody is
+    playing -- with two exceptions, both of which mean the save is no longer
+    about the same competition:
+
+      * the committed calendar has changed, so results on disk point at
+        fixtures that no longer exist; or
+      * `BBALLSIM_RESET_SEASON` is set, which is the manual override.
+
+    Returns the files actually written.
     """
     target = Path(target) if target else data_dir()
     if target.resolve() == BUNDLED_DATA_DIR.resolve():
         return []
 
     target.mkdir(parents=True, exist_ok=True)
-    copied = []
+    written = []
     for name in ("league.json", "season.json"):
         source = BUNDLED_DATA_DIR / name
         destination = target / name
-        if source.is_file() and not destination.exists():
+        if not source.is_file():
+            continue
+        if not destination.exists() or _should_replace_season(name, source, destination):
             shutil.copyfile(source, destination)
-            copied.append(destination)
-    return copied
+            written.append(destination)
+    return written
+
+
+def _should_replace_season(name: str, source: Path, destination: Path) -> bool:
+    """Whether an existing file on the data directory is now stale."""
+    if name != "season.json":
+        return False  # the roster is never overwritten; it has no calendar
+    if os.environ.get("BBALLSIM_RESET_SEASON", "").strip().lower() in {"1", "true", "yes"}:
+        return True
+    return _season_schedule_id(source) != _season_schedule_id(destination)
 
 # Decimal places kept for every stored float. A ten-thousandth of a point on a
 # 1-20 attribute is far below anything the engine can act on, and writing the
@@ -520,6 +564,10 @@ def dump_season(
         "version": SAVE_VERSION,
         "name": name,
         "season": season,
+        # Which calendar these results were played on. A deployment compares
+        # this against the committed one and replaces a save built on a
+        # superseded schedule -- see `seed_data_dir`.
+        "schedule": schedule_fingerprint(games),
         # The sim clock's offset from real time, so reopening the app puts you
         # back on the date you left rather than at whatever today is.
         "clock_offset_seconds": clock_offset_seconds,

@@ -40,9 +40,10 @@ DEFAULT_HOST = os.environ.get("HOST") or ("0.0.0.0" if os.environ.get("PORT") el
 def build_league(team_count: int = 30) -> League:
     """The league and its season, from disk."""
     # On a mounted disk the first boot finds an empty directory; seed it from
-    # the copies baked into the image, without ever overwriting a live save.
+    # the copies baked into the image. A season already there is left alone
+    # unless it was played on a calendar this build no longer has.
     for path in seed_data_dir():
-        print(f"seeded {path}")
+        print(f"installed {path.name} -> {path}")
 
     saved = load_teams(team_count)
     league = League(name=saved.name, season=saved.season)
