@@ -40,6 +40,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -58,14 +60,52 @@ from .tactics import Tactics
 # version than this code understands is an error rather than a guess.
 SAVE_VERSION = 1
 
-# Where the league lives by default. Committed to the repository, so a fresh
-# clone gets the same 30 teams as everybody else.
-LEAGUE_PATH = Path(__file__).resolve().parents[1] / "data" / "league.json"
+# The copies committed to the repository, so a fresh clone gets the same 30
+# teams as everybody else. In a deployment these are the *seed*: read-only,
+# baked into the image, and copied once into the writable data directory.
+BUNDLED_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+
+
+def data_dir() -> Path:
+    """Where saves are read and written.
+
+    `BBALLSIM_DATA_DIR` points this at a mounted disk in a deployment, where
+    the repository checkout is replaced on every deploy and anything written
+    beside it would be lost. Locally it is just `data/`.
+    """
+    override = os.environ.get("BBALLSIM_DATA_DIR")
+    return Path(override) if override else BUNDLED_DATA_DIR
+
+
+# Resolved once at import: the environment is set before the process starts.
+LEAGUE_PATH = data_dir() / "league.json"
 
 # The season alongside it: the fixture list, and the results of whatever has
 # been played. Standings and season stats are absent on purpose -- they are
 # derived from these results on load.
-SEASON_PATH = Path(__file__).resolve().parents[1] / "data" / "season.json"
+SEASON_PATH = data_dir() / "season.json"
+
+
+def seed_data_dir(target: Path | None = None) -> list[Path]:
+    """Copy the bundled league and season into the data directory, once.
+
+    A mounted disk starts empty, so first boot has nothing to load. Existing
+    files are never overwritten -- a deploy must not wipe the season somebody
+    has been playing. Returns the files actually copied.
+    """
+    target = Path(target) if target else data_dir()
+    if target.resolve() == BUNDLED_DATA_DIR.resolve():
+        return []
+
+    target.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for name in ("league.json", "season.json"):
+        source = BUNDLED_DATA_DIR / name
+        destination = target / name
+        if source.is_file() and not destination.exists():
+            shutil.copyfile(source, destination)
+            copied.append(destination)
+    return copied
 
 # Decimal places kept for every stored float. A ten-thousandth of a point on a
 # 1-20 attribute is far below anything the engine can act on, and writing the

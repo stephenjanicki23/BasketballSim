@@ -1,0 +1,36 @@
+# Render blueprint. Point Render at this repository and it reads this file.
+#
+# Two things about this app shape the config, and neither is negotiable:
+#
+#   1. The league lives in memory. One instance only -- `numInstances: 1`, and
+#      never turn on autoscaling. Two instances would each hold their own
+#      league, tick their own clocks and write over each other's save.
+#   2. It writes `season.json` as you play. That needs a disk: Render replaces
+#      the filesystem on every deploy, so anything written next to the code is
+#      gone the next time you push. `BBALLSIM_DATA_DIR` points the app at the
+#      mounted disk, and first boot seeds it from the copies in the repository.
+#
+# Disks require a paid instance type; the free tier has no persistent storage
+# (and sleeps after 15 minutes idle, which also loses in-memory state).
+
+services:
+  - type: web
+    name: basketball-manager
+    runtime: python
+    plan: starter
+    numInstances: 1
+    # No dependencies -- there is nothing to install. Render still wants a
+    # build command, so state that plainly rather than leaving it blank.
+    buildCommand: "python3 -c \"import sys; assert sys.version_info >= (3, 11); print('no dependencies to install')\""
+    startCommand: "python3 run.py serve"
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Where saves are read and written. Must match the disk mount below.
+      - key: BBALLSIM_DATA_DIR
+        value: /var/data
+    disk:
+      name: league-data
+      mountPath: /var/data
+      sizeGB: 1

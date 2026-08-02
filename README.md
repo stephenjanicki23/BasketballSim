@@ -18,13 +18,40 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 179 tests
+python3 -m unittest discover -s tests    # 191 tests
 ```
 
 In the browser: the left column is the schedule, click any game to open the
 tracker. Use **+15 min** / **Skip to next tip-off** to push the league clock
 forward, and **Tracker speed** to control how fast the play-by-play reveals
 (1× is real time, 20× plays a game out in about two and a half minutes).
+
+## Hosting it
+
+`DEPLOY.md` walks through putting this on Render with a custom domain. The
+short version: `render.yaml` in the root is a blueprint Render reads directly,
+and two properties of the app shape it — the league lives **in memory**, so it
+runs as exactly one instance and must never autoscale; and it **writes as you
+play**, so it needs a mounted disk (`BBALLSIM_DATA_DIR` points at it, and first
+boot seeds it from the committed `data/`, never overwriting a live save).
+
+Being hosted put three things on the server that a laptop did not need:
+
+- **A lock around the league.** The server is threaded and the `League` is
+  shared mutable state; two requests ticking at once could finalise the same
+  game twice and count it twice in the standings. `tests/test_server.py` hammers
+  the clock from six threads and checks the books balance — and it does fail
+  without the lock, which is the only reason it is worth having.
+- **Autosave, and `SIGTERM`.** Saving only on Ctrl-C is fine at a terminal.
+  A host stops a container by signalling it, so the app now handles `SIGTERM`
+  (save, then exit) and checkpoints every two minutes while running — but only
+  when games have actually been played, so an idle server writes nothing.
+- **`/api/health`.** Answers without touching the league, so a health check
+  still succeeds while a slow request holds the lock.
+
+Note that `http.server` has no request timeouts or rate limiting, and there is
+no authentication — anyone with the URL can advance the clock. Both are called
+out in `DEPLOY.md`.
 
 ## The league is saved, not generated
 
@@ -506,12 +533,14 @@ web/               the tracker UI (vanilla JS, no build step)
 data/league.json   who is in the league: 30 teams, 360 players, 30 coaches
 data/season.json   what has happened: 870 fixtures, and results
 tools/make_league.py, tools/make_season.py   built them (one-off)
+render.yaml        hosting blueprint — see DEPLOY.md
 ```
 
 ## API
 
 | | |
 |---|---|
+| `GET /api/health` | liveness, for a platform health check |
 | `GET /api/league` | league summary and current sim time |
 | `GET /api/teams`, `/api/teams/<id>` | teams, roster with ratings |
 | `GET /api/schedule?date=&team=` | fixtures |

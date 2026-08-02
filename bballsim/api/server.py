@@ -1,6 +1,7 @@
 """Zero-dependency JSON API + static file server.
 
 Endpoints
+    GET  /api/health                        liveness, for a platform health check
     GET  /api/league                        league summary and clock
     GET  /api/teams                         all teams
     GET  /api/teams/<id>                    one team with its roster
@@ -20,6 +21,8 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import signal
+import threading
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,6 +37,12 @@ WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
 
 class ApiHandler(BaseHTTPRequestHandler):
     league: League = None  # type: ignore[assignment]
+
+    # One League, many request threads. Every endpoint either ticks the league
+    # or reads tables the tick rebuilds, so requests are serialised here rather
+    # than racing over shared mutable state -- two concurrent ticks could
+    # finalise the same game twice and count it twice in the standings.
+    lock: threading.RLock = threading.RLock()
 
     # -- plumbing ------------------------------------------------------
     def log_message(self, fmt: str, *args) -> None:  # quieter console
@@ -76,10 +85,17 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
 
+        # Deliberately outside the lock and without a tick: a health check has
+        # to answer even while a slow request holds the league.
+        if path == "/api/health":
+            self._send_json({"status": "ok"})
+            return
+
         if path.startswith("/api/"):
-            self.league.tick()
             try:
-                self._route_api(path, query)
+                with self.lock:
+                    self.league.tick()
+                    self._route_api(path, query)
             except Exception as exc:  # keep the shell alive while iterating
                 self._send_json({"error": str(exc), "type": type(exc).__name__}, 500)
             return
@@ -100,9 +116,10 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "not found"}, 404)
             return
         body = self._read_json_body()
-        self.league.tick()
         try:
-            self._route_post(parsed.path, body)
+            with self.lock:
+                self.league.tick()
+                self._route_post(parsed.path, body)
         except Exception as exc:
             self._send_json({"error": str(exc), "type": type(exc).__name__}, 500)
 
@@ -221,14 +238,75 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "unknown endpoint", "path": path}, 404)
 
 
-def serve(league: League, host: str = "127.0.0.1", port: int = 8000) -> None:
+def serve(
+    league: League,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    save: "callable | None" = None,
+    autosave_seconds: float = 120.0,
+    on_start: "callable | None" = None,
+) -> None:
+    """Run the app until it is asked to stop.
+
+    `save`, if given, is called periodically and once on the way out. Saving
+    only at shutdown is fine at a terminal, where you press Ctrl-C; it is not
+    fine on a host that can stop a container without warning, so games are
+    checkpointed while the server runs as well.
+
+    `on_start` is handed the running server, which is how a caller that did not
+    create it -- a test, or an embedder -- gets hold of `shutdown()`.
+    """
     ApiHandler.league = league
     server = ThreadingHTTPServer((host, port), ApiHandler)
+    stopping = threading.Event()
+
+    def checkpoint() -> None:
+        if save is None:
+            return
+        try:
+            with ApiHandler.lock:
+                save(league)
+        except Exception as exc:  # a failed save must not take the server down
+            print(f"autosave failed: {type(exc).__name__}: {exc}")
+
+    def autosave_loop() -> None:
+        played = _finalised(league)
+        while not stopping.wait(autosave_seconds):
+            now_played = _finalised(league)
+            if now_played != played:      # nothing new, nothing to write
+                played = now_played
+                checkpoint()
+
+    if save is not None and autosave_seconds > 0:
+        threading.Thread(target=autosave_loop, daemon=True).start()
+
+    def request_stop(signum, _frame) -> None:
+        # SIGTERM is how a container is asked to stop. Without this the process
+        # is killed outright and the `finally` below never runs, taking every
+        # game played since the last checkpoint with it.
+        print(f"\nReceived {signal.Signals(signum).name}, shutting down.")
+        stopping.set()
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, request_stop)
+        except ValueError:
+            pass  # not the main thread (tests, embedded use) -- Ctrl-C still works
+
     print(f"Basketball Manager shell running at http://{host}:{port}")
     print("Ctrl-C to stop.")
+    if on_start is not None:
+        on_start(server)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down.")
     finally:
+        stopping.set()
         server.server_close()
+        checkpoint()
+
+
+def _finalised(league: League) -> int:
+    return sum(1 for g in league.schedule if g.status == GameStatus.FINAL)

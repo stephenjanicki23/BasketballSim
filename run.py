@@ -14,6 +14,7 @@ Nothing here is generated. Teams, players and coaches come from
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import timedelta
 
 from bballsim.engine.game import GameSimulator
@@ -25,12 +26,24 @@ from bballsim.save import (
     apply_season,
     read_season,
     season_exists,
+    seed_data_dir,
     write_season,
 )
+
+# A hosted app is told which port to listen on and must bind every interface;
+# at a terminal, localhost is the safer default. Both come from the
+# environment so the same command works in either place.
+DEFAULT_PORT = int(os.environ.get("PORT") or 8000)
+DEFAULT_HOST = os.environ.get("HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
 
 
 def build_league(team_count: int = 30) -> League:
     """The league and its season, from disk."""
+    # On a mounted disk the first boot finds an empty directory; seed it from
+    # the copies baked into the image, without ever overwriting a live save.
+    for path in seed_data_dir():
+        print(f"seeded {path}")
+
     saved = load_teams(team_count)
     league = League(name=saved.name, season=saved.season)
     for team in saved.teams:
@@ -67,13 +80,14 @@ def command_serve(args: argparse.Namespace) -> None:
     league = build_league(args.teams)
     if args.speed is not None:
         league.tracker_speed = args.speed
-    try:
-        serve(league, host=args.host, port=args.port)
-    finally:
-        # Games played while the server was up are worth keeping, however it
-        # came down.
-        if not args.no_save:
-            save_season(league)
+    # Games played while the server is up are worth keeping, however it comes
+    # down -- so the save runs periodically as well as at shutdown.
+    serve(
+        league,
+        host=args.host,
+        port=args.port,
+        save=None if args.no_save else save_season,
+    )
 
 
 def command_sim(args: argparse.Namespace) -> None:
@@ -117,8 +131,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command")
 
     serve_parser = sub.add_parser("serve", help="run the web app")
-    serve_parser.add_argument("--host", default="127.0.0.1")
-    serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument("--host", default=DEFAULT_HOST)
+    serve_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve_parser.add_argument("--teams", type=int, default=30)
     serve_parser.add_argument("--speed", type=float, default=None,
                               help="game seconds revealed per real second "
