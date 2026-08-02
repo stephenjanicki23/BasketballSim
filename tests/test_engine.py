@@ -1,0 +1,203 @@
+"""Sanity tests for the simulation shell.
+
+Run with:  python3 -m unittest discover -s tests -v
+"""
+
+from __future__ import annotations
+
+import copy
+import sys
+import unittest
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from bballsim.chemistry import evaluate as evaluate_chemistry
+from bballsim.engine.events import EventType
+from bballsim.engine.game import GameSimulator
+from bballsim.league import GameStatus, League, build_round_robin
+from bballsim.models import Lineup
+from bballsim.placeholder import make_teams
+from bballsim.tactics import OffensiveScheme, Tactics
+
+
+def sim(home, away, seed="test"):
+    return GameSimulator("test-game", copy.deepcopy(home), copy.deepcopy(away), seed=seed).simulate()
+
+
+class TestGameSimulation(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.teams = make_teams(4)
+        cls.result = sim(cls.teams[0], cls.teams[1])
+
+    def test_game_finishes_with_a_winner(self):
+        self.assertNotEqual(self.result.home_score, self.result.away_score)
+        self.assertGreaterEqual(self.result.periods_played, 4)
+
+    def test_events_are_ordered_and_bookended(self):
+        events = self.result.events
+        self.assertEqual(events[0].type, EventType.GAME_START)
+        self.assertEqual(events[-1].type, EventType.GAME_END)
+        sequences = [e.sequence for e in events]
+        self.assertEqual(sequences, sorted(sequences))
+        # game_seconds must be monotonic or the tracker reveals events out of order
+        seconds = [e.game_seconds for e in events]
+        self.assertEqual(seconds, sorted(seconds))
+
+    def test_box_score_matches_final_score(self):
+        self.assertEqual(self.result.home_box.points, self.result.home_score)
+        self.assertEqual(self.result.away_box.points, self.result.away_score)
+
+    def test_minutes_add_up_to_five_players_per_period(self):
+        for box in (self.result.home_box, self.result.away_box):
+            total = sum(line.seconds for line in box.players.values())
+            expected = 5 * self.result.periods_played * 12 * 60
+            # overtime periods are 5 minutes, so only assert on regulation games
+            if self.result.periods_played == 4:
+                self.assertAlmostEqual(total, expected, delta=1.0)
+
+    def test_totals_are_internally_consistent(self):
+        for box in (self.result.home_box, self.result.away_box):
+            totals = box.to_dict()["totals"]
+            self.assertLessEqual(totals["fgm"], totals["fga"])
+            self.assertLessEqual(totals["tpm"], totals["tpa"])
+            self.assertLessEqual(totals["tpa"], totals["fga"])
+            self.assertLessEqual(totals["ftm"], totals["fta"])
+            self.assertLessEqual(totals["ast"], totals["fgm"])
+            self.assertEqual(
+                box.points,
+                2 * (totals["fgm"] - totals["tpm"]) + 3 * totals["tpm"] + totals["ftm"],
+            )
+
+    def test_same_seed_reproduces_the_game(self):
+        a = sim(self.teams[0], self.teams[1], seed="repeat")
+        b = sim(self.teams[0], self.teams[1], seed="repeat")
+        self.assertEqual(a.home_score, b.home_score)
+        self.assertEqual(a.away_score, b.away_score)
+        self.assertEqual(
+            [e.description for e in a.events], [e.description for e in b.events]
+        )
+
+    def test_different_seeds_diverge(self):
+        a = sim(self.teams[0], self.teams[1], seed="one")
+        b = sim(self.teams[0], self.teams[1], seed="two")
+        self.assertNotEqual(
+            [e.description for e in a.events], [e.description for e in b.events]
+        )
+
+
+class TestRatingsDriveOutcomes(unittest.TestCase):
+    def test_better_team_wins_most_of_the_time(self):
+        strong, weak = make_teams(2)
+        for player in strong.players:
+            for attribute in ("finishing", "three_point", "perimeter_defense",
+                              "interior_defense", "playmaking", "ball_handling"):
+                setattr(player.ratings, attribute, 85.0)
+        for player in weak.players:
+            for attribute in ("finishing", "three_point", "perimeter_defense",
+                              "interior_defense", "playmaking", "ball_handling"):
+                setattr(player.ratings, attribute, 40.0)
+
+        results = [sim(strong, weak, seed=f"gap-{i}") for i in range(20)]
+        wins = sum(1 for r in results if r.home_score > r.away_score)
+        self.assertGreaterEqual(wins, 18)
+
+
+class TestTacticsDriveOutcomes(unittest.TestCase):
+    def test_three_point_emphasis_raises_three_point_attempts(self):
+        base, opponent = make_teams(2)
+
+        low = copy.deepcopy(base)
+        low.tactics = Tactics(three_point_emphasis=5, offensive_scheme=OffensiveScheme.INSIDE_OUT)
+        high = copy.deepcopy(base)
+        high.tactics = Tactics(three_point_emphasis=95, offensive_scheme=OffensiveScheme.PACE_AND_SPACE)
+
+        low_attempts = sum(sim(low, opponent, seed=f"low-{i}").home_box.total("tpa") for i in range(10))
+        high_attempts = sum(sim(high, opponent, seed=f"high-{i}").home_box.total("tpa") for i in range(10))
+        self.assertGreater(high_attempts, low_attempts * 1.3)
+
+    def test_pace_changes_possession_count(self):
+        base, opponent = make_teams(2)
+        slow = copy.deepcopy(base)
+        slow.tactics = Tactics(pace=5)
+        fast = copy.deepcopy(base)
+        fast.tactics = Tactics(pace=95, offensive_scheme=OffensiveScheme.SEVEN_SECONDS)
+
+        slow_poss = sum(sim(slow, opponent, seed=f"s-{i}").home_box.possessions for i in range(6))
+        fast_poss = sum(sim(fast, opponent, seed=f"f-{i}").home_box.possessions for i in range(6))
+        self.assertGreater(fast_poss, slow_poss)
+
+
+class TestChemistry(unittest.TestCase):
+    def test_chemistry_profile_responds_to_pair_ratings(self):
+        team = make_teams(1)[0]
+        lineup = Lineup(team.starters())
+
+        neutral = evaluate_chemistry(team, lineup)
+        ids = lineup.ids()
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                team.pair_chemistry[frozenset((ids[i], ids[j]))] = 95.0
+        team.team_chemistry = 95.0
+        strong = evaluate_chemistry(team, lineup)
+
+        self.assertGreater(strong.relational, neutral.relational)
+        self.assertGreater(strong.execution, neutral.execution)
+
+
+class TestLeagueFlow(unittest.TestCase):
+    def setUp(self):
+        self.league = League(name="Test League", season="2026-27")
+        for team in make_teams(4):
+            self.league.add_team(team)
+        self.league.set_schedule(
+            build_round_robin(
+                list(self.league.teams),
+                start_date=(datetime.now(timezone.utc) + timedelta(days=1)).date(),
+                times_played=1,
+                days_between_rounds=1,
+            )
+        )
+
+    def test_nothing_is_played_before_tipoff(self):
+        self.league.tick()
+        self.assertTrue(all(g.status == GameStatus.SCHEDULED for g in self.league.schedule))
+
+    def test_games_go_live_then_final_as_the_clock_advances(self):
+        self.league.clock.advance(timedelta(days=10))
+        self.league.tick()
+        self.assertTrue(all(g.status == GameStatus.FINAL for g in self.league.schedule))
+        total_games = sum(row.games_played for row in self.league.standings.values())
+        self.assertEqual(total_games, 2 * len(self.league.schedule))
+
+    def test_feed_reveals_events_progressively(self):
+        game = self.league.schedule[0]
+        self.league.tracker_speed = 1.0
+        self.league.clock.jump_to(game.tipoff_at + timedelta(seconds=30))
+        self.league.tick()
+
+        self.assertEqual(game.status, GameStatus.LIVE)
+        early = self.league.feed(game)
+        self.assertGreater(len(early["events"]), 0)
+        self.assertFalse(early["complete"])
+        self.assertTrue(all(e["game_seconds"] <= 31 for e in early["events"]))
+
+        # A `since` cursor must not repeat events already delivered.
+        cursor = early["last_sequence"]
+        self.league.clock.advance(timedelta(seconds=120))
+        later = self.league.feed(game, since_sequence=cursor)
+        self.assertTrue(all(e["sequence"] > cursor for e in later["events"]))
+        self.assertGreater(len(later["events"]), 0)
+
+    def test_standings_only_count_finished_games(self):
+        game = self.league.schedule[0]
+        self.league.tracker_speed = 1.0
+        self.league.clock.jump_to(game.tipoff_at + timedelta(seconds=10))
+        self.league.tick()
+        self.assertEqual(sum(r.games_played for r in self.league.standings.values()), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

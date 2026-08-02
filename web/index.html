@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Basketball Manager — Shell</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">BB</span>
+      <div>
+        <h1 id="league-name">Basketball Manager</h1>
+        <p class="muted" id="league-clock">—</p>
+      </div>
+    </div>
+    <div class="clock-controls">
+      <label class="speed">
+        Tracker speed
+        <select id="speed-select">
+          <option value="1">Real time (1×)</option>
+          <option value="10">10×</option>
+          <option value="20" selected>20×</option>
+          <option value="60">60×</option>
+          <option value="300">300×</option>
+        </select>
+      </label>
+      <button data-advance="15">+15 min</button>
+      <button data-advance="240">+4 hrs</button>
+      <button id="skip-next">Skip to next tip-off</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel schedule-panel">
+      <div class="panel-head">
+        <h2>Schedule</h2>
+        <span class="muted" id="schedule-summary"></span>
+      </div>
+      <ul id="game-list" class="game-list"></ul>
+    </section>
+
+    <section class="panel tracker-panel">
+      <div id="tracker-empty" class="empty">
+        <p>Select a game to open the tracker.</p>
+        <p class="muted">Games simulate at their tip-off time and reveal play-by-play against the clock.</p>
+      </div>
+
+      <div id="tracker" class="tracker hidden">
+        <div class="scoreboard">
+          <div class="score-team away">
+            <span class="abbr" id="away-abbr">—</span>
+            <span class="score" id="away-score">0</span>
+          </div>
+          <div class="score-middle">
+            <span class="period" id="period">Q1</span>
+            <span class="clock" id="game-clock">12:00</span>
+            <span class="status-pill" id="status-pill">Scheduled</span>
+          </div>
+          <div class="score-team home">
+            <span class="score" id="home-score">0</span>
+            <span class="abbr" id="home-abbr">—</span>
+          </div>
+        </div>
+
+        <nav class="tabs">
+          <button class="tab active" data-tab="pbp">Play-by-play</button>
+          <button class="tab" data-tab="box">Box score</button>
+        </nav>
+
+        <div id="tab-pbp" class="tab-body">
+          <ul id="pbp" class="pbp"></ul>
+        </div>
+
+        <div id="tab-box" class="tab-body hidden">
+          <div id="box-score"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
