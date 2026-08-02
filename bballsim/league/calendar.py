@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import uuid
+import hashlib
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
@@ -73,6 +73,19 @@ class ScheduledGame:
 DEFAULT_TIPOFF = time(hour=23, minute=0)  # 7:00pm ET expressed in UTC
 
 
+def game_id(season: str, round_label: str, home_team_id: str, away_team_id: str) -> str:
+    """A stable id for a fixture.
+
+    Deliberately derived rather than random. The game id *is* the simulation
+    seed, so a `uuid4()` here meant the same fixture played out differently on
+    every restart -- the schedule looked identical and every game inside it was
+    a different game. Deriving it from who is playing, when, keeps a saved
+    season pointing at the same games it was saved with.
+    """
+    key = f"{season}|{round_label}|{away_team_id}@{home_team_id}"
+    return hashlib.blake2b(key.encode("utf-8"), digest_size=6).hexdigest()
+
+
 def build_round_robin(
     team_ids: list[str],
     start_date: date,
@@ -108,14 +121,15 @@ def build_round_robin(
                 # Alternate home/away between cycles so nobody hosts every meeting.
                 if cycle % 2 == 1:
                     home, away = away, home
+                label = f"Round {cycle * (len(ids) - 1) + round_index + 1}"
                 games.append(
                     ScheduledGame(
-                        id=uuid.uuid4().hex[:12],
+                        id=game_id(season, label, home, away),
                         home_team_id=home,
                         away_team_id=away,
                         tipoff_at=datetime.combine(day, tipoff, tzinfo=timezone.utc),
                         season=season,
-                        round_label=f"Round {cycle * (len(ids) - 1) + round_index + 1}",
+                        round_label=label,
                     )
                 )
             rotating = [rotating[-1]] + rotating[:-1]

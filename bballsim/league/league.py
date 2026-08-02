@@ -162,6 +162,32 @@ class League:
         if result is None:
             return
 
+        self._record(game)
+
+        # Chemistry grows from shared floor time. Deliberately *not* part of
+        # `_record`: a restored season folds its saved results back into the
+        # standings, and that must not drift chemistry a second time -- the
+        # chemistry those games produced is already saved on the teams.
+        for team_id, box_owner in ((game.home_team_id, "home"), (game.away_team_id, "away")):
+            team = self.teams.get(team_id)
+            if team is None:
+                continue
+            pair_minutes = getattr(result, f"{box_owner}_pair_minutes", None)
+            if pair_minutes:
+                drift_after_game(team, pair_minutes)
+
+    def _record(self, game: ScheduledGame) -> None:
+        """Fold one finished game into the standings and the season stats.
+
+        Standings and stats are never saved -- they are derived here, from
+        results, both when a game finalises live and when a season is loaded
+        from disk. Deriving them twice from the same place is what stops a
+        restored table from disagreeing with the games behind it.
+        """
+        result = game.result
+        if result is None:
+            return
+
         # The stats layer only sees box scores, so hand it the roster detail
         # it cannot infer -- which team a player belongs to, and his position.
         self.stats.add_game(result, roster=self._roster_lookup(game))
@@ -179,14 +205,26 @@ class League:
             away_row.wins += 1
             home_row.losses += 1
 
-        # Chemistry grows from shared floor time.
-        for team_id, box_owner in ((game.home_team_id, "home"), (game.away_team_id, "away")):
-            team = self.teams.get(team_id)
-            if team is None:
-                continue
-            pair_minutes = getattr(result, f"{box_owner}_pair_minutes", None)
-            if pair_minutes:
-                drift_after_game(team, pair_minutes)
+    def restore_schedule(self, games: list[ScheduledGame]) -> None:
+        """Install a schedule loaded from disk, rebuilding the derived tables.
+
+        Any game already FINAL is folded straight into the standings and season
+        stats. LIVE games come back as SCHEDULED: nothing depends on a game in
+        progress, and the next tick re-tips it -- to the same game, since the
+        seed is the fixture id.
+        """
+        for game in games:
+            if game.status == GameStatus.LIVE:
+                game.status = GameStatus.SCHEDULED
+                game.result = None
+                game.started_at = None
+
+        self.set_schedule(games)
+        self.standings = {tid: StandingsRow(team_id=tid) for tid in self.teams}
+        self.stats = SeasonStats()
+        for game in self.schedule:
+            if game.status == GameStatus.FINAL:
+                self._record(game)
 
     def _roster_lookup(self, game: ScheduledGame) -> dict[str, tuple[str, str]]:
         lookup: dict[str, tuple[str, str]] = {}
@@ -208,6 +246,7 @@ class League:
             return {
                 "game": game.to_dict(),
                 "events": [],
+                "play_by_play_available": False,
                 "revealed_seconds": 0.0,
                 "complete": False,
             }
@@ -216,6 +255,23 @@ class League:
             revealed = float("inf")
         else:
             revealed = game.revealed_seconds(now, self.tracker_speed)
+
+        if not game.result.events:
+            # A game restored from a save. The box score and the final score
+            # are stored; the play-by-play is not -- a season of it is ~90MB.
+            # Report the result honestly rather than an empty 0-0 feed.
+            return {
+                "game": game.to_dict(),
+                "events": [],
+                "play_by_play_available": False,
+                "revealed_seconds": None,
+                "home_score": game.result.home_score,
+                "away_score": game.result.away_score,
+                "period": game.result.periods_played,
+                "clock": "0:00",
+                "complete": game.status == GameStatus.FINAL,
+                "last_sequence": since_sequence,
+            }
 
         events = [
             e.to_dict()
@@ -228,6 +284,7 @@ class League:
         return {
             "game": game.to_dict(),
             "events": events,
+            "play_by_play_available": True,
             "revealed_seconds": None if revealed == float("inf") else round(revealed, 1),
             "home_score": last.home_score if last else 0,
             "away_score": last.away_score if last else 0,

@@ -6,9 +6,9 @@ time from player ratings, tactics and chemistry; games tip off on a schedule;
 and you can open any game in a tracker and watch the play-by-play unfold.
 
 There are no real teams or players. `bballsim/placeholder.py` invented a
-30-team league of 360 anonymous players and 30 coaches **once**; that league now
-lives in `data/league.json` and is what everything plays with. Delete both when
-you load real data.
+30-team league of 360 anonymous players and 30 coaches **once**; that league and
+its fixture list now live in `data/` and are what everything plays with. Delete
+them when you load real data.
 
 ## Running it
 
@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 162 tests
+python3 -m unittest discover -s tests    # 179 tests
 ```
 
 In the browser: the left column is the schedule, click any game to open the
@@ -28,9 +28,12 @@ forward, and **Tracker speed** to control how fast the play-by-play reveals
 
 ## The league is saved, not generated
 
-The teams, players and coaches do not change. They are read from
-`data/league.json`, which is committed, so a fresh clone gets the same
-Pavel Vandeleur as everybody else.
+Nothing is generated at boot. Two committed files hold it all:
+
+| | |
+|---|---|
+| `data/league.json` | who is in the league — 30 teams, 360 players, 30 coaches |
+| `data/season.json` | what has happened — the 870-fixture schedule, and results |
 
 This is a stronger guarantee than seeding. A seeded generator is
 *reproducible* — the same code gives the same league — but not *stable*: change
@@ -45,6 +48,46 @@ python3 tools/make_league.py --show     # what is in the file now
 python3 tools/make_league.py --force    # replace every player and coach
 ```
 
+### The schedule and the standings
+
+The same argument applies to the fixture list, and one detail made it sharper:
+**a fixture's id is its simulation seed.** The schedule used to be rebuilt from
+`uuid4()` on every boot, so the fixtures looked identical and every game inside
+them was a different game. Ids are now derived from who is playing and when, so
+a saved season points at the games it was saved with.
+
+```bash
+python3 tools/make_season.py            # build the fixture list (refuses to clobber)
+python3 tools/make_season.py --show     # fixtures, results, sim date
+python3 tools/make_season.py --play     # build it and sim the whole thing
+```
+
+`run.py serve` loads it, and writes results back on the way out — however the
+server comes down, since the save is in a `finally`. Play six days of games,
+quit, restart, and the table is where you left it, sim date included. Pass
+`--no-save` to leave the file alone.
+
+What the season file stores is deliberately narrow:
+
+- **Stored** — the fixture list, and for each finished game its final score,
+  line score and full box score.
+- **Derived** — the standings and season stats. `League.restore_schedule` folds
+  them back out of the results on load, through the same `_record` the live
+  path uses, so a restored table can't disagree with the games behind it.
+  Chemistry drift is deliberately *not* in `_record`: it already happened, and
+  its result is saved with the roster.
+- **Dropped** — the play-by-play. A season is ~330,000 events and about 90 MB of
+  JSON, which is not something to write on every save. A game restored from
+  disk keeps its box score and its result but not its commentary, and the
+  tracker feed reports `play_by_play_available: false` rather than an empty
+  0–0 feed.
+- **Dropped** — pair minutes, which exist only to drift chemistry when a game
+  finalises.
+
+A game that was mid-flight when you quit comes back as scheduled rather than
+half-played: nothing depends on a game in progress, and the next tick re-tips
+it — to the same game, since the seed is the fixture id.
+
 `bballsim/save.py` owns the format, and deliberately does **not** reuse the
 `to_dict()` methods elsewhere in the package — those are display views for the
 API and the demo page, which round values, add derived fields and cannot be
@@ -56,9 +99,10 @@ anything the engine acts on), after which reading the file and writing it back
 is byte-identical — a diff on `league.json` always means something really moved.
 
 `bballsim/roster.py` is the one place anything asks for teams, so the server,
-the demo exporter and the CLI cannot disagree about who is in the league. If
-the file is missing it generates a temporary league and says so loudly on
-stderr, because that is a *different* league.
+the demo exporter and the CLI cannot disagree about who is in the league — the
+demo page is built from the same two files, so its fixtures and its 360 players
+are the app's. If either file is missing, a temporary one is generated and said
+so loudly on stderr, because that is a *different* league.
 
 `tests/test_save.py` pins this down. The round-trip test walks the dataclass
 fields rather than naming attributes by hand, so adding an attribute to
@@ -455,12 +499,13 @@ bballsim/
     stats.py       season totals -> per-game rates, for players and teams
     league.py      standings, the sim clock, tick(), the tracker feed
   api/server.py    stdlib HTTP: JSON API + static files
-  save.py          the league file format: exact, lossless, no derived values
+  save.py          the file formats: stored values only, nothing derived
   roster.py        the one place anything asks for teams
   placeholder.py   THROWAWAY generator — ran once to build data/league.json
 web/               the tracker UI (vanilla JS, no build step)
-data/league.json   the league: 30 teams, 360 players, 30 coaches
-tools/make_league.py  generates it (one-off)
+data/league.json   who is in the league: 30 teams, 360 players, 30 coaches
+data/season.json   what has happened: 870 fixtures, and results
+tools/make_league.py, tools/make_season.py   built them (one-off)
 ```
 
 ## API
@@ -486,8 +531,8 @@ flag, contracts, trades, the draft, playoffs, real scheduling (back-to-backs,
 travel), and in-game manager input (timeouts, tactical changes mid-game). The
 seams for those are all in place.
 
-Persistence is now half-done rather than absent: the *roster* is saved, so
-teams, players and coaches survive a restart. **Results are not** — the
-schedule, standings and season stats still live in memory and a restart
-re-sims them. Saving those means writing league state alongside the roster,
-which `save.py` is shaped for but does not do yet.
+Persistence covers the roster, the schedule and results; standings and season
+stats rebuild from those. The one thing it does not keep is **play-by-play** —
+a finished game restored from disk has its box score but not its commentary,
+for the size reason described above. Storing it would mean a separate per-game
+file rather than one season file.

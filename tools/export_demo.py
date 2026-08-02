@@ -30,6 +30,7 @@ from bballsim.league.calendar import GameStatus
 from bballsim.models import Lineup
 from bballsim.league.stats import STAT_COLUMNS
 from bballsim.roster import load_teams
+from bballsim.save import apply_season, read_season, season_exists
 from bballsim.ratings import (
     ATTRIBUTE_GROUPS,
     ATTRIBUTE_LABELS,
@@ -84,26 +85,31 @@ CODE_BY_TYPE = {name: index for index, name in enumerate(EVENT_CODES)}
 DETAILED_GAMES = 30
 
 
-def build_season(team_count: int = 30, season_start_days_ago: int = 30) -> League:
-    # The saved league, not a freshly generated one -- the demo has to show the
-    # same 360 players as the app.
+def build_season(team_count: int = 30) -> League:
+    """The saved league and the saved fixture list, played out in full.
+
+    Both come off disk rather than being generated here, so the demo shows the
+    same 360 players and the same fixtures as the app. A fixture id is its
+    simulation seed, so the games below are the games the app would play.
+    """
     saved = load_teams(team_count)
     league = League(name=saved.name, season=saved.season)
     for team in saved.teams:
         league.add_team(team)
 
-    start = (datetime.now(timezone.utc) - timedelta(days=season_start_days_ago)).date()
-    league.set_schedule(
-        build_round_robin(
+    if season_exists():
+        apply_season(league, read_season())
+    else:
+        league.set_schedule(build_round_robin(
             team_ids=list(league.teams),
-            start_date=start,
-            times_played=1,
+            start_date=datetime.now(timezone.utc).date(),
+            times_played=2,
             days_between_rounds=1,
             season=league.season,
-        )
-    )
+        ))
+
     # Run the whole schedule out.
-    league.clock.advance(timedelta(days=365))
+    league.clock.advance(timedelta(days=365 * 2))
     league.tick()
     return league
 

@@ -1,4 +1,13 @@
-"""Saving and loading a league, so the teams you have are the teams you keep.
+"""Saving and loading, so the league you have is the league you keep.
+
+Two files, both under `data/`:
+
+    league.json   who is in the league -- teams, players, coaches
+    season.json   what has happened -- the fixture list, and results
+
+The rest of this module note is about the first; the second is documented at
+the section that builds it, further down.
+
 
 A generated league is reproducible but not *stable*. `make_teams(30)` returns
 the same 360 players every run only for as long as the generator is untouched:
@@ -24,6 +33,7 @@ the round-trip attribute by attribute rather than by spot check.
 
     python3 tools/make_league.py            # generate and write data/league.json
     python3 tools/make_league.py --show     # what is in the file now
+    python3 tools/make_season.py            # build the fixture list
 """
 
 from __future__ import annotations
@@ -31,11 +41,15 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .ability import Ability, Archetype
 from .biography import Biography, DraftInfo
 from .coach import Coach, CoachRatings
+from .engine.boxscore import PlayerLine, TeamBox
+from .engine.game import GameResult
+from .league.calendar import GameStatus, ScheduledGame
 from .models import Player, Position, Team
 from .ratings import HiddenAttributes, Ratings, Tendencies
 from .tactics import Tactics
@@ -47,6 +61,11 @@ SAVE_VERSION = 1
 # Where the league lives by default. Committed to the repository, so a fresh
 # clone gets the same 30 teams as everybody else.
 LEAGUE_PATH = Path(__file__).resolve().parents[1] / "data" / "league.json"
+
+# The season alongside it: the fixture list, and the results of whatever has
+# been played. Standings and season stats are absent on purpose -- they are
+# derived from these results on load.
+SEASON_PATH = Path(__file__).resolve().parents[1] / "data" / "season.json"
 
 # Decimal places kept for every stored float. A ten-thousandth of a point on a
 # 1-20 attribute is far below anything the engine can act on, and writing the
@@ -289,3 +308,233 @@ def fingerprint(teams: list[Team]) -> str:
         _round([dump_team(t) for t in teams]), sort_keys=True, separators=(",", ":")
     )
     return hashlib.blake2b(blob.encode("utf-8"), digest_size=8).hexdigest()
+
+
+# --------------------------------------------------------------------------
+# The season: fixtures and results.
+#
+# What is stored here is deliberately narrow.
+#
+#   Stored      the fixture list, and for each finished game its final score,
+#               line score and full box score.
+#   Derived     standings and season stats. Both are folded out of the results
+#               on load by `League.restore_schedule`, so a restored table can
+#               never disagree with the games behind it.
+#   Dropped     the play-by-play. A 435-game season is ~330,000 events and
+#               about 90MB of JSON, which is not a thing to write on every
+#               save. A game restored from disk keeps its box score and its
+#               result; it does not keep its commentary.
+#   Dropped     pair minutes. They exist only to drift chemistry when a game
+#               finalises, which has already happened -- and the chemistry it
+#               produced is saved with the roster.
+# --------------------------------------------------------------------------
+
+# Box score fields worth storing. `rebounds` and `minutes` are derived from
+# these and are left out, the same as everywhere else in this file.
+_PLAYER_LINE_FIELDS = (
+    "seconds", "points", "fgm", "fga", "tpm", "tpa", "ftm", "fta",
+    "offensive_rebounds", "defensive_rebounds", "assists", "steals",
+    "blocks", "turnovers", "fouls", "plus_minus",
+)
+
+
+def dump_player_line(line: PlayerLine) -> dict:
+    data = {"player_id": line.player_id, "name": line.name}
+    data.update({key: getattr(line, key) for key in _PLAYER_LINE_FIELDS})
+    return data
+
+
+def load_player_line(data: dict) -> PlayerLine:
+    return PlayerLine(
+        player_id=data["player_id"],
+        name=data.get("name", ""),
+        **{key: data.get(key, 0) for key in _PLAYER_LINE_FIELDS},
+    )
+
+
+def dump_box(box: TeamBox) -> dict:
+    return {
+        "team_id": box.team_id,
+        "name": box.name,
+        "possessions": box.possessions,
+        "points_by_period": list(box.points_by_period),
+        # JSON object keys are strings; periods are ints.
+        "team_fouls_by_period": {str(k): v for k, v in box.team_fouls_by_period.items()},
+        "timeouts_remaining": box.timeouts_remaining,
+        "players": [dump_player_line(l) for l in box.players.values()],
+    }
+
+
+def load_box(data: dict) -> TeamBox:
+    box = TeamBox(
+        team_id=data["team_id"],
+        name=data.get("name", ""),
+        possessions=data.get("possessions", 0),
+        points_by_period=list(data.get("points_by_period", [])),
+        team_fouls_by_period={
+            int(k): v for k, v in (data.get("team_fouls_by_period") or {}).items()
+        },
+        timeouts_remaining=data.get("timeouts_remaining", 7),
+    )
+    box.players = {
+        line["player_id"]: load_player_line(line) for line in data.get("players", [])
+    }
+    return box
+
+
+def dump_result(result: GameResult) -> dict:
+    return {
+        "seed": result.seed,
+        "home_score": result.home_score,
+        "away_score": result.away_score,
+        "periods_played": result.periods_played,
+        "duration_game_seconds": result.duration_game_seconds,
+        "home_box": dump_box(result.home_box),
+        "away_box": dump_box(result.away_box),
+    }
+
+
+def load_result(data: dict, game: dict) -> GameResult:
+    return GameResult(
+        game_id=game["id"],
+        seed=data.get("seed", 0),
+        home_team_id=game["home_team_id"],
+        away_team_id=game["away_team_id"],
+        home_score=data["home_score"],
+        away_score=data["away_score"],
+        periods_played=data.get("periods_played", 4),
+        # Not stored; see the note at the top of this section.
+        events=[],
+        home_box=load_box(data["home_box"]),
+        away_box=load_box(data["away_box"]),
+        duration_game_seconds=data.get("duration_game_seconds", 0.0),
+    )
+
+
+def _iso(moment: datetime | None) -> str | None:
+    return moment.isoformat() if moment else None
+
+
+def _moment(text: str | None) -> datetime | None:
+    return datetime.fromisoformat(text) if text else None
+
+
+def dump_game(game: ScheduledGame) -> dict:
+    data = {
+        "id": game.id,
+        "home_team_id": game.home_team_id,
+        "away_team_id": game.away_team_id,
+        "tipoff_at": game.tipoff_at.isoformat(),
+        "status": game.status.value,
+        "season": game.season,
+        "round_label": game.round_label,
+        "started_at": _iso(game.started_at),
+        "finished_at": _iso(game.finished_at),
+    }
+    if game.result is not None and game.status == GameStatus.FINAL:
+        data["result"] = dump_result(game.result)
+    return data
+
+
+def load_game(data: dict) -> ScheduledGame:
+    game = ScheduledGame(
+        id=data["id"],
+        home_team_id=data["home_team_id"],
+        away_team_id=data["away_team_id"],
+        tipoff_at=datetime.fromisoformat(data["tipoff_at"]),
+        status=GameStatus(data.get("status", "scheduled")),
+        season=data.get("season", ""),
+        round_label=data.get("round_label", ""),
+        started_at=_moment(data.get("started_at")),
+        finished_at=_moment(data.get("finished_at")),
+    )
+    if data.get("result"):
+        game.result = load_result(data["result"], data)
+    return game
+
+
+@dataclass
+class SavedSeason:
+    """A season as it came off disk."""
+
+    name: str
+    season: str
+    games: list[ScheduledGame]
+    clock_offset_seconds: float = 0.0
+    tracker_speed: float = 20.0
+
+    @property
+    def played(self) -> int:
+        return sum(1 for g in self.games if g.status == GameStatus.FINAL)
+
+
+def dump_season(
+    games: list[ScheduledGame],
+    *,
+    name: str,
+    season: str,
+    clock_offset_seconds: float = 0.0,
+    tracker_speed: float = 20.0,
+) -> dict:
+    return {
+        "version": SAVE_VERSION,
+        "name": name,
+        "season": season,
+        # The sim clock's offset from real time, so reopening the app puts you
+        # back on the date you left rather than at whatever today is.
+        "clock_offset_seconds": clock_offset_seconds,
+        "tracker_speed": tracker_speed,
+        "games": [dump_game(g) for g in games],
+    }
+
+
+def load_season(data: dict) -> SavedSeason:
+    version = data.get("version", 0)
+    if version > SAVE_VERSION:
+        raise ValueError(
+            f"season file is version {version}, this build understands {SAVE_VERSION}"
+        )
+    return SavedSeason(
+        name=data.get("name", "Basketball League"),
+        season=data.get("season", "2026-27"),
+        games=[load_game(g) for g in data.get("games", [])],
+        clock_offset_seconds=data.get("clock_offset_seconds", 0.0),
+        tracker_speed=data.get("tracker_speed", 20.0),
+    )
+
+
+def write_season(path: Path, league, *, indent: int | None = 1) -> Path:
+    """Write a league's schedule and results to `path`.
+
+    Takes the League rather than a game list so the clock offset and tracker
+    speed travel with it -- reopening the app should put you back on the date
+    you left.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _round(dump_season(
+        league.schedule,
+        name=league.name,
+        season=league.season,
+        clock_offset_seconds=league.clock.offset.total_seconds(),
+        tracker_speed=league.tracker_speed,
+    ))
+    path.write_text(json.dumps(payload, indent=indent, sort_keys=True) + "\n")
+    return path
+
+
+def read_season(path: Path = SEASON_PATH) -> SavedSeason:
+    return load_season(json.loads(Path(path).read_text()))
+
+
+def season_exists(path: Path = SEASON_PATH) -> bool:
+    return Path(path).is_file()
+
+
+def apply_season(league, saved: SavedSeason) -> None:
+    """Put a loaded season onto a league: fixtures, clock, and derived tables."""
+    league.name = saved.name
+    league.season = saved.season
+    league.tracker_speed = saved.tracker_speed
+    league.clock.offset = timedelta(seconds=saved.clock_offset_seconds)
+    league.restore_schedule(saved.games)
