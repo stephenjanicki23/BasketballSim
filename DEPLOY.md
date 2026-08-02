@@ -84,11 +84,16 @@ configure beyond DNS.
   played*, and once more on shutdown. Render stops a service by sending
   `SIGTERM`, which the app handles: it stops accepting requests, saves, and
   exits. An idle server writes nothing.
-- **Logs** — a save prints `saved N played of 870 fixtures … (sim date …)`, so
+- **Logs** — a save prints `saved N played of 1230 fixtures … (sim date …)`, so
   the logs tell you the season is being kept.
-- **Resetting the league** — delete `/var/data/season.json` from a Render shell
-  and restart; the next boot re-seeds it from the committed fixture list.
-  Deleting `league.json` too resets the players and coaches.
+- **Resetting the season** — delete `/var/data/season.json` from a Render shell
+  and restart; the next boot re-seeds it from the committed fixture list, with
+  every result, standing and stat wiped. Deleting `league.json` too resets the
+  players and coaches.
+- **The clock is real time.** Games tip off at their real 8am, 1pm and 7pm
+  Pacific slots, three a day per team. The service has to be *running* at those
+  times to play them — which is another reason the free tier's sleep-when-idle
+  does not suit this app.
 
 ## Known limits
 

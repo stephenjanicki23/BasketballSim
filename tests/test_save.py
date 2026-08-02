@@ -537,18 +537,16 @@ class TestTheCommittedSeason(unittest.TestCase):
             raise unittest.SkipTest(f"no season at {SEASON_PATH}")
         cls.saved = read_season(SEASON_PATH)
 
-    def test_it_is_a_full_double_round_robin(self):
-        # 30 teams, home and away: 30 * 29 = 870.
-        self.assertEqual(len(self.saved.games), 870)
-        self.assertEqual(len({g.id for g in self.saved.games}), 870)
+    def test_every_fixture_has_its_own_id(self):
+        """Ids are the simulation seeds, so a collision would make two
+        different fixtures play out as the same game."""
+        self.assertEqual(
+            len({g.id for g in self.saved.games}), len(self.saved.games)
+        )
 
-    def test_every_team_plays_the_same_number_of_games(self):
-        counts: dict[str, int] = {}
-        for game in self.saved.games:
-            for team_id in (game.home_team_id, game.away_team_id):
-                counts[team_id] = counts.get(team_id, 0) + 1
-        self.assertEqual(len(counts), 30)
-        self.assertEqual(set(counts.values()), {58})
+    # The shape of the season -- 82 games each, three a day, 8am/1pm/7pm
+    # Pacific -- is asserted in tests/test_schedule.py, which owns the
+    # calendar. Here we only care that what was saved is what comes back.
 
     def test_every_team_hosts_as_often_as_it_travels(self):
         home: dict[str, int] = {}

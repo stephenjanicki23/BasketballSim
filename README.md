@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 200 tests
+python3 -m unittest discover -s tests    # 220 tests
 ```
 
 In the browser: four tabs — **Games** (schedule and the live tracker),
@@ -84,7 +84,7 @@ Nothing is generated at boot. Two committed files hold it all:
 | | |
 |---|---|
 | `data/league.json` | who is in the league — 30 teams, 360 players, 30 coaches |
-| `data/season.json` | what has happened — the 870-fixture schedule, and results |
+| `data/season.json` | what has happened — the 1,230-fixture schedule, and results |
 
 This is a stronger guarantee than seeding. A seeded generator is
 *reproducible* — the same code gives the same league — but not *stable*: change
@@ -99,9 +99,36 @@ python3 tools/make_league.py --show     # what is in the file now
 python3 tools/make_league.py --force    # replace every player and coach
 ```
 
-### The schedule and the standings
+### The season calendar
 
-The same argument applies to the fixture list, and one detail made it sharper:
+**82 games each, three a day, on real days.** Tip-offs are 8am, 1pm and 7pm
+**Pacific**; every team plays once per slate, so a three-slate day is three
+games for everybody — 45 games a day across 30 teams.
+
+82 does not divide by three, so the tail is **two days of two games** rather
+than a day with a single game: 26 days of three plus 2 days of two = 28 days
+and 1,230 games. `_pack_days` owns that rule and a test walks every round count
+from 2 to 200 asserting no day is ever left with one game.
+
+Two details the calendar has to get right, both tested:
+
+- **Home and away split exactly 41/41.** Handing home to whoever has hosted
+  less gets close but lands teams on 40–42, because the choice is local and the
+  constraint is seasonal. A repair pass fixes it, and it needs to *walk*: when
+  one team was on 42 and another on 40, no fixture existed between them, so the
+  surplus is moved along a path of fixtures instead.
+- **Daylight saving.** Tip-offs are stored as Pacific wall-clock times and
+  converted to UTC, not as a fixed offset — Pacific is UTC-7 half the year and
+  UTC-8 the other half, and a hard-coded offset would move every game by an
+  hour on 1 November. `zoneinfo` is standard library, so this costs no
+  dependency.
+
+The sim clock runs at **real time with no offset**: a game tips off when its
+actual 8am/1pm/7pm Pacific slot arrives.
+
+### The fixture list is saved too
+
+The same argument as the roster applies here, and one detail made it sharper:
 **a fixture's id is its simulation seed.** The schedule used to be rebuilt from
 `uuid4()` on every boot, so the fixtures looked identical and every game inside
 them was a different game. Ids are now derived from who is playing and when, so
@@ -110,13 +137,18 @@ a saved season points at the games it was saved with.
 ```bash
 python3 tools/make_season.py            # build the fixture list (refuses to clobber)
 python3 tools/make_season.py --show     # fixtures, results, sim date
-python3 tools/make_season.py --play     # build it and sim the whole thing
+python3 tools/make_season.py --force    # rebuild, discarding every result
+python3 tools/make_season.py --start 2026-09-01   # pick opening day
 ```
 
-`run.py serve` loads it, and writes results back on the way out — however the
-server comes down, since the save is in a `finally`. Play six days of games,
-quit, restart, and the table is where you left it, sim date included. Pass
-`--no-save` to leave the file alone.
+Opening day defaults to **tomorrow** in Pacific, so a freshly built season has
+nothing played. Because the clock is real time, a season built a week before
+you deploy will play its first week's games on the first boot — that is what a
+real-time calendar means. `--force --start <date>` re-anchors it.
+
+`run.py serve` loads it and writes results back as they are played and on the
+way out. Play some games, quit, restart, and the table is where you left it.
+Pass `--no-save` to leave the file alone.
 
 What the season file stores is deliberately narrow:
 

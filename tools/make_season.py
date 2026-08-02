@@ -24,8 +24,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bballsim.league import League, build_round_robin
-from bballsim.league.calendar import GameStatus
+from bballsim.league import League
+from bballsim.league.calendar import PACIFIC, GameStatus, build_daily_schedule
 from bballsim.roster import load_teams
 from bballsim.save import (
     SEASON_PATH,
@@ -35,26 +35,27 @@ from bballsim.save import (
     write_season,
 )
 
-# A fixed opening night. Absolute rather than "today minus three days", so the
-# fixture list is the same on every machine and in every run -- which is the
-# whole point of saving it.
-SEASON_START = date(2026, 10, 20)
-TIMES_PLAYED = 2
-DAYS_BETWEEN_ROUNDS = 1
+# 82 games each, three a day at 8am, 1pm and 7pm Pacific. 82 does not divide
+# by three, so the tail is two days of two games rather than a day with one.
+GAMES_PER_TEAM = 82
 
 
-def build(league: League) -> None:
-    league.set_schedule(build_round_robin(
+def default_start() -> date:
+    """Tomorrow, Pacific. The league runs on real days, so a season that began
+    yesterday would have games to play the moment it was created."""
+    return datetime.now(PACIFIC).date() + timedelta(days=1)
+
+
+def build(league: League, start: date) -> None:
+    league.set_schedule(build_daily_schedule(
         team_ids=list(league.teams),
-        start_date=SEASON_START,
-        times_played=TIMES_PLAYED,
-        days_between_rounds=DAYS_BETWEEN_ROUNDS,
+        start_date=start,
+        games_per_team=GAMES_PER_TEAM,
         season=league.season,
     ))
-    # Put the sim clock just after opening night, so a fresh save has a game
-    # to watch rather than a schedule that has not started or one already over.
-    first = league.schedule[0]
-    league.clock.jump_to(first.tipoff_at + timedelta(minutes=1))
+    # Sim time *is* real time: no offset. Games tip off when their real
+    # 8am/1pm/7pm Pacific slot arrives, and nothing has been played yet.
+    league.clock.offset = timedelta()
 
 
 def describe(league: League) -> None:
@@ -63,10 +64,14 @@ def describe(league: League) -> None:
     print(f"  teams        {len(league.teams)}")
     print(f"  fixtures     {len(league.schedule)}")
     print(f"  played       {len(finals)}")
-    print(f"  sim date     {league.clock.now().date()}")
+    print(f"  sim date     {league.clock.now().astimezone(PACIFIC):%Y-%m-%d %H:%M %Z}")
     if league.schedule:
-        print(f"  opening      {league.schedule[0].tipoff_at.date()}")
-        print(f"  closing      {league.schedule[-1].tipoff_at.date()}")
+        first = league.schedule[0].tipoff_at.astimezone(PACIFIC)
+        last = league.schedule[-1].tipoff_at.astimezone(PACIFIC)
+        print(f"  opening      {first:%a %Y-%m-%d %-I:%M %p %Z}")
+        print(f"  closing      {last:%a %Y-%m-%d %-I:%M %p %Z}")
+        days = sorted({g.tipoff_at.astimezone(PACIFIC).date() for g in league.schedule})
+        print(f"  playing days {len(days)}")
     if finals:
         print()
         print(f"  {'Team':<26}{'W':>4}{'L':>4}{'PCT':>7}{'DIFF':>7}")
@@ -92,6 +97,8 @@ def main() -> None:
                         help="describe the season already on disk and exit")
     parser.add_argument("--play", action="store_true",
                         help="simulate the whole schedule before saving")
+    parser.add_argument("--start", type=date.fromisoformat, default=None,
+                        help="opening day, YYYY-MM-DD (default: tomorrow, Pacific)")
     args = parser.parse_args()
 
     league = new_league()
@@ -113,7 +120,7 @@ def main() -> None:
         describe(league)
         raise SystemExit(1)
 
-    build(league)
+    build(league, args.start or default_start())
     if args.play:
         league.clock.advance(timedelta(days=365 * 2))
         league.tick()
