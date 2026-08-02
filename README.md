@@ -5,8 +5,9 @@ commit is the **plumbing**, not the content: possessions are simulated one at a
 time from player ratings, tactics and chemistry; games tip off on a schedule;
 and you can open any game in a tracker and watch the play-by-play unfold.
 
-There are no real teams or players — `bballsim/placeholder.py` invents anonymous
-ones so the shell boots. Delete it when you load real data.
+There are no real teams or players — `bballsim/placeholder.py` invents a
+30-team league of 360 anonymous players so the shell boots. Delete it when you
+load real data.
 
 ## Running it
 
@@ -16,7 +17,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 85 tests
+python3 -m unittest discover -s tests    # 93 tests
 ```
 
 In the browser: the left column is the schedule, click any game to open the
@@ -91,6 +92,14 @@ class. Two consistency rules are enforced there rather than left to callers:
 - **Draft position follows potential, not current ability.** Teams draft the
   player they think they are getting, which is what makes a bust possible: a
   first-round pick whose CA never caught up with the PA he was taken on.
+
+Each team's roster is five starters — one per position — plus a seven-man
+bench, and the CA ladder is dealt to a **shuffled** set of positions. So a
+franchise player is as likely to be a centre as a point guard, while the
+starting five still covers PG through C. (The ladder used to be zipped against
+a fixed position order, which quietly made the best player on every team a PG.)
+About a fifth of teams get a genuine superstar on top of that, which is what
+puts anyone in the Elite and Generational tiers.
 
 Nationality is weighted to look like an NBA roster — around 70% American with a
 long tail of basketball nations — and background follows from it: Americans come
@@ -227,15 +236,17 @@ Every game is seeded by its game id, so a game always replays identically.
 
 Simulated across a placeholder league, per team-game:
 
+Across the 30-team league, per team-game:
+
 | | sim | NBA (recent) |
 |---|---|---|
-| Points | 107.8 | 114 |
-| Possessions | 100.7 | 99 |
-| FG% / 3P% / FT% | .425 / .363 / .759 | .472 / .366 / .783 |
-| AST / TOV / REB | 25.1 / 13.6 / 55.1 | 26.5 / 13.5 / 53 |
-| STL / BLK / PF | 8.2 / 5.8 / 17.9 | 7.5 / 5.0 / 19 |
-| OREB% | .237 | .235 |
-| Score SD / mean margin | 16.0 / 15.8 | ~13 / ~11.5 |
+| Points | 108.2 | 114 |
+| Possessions | 99.6 (84–119) | 99 (96–104) |
+| FG% / 3P% / FT% | .439 / .356 / .770 | .472 / .366 / .783 |
+| AST / TOV / REB | 23.1 / 15.1 / 52.4 | 26.5 / 13.5 / 53 |
+| STL / BLK / PF | 9.5 / 5.1 / 18.6 | 7.5 / 5.0 / 19 |
+| OREB% | .264 | .235 |
+| Score SD / mean margin | 14.6 / 15.8 | ~13 / ~11.5 |
 
 The scale change from 0–99 to 1–20 moved almost none of these, because the
 engine works in normalized units — `(rating − average) / average` — rather than
@@ -244,6 +255,13 @@ with the scale: the nightly form swing, and the placeholder generator.
 
 Close enough to feel like basketball. Every constant that produces those
 numbers is at the top of `bballsim/engine/possession.py`.
+
+Pace is deliberately bounded. Scheme, slider and personnel all push tempo the
+same way and used to compound without limit — a seven-seconds team with the
+pace slider at 70 ran 129 possessions a game and put up 174 points. A single
+clamp in `_possession_length` keeps the league's fastest team about 15% quicker
+than its slowest, and the placeholder now draws each team's pace slider around
+its scheme's own tempo instead of independently, so no coach doubles down.
 
 One known gap: **games are more spread out than real ones** — mean margin 15.8
 against a real 11.5, so blowouts show up more often than they should. That is

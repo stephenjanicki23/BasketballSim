@@ -37,9 +37,15 @@ from .state import GameState, TeamState
 # average defence with neutral tactics.
 # --------------------------------------------------------------------------
 
-BASE_POSSESSION_SECONDS = 14.8
+BASE_POSSESSION_SECONDS = 14.25
 POSSESSION_SECONDS_SPREAD = 5.5
 MIN_POSSESSION_SECONDS = 2.5
+# Scheme, slider and personnel all push pace in the same direction, and used to
+# compound without limit -- a seven-seconds team with the pace slider at 70 ran
+# 129 possessions a game, well past anything real. The band below keeps the
+# league's fastest team about 15% quicker than its slowest, which is roughly
+# the real spread (~93 to ~108 possessions).
+MAX_PACE_SWING = 0.15
 
 BASE_TURNOVER_RATE = 0.132
 BASE_STEAL_SHARE = 0.60          # share of turnovers that are steals
@@ -56,8 +62,8 @@ BASE_FG_PCT: dict[ShotZone, float] = {
     ShotZone.RIM: 0.652,
     ShotZone.PAINT: 0.458,
     ShotZone.MID_RANGE: 0.428,
-    ShotZone.CORNER_THREE: 0.372,
-    ShotZone.ABOVE_BREAK_THREE: 0.342,
+    ShotZone.CORNER_THREE: 0.398,
+    ShotZone.ABOVE_BREAK_THREE: 0.368,
 }
 
 # How much a full scale of shooter-over-defender advantage moves the make rate.
@@ -182,6 +188,7 @@ class PossessionEngine:
         )
         # Guards who push tempo shorten possessions on their own.
         pace += normalize(self._lineup_skill(off.lineup, C.transition_threat)) * 0.08
+        pace = max(-MAX_PACE_SWING, min(MAX_PACE_SWING, pace))
         pressure = slider_mod(deff.tactics.defensive_pressure) * 0.08
         seconds = BASE_POSSESSION_SECONDS * (1.0 - pace + pressure)
         seconds += self.rng.gauss(0.0, POSSESSION_SECONDS_SPREAD)

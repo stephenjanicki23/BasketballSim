@@ -27,6 +27,8 @@ let checked = 0;
 const failures = [];
 
 for (const game of data.games) {
+  // Older games ship as results only, with no event stream to rebuild from.
+  if (!game.detailed) continue;
   const box = newBoxState(game);
   for (const event of game.events) applyEvent(box, event);
 
@@ -59,7 +61,8 @@ for (const game of data.games) {
   }
 }
 
-console.log(`games: ${data.games.length}   assertions: ${checked}`);
+const detailed = data.games.filter((g) => g.detailed).length;
+console.log(`games: ${data.games.length} (${detailed} with play-by-play)   assertions: ${checked}`);
 if (failures.length) {
   console.error(`\nFAILURES (${failures.length}):`);
   for (const failure of failures.slice(0, 25)) console.error("  " + failure);

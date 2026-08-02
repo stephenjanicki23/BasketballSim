@@ -75,7 +75,14 @@ EVENT_CODES = [
 CODE_BY_TYPE = {name: index for index, name in enumerate(EVENT_CODES)}
 
 
-def build_season(team_count: int = 8, season_start_days_ago: int = 12) -> League:
+# A 30-team round robin is 435 games. Shipping full play-by-play for all of
+# them would be tens of megabytes, so only the most recent slate carries
+# events and box scores; the rest ship as results so the schedule and
+# standings stay complete.
+DETAILED_GAMES = 30
+
+
+def build_season(team_count: int = 30, season_start_days_ago: int = 30) -> League:
     league = League(name="Placeholder Basketball League", season="2026-27")
     for team in make_teams(team_count):
         league.add_team(team)
@@ -86,7 +93,7 @@ def build_season(team_count: int = 8, season_start_days_ago: int = 12) -> League
             team_ids=list(league.teams),
             start_date=start,
             times_played=1,
-            days_between_rounds=2,
+            days_between_rounds=1,
             season=league.season,
         )
     )
@@ -162,9 +169,24 @@ def event_flags(event) -> int:
     return flags
 
 
-def export_game(game, league) -> dict:
+def export_game(game, league, include_events: bool = True) -> dict:
+    """One fixture. Without `include_events` this is just the result -- enough
+    for the schedule and standings, without the play-by-play weight."""
     result = game.result
+    if not include_events:
+        return {
+            "id": game.id,
+            "tipoff": game.tipoff_at.isoformat(),
+            "round": game.round_label,
+            "home": game.home_team_id,
+            "away": game.away_team_id,
+            "homeScore": result.home_score,
+            "awayScore": result.away_score,
+            "periods": result.periods_played,
+            "detailed": False,
+        }
     return {
+        "detailed": True,
         "id": game.id,
         # Who tipped off, so the page can track minutes through substitutions.
         "homeStarters": [p.id for p in league.teams[game.home_team_id].starters()],
@@ -207,6 +229,8 @@ def export_game(game, league) -> dict:
 def main() -> None:
     league = build_season()
     finals = [g for g in league.schedule if g.status == GameStatus.FINAL]
+    # Newest games get the full treatment; everything older is results only.
+    detailed_ids = {g.id for g in finals[-DETAILED_GAMES:]}
 
     payload = {
         "league": {
@@ -231,7 +255,7 @@ def main() -> None:
             "tiers": [[floor, label] for floor, label in RATING_TIERS],
         },
         "teams": [export_team(league, t) for t in league.teams.values()],
-        "games": [export_game(g, league) for g in finals],
+        "games": [export_game(g, league, g.id in detailed_ids) for g in finals],
         "standings": league.standings_table(),
     }
 
@@ -240,7 +264,9 @@ def main() -> None:
 
     print(packed, end="")
     print(
-        f"games={len(finals)}  raw={len(raw) // 1024}KB  packed={len(packed) // 1024}KB",
+        f"teams={len(league.teams)}  players={sum(len(t.players) for t in league.teams.values())}  "
+        f"games={len(finals)} ({len(detailed_ids)} with play-by-play)  "
+        f"raw={len(raw) // 1024}KB  packed={len(packed) // 1024}KB",
         file=sys.stderr,
     )
 

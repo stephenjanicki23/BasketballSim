@@ -309,6 +309,8 @@ function renderSchedule() {
       row.appendChild(side);
     }
 
+    if (!game.detailed) row.classList.add("is-result-only");
+
     const open = () => selectGame(game.id);
     row.addEventListener("click", open);
     row.addEventListener("keydown", (e) => {
@@ -351,6 +353,24 @@ function selectGame(gameId) {
   $("#tipoff-label").textContent = `${gameDate(game)} · ${game.round}`;
 
   setView("games");
+
+  const detailed = Boolean(game.detailed);
+  $("#tracker-body").hidden = !detailed;
+  $("#no-detail").hidden = detailed;
+  if (!detailed) {
+    const home = state.teams.get(game.home);
+    const away = state.teams.get(game.away);
+    $("#away-score").textContent = String(game.awayScore);
+    $("#home-score").textContent = String(game.homeScore);
+    $("#period").textContent = "FT";
+    $("#clock").textContent = "00.0";
+    $("#game-state").textContent = "Final";
+    $("#game-state").classList.remove("is-live");
+    $("#away-abbr").parentElement.classList.toggle("is-leading", game.awayScore > game.homeScore);
+    $("#home-abbr").parentElement.classList.toggle("is-leading", game.homeScore > game.awayScore);
+    return;
+  }
+
   renderTracker();
   startPlayback();
 }
@@ -360,7 +380,8 @@ function revealedEvents() {
 }
 
 function advanceTo(seconds) {
-  const events = state.game.events;
+  const events = state.game.events || [];
+  if (!events.length) return;
   state.playhead = Math.max(0, seconds);
   const feed = $("#feed");
   let appended = 0;

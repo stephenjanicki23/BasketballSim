@@ -33,10 +33,33 @@ _TEAM_NAMES = [
     ("Highland", "Stags", "HLS"),
     ("Riverbend", "Foundry", "RBF"),
     ("Grandview", "Skyline", "GVS"),
+    ("Ironvale", "Forge", "IVF"),
+    ("Cape Harbor", "Gulls", "CHG"),
+    ("Summit Ridge", "Peaks", "SRP"),
+    ("Cedar Falls", "Timber", "CFT"),
+    ("Port Union", "Anchors", "PUA"),
+    ("Silverlake", "Comets", "SLC"),
+    ("Fort Bellamy", "Sentinels", "FBS"),
+    ("Autumn Valley", "Foxes", "AVF"),
+    ("Kingsbridge", "Royals", "KBR"),
+    ("Marble Heights", "Monarchs", "MHM"),
+    ("Copperfield", "Coyotes", "CFC"),
+    ("Thornwood", "Hawks", "THW"),
+    ("Gale Point", "Storm", "GPS"),
+    ("Redstone", "Rangers", "RSR"),
+    ("Brightwater", "Tides", "BWT"),
+    ("Alder Creek", "Bruins", "ACB"),
+    ("Stonegate", "Guardians", "STG"),
+    ("Windmere", "Cyclones", "WMC"),
+    ("Oakhaven", "Owls", "OKO"),
+    ("Crescent Bay", "Surge", "CBS"),
+    ("Falconridge", "Falcons", "FRF"),
+    ("New Meridian", "Pioneers", "NMP"),
 ]
 
 # Deliberately long: the league needs a unique surname per player so the
-# play-by-play never reads "D. Reyes blocks D. Reyes's shot".
+# play-by-play never reads "D. Reyes blocks D. Reyes's shot". 30 teams of 12
+# is 360 players, so the pool has to clear that with room to spare.
 _SURNAMES = [
     "Alder", "Brook", "Calloway", "Dunmore", "Ellery", "Fenwick", "Gale",
     "Hollis", "Ingram", "Jarvis", "Kessler", "Larkin", "Mercer", "Nash",
@@ -56,12 +79,68 @@ _SURNAMES = [
     "Uxbridge", "Vasquez", "Wentworth", "Yorke", "Zamora", "Abernathy",
     "Braddock", "Chaudhry", "Delacroix", "Emberly", "Fontaine", "Greaves",
     "Hallowell", "Ibarra", "Jelani", "Kowalczyk", "Lundqvist", "Moreau",
+    "Nakamura", "Okonkwo", "Petrov", "Quinlan", "Rasmussen", "Solberg",
+    "Takahashi", "Ustinov", "Villalobos", "Wagstaff", "Xiong", "Yamamoto",
+    "Zielinski", "Ackerman", "Barrington", "Caldwell", "Draper", "Eberhardt",
+    "Fairweather", "Gundersen", "Hollingsworth", "Iverson", "Jacoby",
+    "Kaminski", "Langford", "Mattheson", "Novak", "Ortega", "Pankhurst",
+    "Quesada", "Radcliffe", "Sorensen", "Thibodeaux", "Ugarte", "Voss",
+    "Whittaker", "Yeoman", "Zaragoza", "Ashford", "Bexley", "Carrington",
+    "Duquette", "Emerson", "Fitzgibbon", "Garrity", "Hendricks", "Ilyushin",
+    "Jorgensen", "Kilpatrick", "Lockhart", "Montrose", "Nightingale",
+    "Ordonez", "Paxton", "Quimby", "Ridgeway", "Stanhope", "Tremaine",
+    "Upshaw", "Valdez", "Wilkerson", "Yancey", "Zeller", "Attwater",
+    "Bergstrom", "Chandler", "Devereaux", "Eastgate", "Fairholm", "Gladwell",
+    "Harrowgate", "Innsbruck", "Jankovic", "Kettering", "Lascelles",
+    "Mortimer", "Nunnally", "Oldfield", "Pemberly", "Quillon", "Ravensworth",
+    "Sinclair", "Thackeray", "Umbridge", "Vanderberg", "Whitmore", "Yelverton",
+    "Zabriskie", "Alcott", "Bannerman", "Crowther", "Dunstable", "Eldridge",
+    "Fothergill", "Goodwin", "Hargreaves", "Iremonger", "Jephson",
+    "Kenworthy", "Lyttleton", "Marchbanks", "Nettlefold", "Ollerenshaw",
+    "Prendergast", "Quennell", "Rowntree", "Standish", "Tattersall",
+    "Underwood", "Vickery", "Wolstenholme", "Yardley", "Zouche", "Applegarth",
+    "Birtwistle", "Cholmondeley", "Dalrymple", "Etheridge", "Farthingale",
+    "Grimsditch", "Huddleston", "Ingoldsby", "Jerningham", "Kirkbride",
+    "Loveridge", "Mallinson", "Ninnis", "Ogilvie", "Postlethwaite",
+    "Quatermain", "Rushworth", "Snodgrass", "Thorneycroft", "Ubaldini",
+    "Vansittart", "Wickersham", "Yoxall", "Zetterberg", "Aldington",
+    "Blenkinsop", "Carmichael", "Dinsdale", "Ellerbeck", "Featherstone",
+    "Gainsborough", "Hollingbourne", "Ickringill", "Jellicoe", "Kempthorne",
+    "Lightfoot", "Micklethwaite", "Naismith", "Oglethorpe", "Pilkington",
+    "Quantrill", "Ravenscroft", "Shackleton", "Trelawney", "Uttridge",
+    "Verinder", "Winterbourne", "Yelland", "Zimmerman", "Arbuthnot",
+    "Beauchamp", "Cadwallader", "Duckworth", "Endicott", "Fanshawe",
+    "Garforth", "Hawksmoor", "Iddesleigh", "Joliffe", "Kirkpatrick",
+    "Lansbury", "Meredith", "Nuttall", "Ottoline", "Popplewell", "Quilter",
+    "Rickenbacker", "Somerville", "Templeton", "Urquhart", "Vivian",
+    "Wolfenden", "Yeatman", "Zangwill", "Aberdeen", "Broadbent", "Culpepper",
+    "Danvers", "Edgerton", "Fitzroy", "Glanville", "Havelock", "Isherwood",
+    "Jardine", "Kilbride", "Lamplugh", "Mowbray", "Norrington", "Osbourne",
+    "Prideaux", "Quiller", "Rasmusson", "Selwyn", "Thistlewood", "Ulverston",
+    "Ventris", "Wadsworth", "Yelverley", "Zealand", "Ancaster", "Bickerstaff",
+    "Cranleigh", "Devonport", "Ecclestone", "Fitzalan", "Godolphin",
+    "Hazelwood", "Irvington", "Jessamine", "Kenilworth", "Lindisfarne",
+    "Mandeville", "Northbrook", "Orpington", "Pendlebury", "Quorndon",
+    "Rothesay", "Stapleton", "Tewkesbury", "Ullswater", "Vandeleur",
+    "Wrottesley", "Yarborough", "Zennor", "Ashbourne", "Beddingfield",
+    "Chelmsford", "Dunwoody", "Elphinstone", "Fairbrother", "Grosvenor",
+    "Hartlepool", "Ilchester", "Jerviswood", "Knatchbull", "Lauderdale",
+    "Marlborough", "Newcombe", "Oxenford", "Pontefract", "Quendon",
+    "Ravenglass", "Strathmore", "Tunstall", "Uppingham", "Vereker",
+    "Willoughby", "Yattendon", "Zouch",
 ]
 
 _FIRST_NAMES = [
     "Andre", "Bryce", "Cam", "Dante", "Elias", "Finn", "Gus", "Hector",
     "Isaiah", "Jonah", "Kai", "Luca", "Miles", "Noel", "Omar", "Pierce",
-    "Quinn", "Rashad", "Silas", "Tobias",
+    "Quinn", "Rashad", "Silas", "Tobias", "Amari", "Brandon", "Caleb",
+    "Damian", "Ezra", "Felix", "Gabriel", "Harun", "Ivan", "Jalen",
+    "Kofi", "Lorenzo", "Malik", "Nikola", "Oscar", "Patrice", "Rafael",
+    "Sebastian", "Tariq", "Vince", "Wesley", "Xavier", "Yusuf", "Zane",
+    "Adrian", "Bilal", "Cole", "Diego", "Emmett", "Franco", "Grayson",
+    "Hugo", "Idris", "Jasper", "Kenji", "Leonel", "Marcus", "Nathanael",
+    "Oren", "Pavel", "Reuben", "Santiago", "Theo", "Ulrich", "Viktor",
+    "Warren", "Yannick", "Zeke",
 ]
 
 # --------------------------------------------------------------------------
@@ -155,6 +234,36 @@ _POSITION_PROFILE: dict[Position, dict[str, float]] = {
         "wing_defense": -2.8,
     },
 }
+
+# Character attributes are drawn on their own axis: being a good pro has
+# nothing to do with being a good player.
+_CHARACTER_ATTRIBUTES = frozenset({
+    "leadership", "work_rate", "teamwork", "coachability", "confidence",
+    "composure", "competitive_drive", "focus", "discipline", "aggression",
+    "mental_toughness", "pressure_handling", "emotional_control",
+    "winning_mentality",
+})
+
+# A roster is five starters -- one of each position -- plus a seven-man bench.
+_STARTER_POSITIONS = (Position.PG, Position.SG, Position.SF, Position.PF, Position.C)
+_BENCH_POSITIONS = (
+    Position.PG, Position.SG, Position.SF, Position.PF, Position.C,
+    Position.SG, Position.SF,
+)
+_ROSTER_SIZE = len(_STARTER_POSITIONS) + len(_BENCH_POSITIONS)
+
+# Target Current Ability by depth. The ladder is fixed; which *position* draws
+# the top rung is shuffled per team, so a franchise player is as likely to be a
+# centre as a point guard. Previously the ladder was zipped against a fixed
+# position order, which made the best player on every single team a PG.
+_STARTER_CA = (158.0, 146.0, 137.0, 129.0, 122.0)
+_BENCH_CA = (114.0, 106.0, 99.0, 92.0, 85.0, 78.0, 72.0)
+
+# A minority of teams have a genuine superstar rather than merely a best
+# player. Without this the top rung tops out around All-Star and the Elite and
+# Generational tiers never appear in a 30-team league.
+SUPERSTAR_CHANCE = 0.22
+SUPERSTAR_BUMP = (8.0, 30.0)
 
 # Character attributes are drawn on their own axis: being a good pro has
 # nothing to do with being a good player.
@@ -268,6 +377,43 @@ def _make_player(
     )
 
 
+# Where each scheme naturally sits on the pace slider. Drawing the slider
+# around the scheme's own tempo stops a team from doubling down -- picking
+# seven-seconds *and* maxing pace, which is not a plan any coach runs.
+_SCHEME_PACE_CENTRE: dict[OffensiveScheme, float] = {
+    OffensiveScheme.SEVEN_SECONDS: 62.0,
+    OffensiveScheme.PACE_AND_SPACE: 56.0,
+    OffensiveScheme.MOTION: 50.0,
+    OffensiveScheme.INSIDE_OUT: 44.0,
+    OffensiveScheme.ISOLATION: 42.0,
+}
+
+_SCHEME_THREE_CENTRE: dict[OffensiveScheme, float] = {
+    OffensiveScheme.PACE_AND_SPACE: 66.0,
+    OffensiveScheme.SEVEN_SECONDS: 58.0,
+    OffensiveScheme.MOTION: 50.0,
+    OffensiveScheme.ISOLATION: 44.0,
+    OffensiveScheme.INSIDE_OUT: 38.0,
+}
+
+
+def _make_tactics(rng: random.Random) -> Tactics:
+    offense = rng.choice(list(OffensiveScheme))
+    defense = rng.choice(list(DefensiveScheme))
+    return Tactics(
+        offensive_scheme=offense,
+        defensive_scheme=defense,
+        pace=rng.gauss(_SCHEME_PACE_CENTRE[offense], 7.0),
+        three_point_emphasis=rng.gauss(_SCHEME_THREE_CENTRE[offense], 9.0),
+        ball_movement=rng.gauss(50, 9),
+        offensive_rebounding=rng.gauss(50, 10),
+        defensive_pressure=rng.gauss(50, 9),
+        help_intensity=rng.gauss(50, 9),
+        close_out_hard=rng.gauss(50, 9),
+        foul_discipline=rng.gauss(50, 8),
+    )
+
+
 def make_team(
     rng: random.Random,
     city: str,
@@ -279,12 +425,32 @@ def make_team(
 ) -> Team:
     # Surnames come from a league-wide pool when one is supplied, so no two
     # players anywhere share a name.
-    surnames = surnames or rng.sample(_SURNAMES, len(_ROSTER_SHAPE))
-    first_names = rng.sample(_FIRST_NAMES, len(_ROSTER_SHAPE))
+    surnames = surnames or rng.sample(_SURNAMES, _ROSTER_SIZE)
+    first_names = rng.sample(_FIRST_NAMES, _ROSTER_SIZE)
+
+    # Deal the CA ladder to a shuffled set of positions. Each team therefore
+    # has its best player at a random position, while the starting five still
+    # covers PG through C.
+    starter_positions = rng.sample(_STARTER_POSITIONS, len(_STARTER_POSITIONS))
+    bench_positions = rng.sample(_BENCH_POSITIONS, len(_BENCH_POSITIONS))
+
+    starter_ca = list(_STARTER_CA)
+    if rng.random() < SUPERSTAR_CHANCE:
+        starter_ca[0] += rng.uniform(*SUPERSTAR_BUMP)
+
+    slots = [
+        (position, target)
+        for position, target in zip(starter_positions, starter_ca)
+    ] + [
+        (position, target)
+        for position, target in zip(bench_positions, _BENCH_CA)
+    ]
 
     players: list[Player] = []
-    for index, position in enumerate(_ROSTER_SHAPE):
-        target_ca = max(30.0, min(195.0, _SLOT_CA[index] + rng.gauss(0, 4.0)))
+    for index, (position, base_ca) in enumerate(slots):
+        # Narrower than the gaps between rungs, so the depth chart still tracks
+        # ability while leaving room for a surprise.
+        target_ca = max(30.0, min(195.0, base_ca + rng.gauss(0, 4.0)))
         players.append(_make_player(
             rng, abbreviation, index + 1, position, target_ca,
             first_names[index], surnames[index],
@@ -298,19 +464,15 @@ def make_team(
         city=city,
         conference="East" if rng.random() < 0.5 else "West",
         players=players,
-        tactics=Tactics(
-            offensive_scheme=rng.choice(list(OffensiveScheme)),
-            defensive_scheme=rng.choice(list(DefensiveScheme)),
-            pace=rng.uniform(30, 70),
-            three_point_emphasis=rng.uniform(25, 75),
-            ball_movement=rng.uniform(30, 70),
-            offensive_rebounding=rng.uniform(25, 75),
-            defensive_pressure=rng.uniform(30, 70),
-            help_intensity=rng.uniform(30, 70),
-        ),
+        tactics=_make_tactics(rng),
         team_chemistry=rng.uniform(40, 70),  # 0-100, not a player rating
     )
-    team.depth_chart = [p.id for p in team.players]
+    # Depth chart: the starting five in ability order, then the bench in
+    # ability order. `Team.starters()` takes the first five, so this keeps one
+    # of each position on the floor while the best player leads the rotation.
+    starters = sorted(players[:5], key=lambda p: -p.ability.current)
+    bench = sorted(players[5:], key=lambda p: -p.ability.current)
+    team.depth_chart = [p.id for p in starters + bench]
     return team
 
 
@@ -319,11 +481,11 @@ def make_teams(count: int = 8, seed: int = 7, season_start_year: int = 2026) -> 
     count = min(count, len(_TEAM_NAMES))
     # Two rounds for a league this size, so pick numbers stay coherent.
     draft_size = count * 2
-    needed = count * len(_ROSTER_SHAPE)
+    needed = count * _ROSTER_SIZE
     if needed > len(_SURNAMES):
         raise ValueError(f"need {needed} unique surnames, pool has {len(_SURNAMES)}")
     pool = rng.sample(_SURNAMES, needed)
-    size = len(_ROSTER_SHAPE)
+    size = _ROSTER_SIZE
     return [
         make_team(
             rng, *_TEAM_NAMES[i], surnames=pool[i * size:(i + 1) * size],

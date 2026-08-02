@@ -679,3 +679,86 @@ class TestBiography(unittest.TestCase):
             self.assertLessEqual(
                 player.bio.background.count(country), 1, player.bio.background
             )
+
+
+class TestLeagueComposition(unittest.TestCase):
+    """A 30-team league, and the positional spread of its best players."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.teams = make_teams(30)
+        cls.players = [p for team in cls.teams for p in team.players]
+
+    def test_thirty_teams_with_unique_identities(self):
+        self.assertEqual(len(self.teams), 30)
+        self.assertEqual(len({t.abbreviation for t in self.teams}), 30)
+        self.assertEqual(len({t.full_name for t in self.teams}), 30)
+        self.assertEqual(len({t.id for t in self.teams}), 30)
+
+    def test_every_player_in_the_league_has_a_unique_name(self):
+        self.assertEqual(len(self.players), 360)
+        self.assertEqual(len({p.name for p in self.players}), 360)
+        # Short names drive the play-by-play, so those must be unique too.
+        self.assertEqual(len({p.short_name for p in self.players}), 360)
+
+    def test_the_best_player_is_not_always_a_point_guard(self):
+        """The bug this replaced: the CA ladder was zipped against a fixed
+        position order, so slot 0 -- the franchise player -- was a PG on every
+        single team."""
+        best_positions = [
+            max(team.players, key=lambda p: p.ability.current).position.value
+            for team in self.teams
+        ]
+        distinct = set(best_positions)
+        self.assertGreaterEqual(len(distinct), 4, f"only {distinct} lead a team")
+        # And no single position should dominate.
+        for position in distinct:
+            share = best_positions.count(position) / len(best_positions)
+            self.assertLess(share, 0.45, f"{position} leads {share:.0%} of teams")
+
+    def test_every_starting_five_covers_every_position(self):
+        for team in self.teams:
+            positions = {p.position.value for p in team.starters()}
+            self.assertEqual(positions, {"PG", "SG", "SF", "PF", "C"}, team.abbreviation)
+
+    def test_the_depth_chart_leads_with_the_best_starter(self):
+        for team in self.teams:
+            starters = team.starters()
+            self.assertEqual(
+                starters[0].ability.current,
+                max(p.ability.current for p in starters),
+                team.abbreviation,
+            )
+
+    def test_the_league_follows_the_tier_pyramid(self):
+        """More rotation players than All-Stars, more All-Stars than
+        generational talents -- the shape of the rating table."""
+        counts = {}
+        for player in self.players:
+            counts[player.stars] = counts.get(player.stars, 0) + 1
+
+        elite = sum(n for star, n in counts.items() if star >= 4.5)
+        all_star = sum(n for star, n in counts.items() if star == 4.0)
+        rotation = sum(n for star, n in counts.items() if 2.0 <= star <= 3.0)
+
+        self.assertGreater(rotation, all_star)
+        self.assertGreater(all_star, elite)
+        self.assertGreater(elite, 0, "a 30-team league should have some elite talent")
+
+    def test_every_team_has_a_full_roster(self):
+        for team in self.teams:
+            self.assertEqual(len(team.players), 12, team.abbreviation)
+            self.assertEqual(len(team.depth_chart), 12, team.abbreviation)
+
+    def test_pace_stays_inside_a_believable_band(self):
+        """Scheme and slider used to compound without limit -- a seven-seconds
+        team with pace at 70 ran 129 possessions a game."""
+        results = [
+            GameSimulator(f"pace-{i}", copy.deepcopy(self.teams[i]),
+                          copy.deepcopy(self.teams[29 - i]), seed=f"pace-{i}").simulate()
+            for i in range(12)
+        ]
+        for result in results:
+            for box in (result.home_box, result.away_box):
+                self.assertGreater(box.possessions, 78)
+                self.assertLess(box.possessions, 125)

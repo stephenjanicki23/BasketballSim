@@ -227,6 +227,7 @@ select {
   cursor: pointer;
 }
 .fixture:hover { background: var(--raised); }
+.fixture.is-result-only .fixture-team { opacity: .72; }
 .fixture.is-selected {
   background: var(--raised);
   box-shadow: inset 3px 0 0 var(--accent);
@@ -711,6 +712,14 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
         </div>
       </div>
 
+      <div id="no-detail" class="empty" hidden>
+        <p>This game was played earlier in the season.</p>
+        <p class="muted">Only the most recent 30 games ship with full play-by-play — a
+          435-game round robin of possession-by-possession data would be tens of
+          megabytes. Pick a game from the bottom of the schedule to watch one unfold.</p>
+      </div>
+
+      <div id="tracker-body">
       <div class="transport">
         <button id="play" aria-pressed="false"><span id="play-icon">▶</span><span id="play-text">Play</span></button>
         <button id="restart" title="Back to tip-off">↺ Tip-off</button>
@@ -761,6 +770,8 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 
       <div id="pane-pbp"><ul id="feed"></ul></div>
       <div id="pane-box" hidden><div id="box"></div></div>
+
+      </div>
 
       <p class="note">
         Every line above came out of the possession engine — shot selection from

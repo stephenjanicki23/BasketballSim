@@ -20,7 +20,7 @@ from bballsim.league.calendar import GameStatus
 from bballsim.placeholder import make_teams
 
 
-def build_league(team_count: int = 8) -> League:
+def build_league(team_count: int = 30) -> League:
     league = League(name="Placeholder Basketball League", season="2026-27")
     for team in make_teams(team_count):
         league.add_team(team)
@@ -99,7 +99,7 @@ def main() -> None:
     serve_parser = sub.add_parser("serve", help="run the web app")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)
-    serve_parser.add_argument("--teams", type=int, default=8)
+    serve_parser.add_argument("--teams", type=int, default=30)
     serve_parser.add_argument("--speed", type=float, default=20.0,
                               help="game seconds revealed per real second")
     serve_parser.set_defaults(func=command_serve)
@@ -109,7 +109,7 @@ def main() -> None:
     sim_parser.set_defaults(func=command_sim)
 
     season_parser = sub.add_parser("season", help="simulate the full schedule")
-    season_parser.add_argument("--teams", type=int, default=8)
+    season_parser.add_argument("--teams", type=int, default=30)
     season_parser.set_defaults(func=command_season)
 
     args = parser.parse_args()
