@@ -88,21 +88,8 @@ class TestGameSimulation(unittest.TestCase):
         )
 
 
-class TestRatingsDriveOutcomes(unittest.TestCase):
-    def test_better_team_wins_most_of_the_time(self):
-        strong, weak = make_teams(2)
-        for player in strong.players:
-            for attribute in ("finishing", "three_point", "perimeter_defense",
-                              "interior_defense", "playmaking", "ball_handling"):
-                setattr(player.ratings, attribute, 85.0)
-        for player in weak.players:
-            for attribute in ("finishing", "three_point", "perimeter_defense",
-                              "interior_defense", "playmaking", "ball_handling"):
-                setattr(player.ratings, attribute, 40.0)
-
-        results = [sim(strong, weak, seed=f"gap-{i}") for i in range(20)]
-        wins = sum(1 for r in results if r.home_score > r.away_score)
-        self.assertGreaterEqual(wins, 18)
+# Attribute-driven outcomes are covered by tests/test_ratings.py, which uses
+# paired seeds and asserts that every attribute it sets actually exists.
 
 
 class TestTacticsDriveOutcomes(unittest.TestCase):

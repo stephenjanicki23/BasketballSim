@@ -84,6 +84,9 @@ class GameSimulator:
     # ------------------------------------------------------------------
     def simulate(self) -> GameResult:
         state = self._initial_state()
+        # Tonight's form, rolled once per player from the hidden consistency
+        # attribute. Everything downstream reads ratings through it.
+        self.possessions.set_form(self.home.players + self.away.players)
         self._emit(state, EventType.GAME_START,
                    f"{self.away.full_name} at {self.home.full_name} -- tip-off")
 
@@ -167,8 +170,11 @@ class GameSimulator:
         )
 
     def _jump_ball(self, state: GameState) -> TeamState:
-        home_jumper = max(state.home.on_court, key=lambda p: p.height_inches + p.ratings.strength * 0.1)
-        away_jumper = max(state.away.on_court, key=lambda p: p.height_inches + p.ratings.strength * 0.1)
+        def tip_skill(player):
+            return player.height_inches + player.ratings.vertical_leap * 0.06 + player.ratings.strength * 0.06
+
+        home_jumper = max(state.home.on_court, key=tip_skill)
+        away_jumper = max(state.away.on_court, key=tip_skill)
         home_edge = 0.5 + (
             (home_jumper.height_inches - away_jumper.height_inches) * 0.02
             + (normalize(home_jumper.ratings.strength) - normalize(away_jumper.ratings.strength)) * 0.15

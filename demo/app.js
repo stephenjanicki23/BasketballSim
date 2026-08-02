@@ -119,7 +119,7 @@ function applyEvent(state, event) {
       break;
     }
     case EV.BLOCK: {
-      // team is the defence: player blocked, secondary took the shot.
+      // team is the defense: player blocked, secondary took the shot.
       const blocker = line(state, teamId, playerId);
       blocker.blk += 1;
       const shooter = line(state, otherTeam(state, teamId), secondaryId);
@@ -140,7 +140,7 @@ function applyEvent(state, event) {
       break;
     }
     case EV.STEAL: {
-      // team is the defence: player stole it, secondary lost it.
+      // team is the defense: player stole it, secondary lost it.
       line(state, teamId, playerId).stl += 1;
       const loser = line(state, otherTeam(state, teamId), secondaryId);
       if (loser) loser.tov += 1;
@@ -206,6 +206,8 @@ const state = {
   box: null,
   tab: "pbp",
   teamId: null,
+  playerId: null,
+  showHidden: false,
   lastTick: 0,
   frame: null,
 };
@@ -676,20 +678,6 @@ const ATTRIBUTE_LABELS = {
   speed: "SPD", strength: "STR", stamina: "STA", basketball_iq: "IQ", discipline: "DSC",
 };
 
-const RATING_GROUPS = [
-  ["Scoring", ["finishing", "mid_range", "three_point", "post_game", "free_throw", "drawing_fouls"]],
-  ["Creation", ["playmaking", "ball_handling", "off_ball"]],
-  ["Defence", ["perimeter_defense", "interior_defense", "steal", "block", "def_rebounding", "off_rebounding"]],
-  ["Physical", ["speed", "strength", "stamina", "basketball_iq", "discipline"]],
-];
-
-const SCHEME_LABELS = {
-  motion: "Motion", pace_and_space: "Pace and space", inside_out: "Inside out",
-  isolation: "Isolation", seven_seconds: "Seven seconds",
-  man: "Man", switch: "Switch everything", drop: "Drop coverage",
-  hedge: "Hedge", zone_2_3: "2-3 zone",
-};
-
 const TACTIC_SLIDERS = [
   ["pace", "Pace"],
   ["three_point_emphasis", "Three-point emphasis"],
@@ -700,6 +688,13 @@ const TACTIC_SLIDERS = [
   ["close_out_hard", "Close out hard"],
   ["foul_discipline", "Foul discipline"],
 ];
+
+const SCHEME_LABELS = {
+  motion: "Motion", pace_and_space: "Pace and space", inside_out: "Inside out",
+  isolation: "Isolation", seven_seconds: "Seven seconds",
+  man: "Man", switch: "Switch everything", drop: "Drop coverage",
+  hedge: "Hedge", zone_2_3: "2-3 zone",
+};
 
 function titleCase(key) {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -716,21 +711,29 @@ function renderTeams() {
   picker.value = state.teamId;
   picker.addEventListener("change", () => {
     state.teamId = picker.value;
+    state.playerId = null;
     renderTeamDetail();
   });
+
+  $("#scout-toggle").addEventListener("change", (e) => {
+    state.showHidden = e.target.checked;
+    renderPlayer();
+  });
+
   renderTeamDetail();
 }
 
 function renderTeamDetail() {
   const team = state.teams.get(state.teamId);
 
+  // --- tactics ---------------------------------------------------------
   const tactics = $("#tactics");
   tactics.textContent = "";
-  const schemes = el("div", "scheme-row");
   const schemeLabel = (key) => SCHEME_LABELS[key] || titleCase(key);
-  schemes.appendChild(schemeChip("Offence", schemeLabel(team.tactics.offensive_scheme)));
-  schemes.appendChild(schemeChip("Defence", schemeLabel(team.tactics.defensive_scheme)));
-  schemes.appendChild(schemeChip("Chemistry", `${team.chemistry}`));
+  const schemes = el("div", "scheme-row");
+  schemes.appendChild(schemeChip("Offense", schemeLabel(team.tactics.offensive_scheme)));
+  schemes.appendChild(schemeChip("Defense", schemeLabel(team.tactics.defensive_scheme)));
+  schemes.appendChild(schemeChip("Chemistry", String(team.chemistry)));
   tactics.appendChild(schemes);
 
   const sliders = el("div", "sliders");
@@ -748,50 +751,98 @@ function renderTeamDetail() {
   }
   tactics.appendChild(sliders);
 
-  const attributes = RATING_GROUPS.flatMap(([, keys]) => keys);
-  const table = $("#roster");
-  table.textContent = "";
-
-  const thead = el("thead");
-  const groupRow = el("tr", "group-row");
-  groupRow.appendChild(el("th", "col-name", ""));
-  groupRow.appendChild(el("th", null, ""));
-  for (const [label, keys] of RATING_GROUPS) {
-    const th = el("th", "group-head", label);
-    th.colSpan = keys.length;
-    groupRow.appendChild(th);
+  // --- roster list -----------------------------------------------------
+  if (!state.playerId || !team.players.some((p) => p.id === state.playerId)) {
+    state.playerId = team.players[0].id;
   }
-  thead.appendChild(groupRow);
-
-  const headRow = el("tr");
-  headRow.appendChild(el("th", "col-name", "Player"));
-  headRow.appendChild(el("th", null, "OVR"));
-  for (const key of attributes) {
-    const th = el("th", "rot-head", ATTRIBUTE_LABELS[key] || titleCase(key));
-    th.title = titleCase(key);
-    headRow.appendChild(th);
-  }
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const tbody = el("tbody");
+  const list = $("#roster-list");
+  list.textContent = "";
   team.players.forEach((player, index) => {
-    const row = el("tr");
+    const row = el("li", "roster-row" + (player.id === state.playerId ? " is-selected" : ""));
     if (index < 5) row.classList.add("is-starter");
-    const nameCell = el("td", "col-name");
-    nameCell.appendChild(el("span", "player-pos", player.pos));
-    nameCell.appendChild(el("span", "player-name", player.name));
-    row.appendChild(nameCell);
-    row.appendChild(el("td", "col-ovr", String(Math.round(player.ovr))));
-    for (const key of attributes) {
-      const value = player.ratings[key];
-      const cell = el("td", "rating", String(value));
-      cell.style.setProperty("--heat", String(Math.max(0, Math.min(1, (value - 35) / 55))));
-      row.appendChild(cell);
-    }
-    tbody.appendChild(row);
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.appendChild(el("span", "player-pos", player.pos));
+    const nameWrap = el("span", "roster-name");
+    nameWrap.appendChild(el("span", "player-name", player.name));
+    nameWrap.appendChild(el("span", "roster-meta", `${player.age} · ${player.personality}`));
+    row.appendChild(nameWrap);
+    row.appendChild(el("span", "roster-ovr", String(Math.round(player.ovr))));
+
+    const open = () => { state.playerId = player.id; renderTeamDetail(); };
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+    });
+    list.appendChild(row);
   });
-  table.appendChild(tbody);
+
+  renderPlayer();
+}
+
+/* An 81-attribute roster will not fit in a table, so the profile follows the
+ * Football Manager pattern: grouped columns of name + value for one player. */
+function renderPlayer() {
+  const team = state.teams.get(state.teamId);
+  const player = team.players.find((p) => p.id === state.playerId);
+  if (!player) return;
+
+  $("#profile-name").textContent = player.name;
+  $("#profile-meta").textContent =
+    `${player.pos} · ${player.age} years · ${formatHeight(player.height)} · ${player.weight} lb · #${player.jersey}`;
+  $("#profile-ovr").textContent = String(Math.round(player.ovr));
+  $("#profile-personality").textContent = player.personality;
+
+  const groups = $("#attribute-groups");
+  groups.textContent = "";
+  for (const [group, keys] of Object.entries(state.data.attributeGroups)) {
+    groups.appendChild(attributeColumn(group, keys, player.ratings, state.data.attributeNames));
+  }
+
+  const scouting = $("#scouting");
+  scouting.hidden = !state.showHidden;
+  if (state.showHidden) {
+    scouting.textContent = "";
+    const keys = Object.keys(state.data.hiddenNames);
+    scouting.appendChild(
+      attributeColumn("Scouted", keys, player.hidden, state.data.hiddenNames, "scouted")
+    );
+    const composites = el("div", "attr-group composite-group");
+    composites.appendChild(el("h4", "attr-heading", "Engine composites"));
+    const listEl = el("ul", "attr-list");
+    for (const key of state.data.compositeOrder) {
+      listEl.appendChild(attributeRow(key, player.composites[key], key));
+    }
+    composites.appendChild(listEl);
+    scouting.appendChild(composites);
+  }
+}
+
+function formatHeight(inches) {
+  return `${Math.floor(inches / 12)}'${inches % 12}"`;
+}
+
+function attributeColumn(title, keys, values, names, extraClass) {
+  const wrap = el("div", "attr-group" + (extraClass ? ` ${extraClass}` : ""));
+  wrap.appendChild(el("h4", "attr-heading", title));
+  const listEl = el("ul", "attr-list");
+  for (const key of keys) {
+    listEl.appendChild(attributeRow(names[key] || titleCase(key), values[key], key));
+  }
+  wrap.appendChild(listEl);
+  return wrap;
+}
+
+function attributeRow(label, value, key) {
+  const row = el("li", "attr-row");
+  row.appendChild(el("span", "attr-name", label));
+  const chip = el("span", "attr-value", String(Math.round(value)));
+  // One hue, light to dark: magnitude reads down the column at a glance.
+  chip.style.setProperty("--heat", String(Math.max(0, Math.min(1, (value - 30) / 60))));
+  if (value >= 80) chip.classList.add("is-elite");
+  row.appendChild(chip);
+  row.title = `${label}: ${Math.round(value)}`;
+  return row;
 }
 
 function schemeChip(label, value) {

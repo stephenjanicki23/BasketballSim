@@ -4,17 +4,20 @@ Chemistry is a multiplier on execution, not on talent. Two elite players who
 have never played together turn the ball over more and pass up open looks; a
 settled group finishes possessions cleanly.
 
-Model has three layers:
+Four layers:
   1. team_chemistry  -- locker room / system fit, one number per team
   2. pair_chemistry  -- how well two specific players play together
-  3. lineup fit      -- structural (spacing, size, ball-handling) rather than
-                        relational, computed fresh from whoever is on the floor
+  3. character       -- teamwork, coachability and locker-room presence, which
+                        are attributes of the five men actually on the floor
+  4. lineup fit      -- structural (spacing, playmaking, size) rather than
+                        relational, computed fresh from whoever is out there
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import composites as C
 from .models import Lineup, Team
 from .ratings import normalize
 
@@ -25,19 +28,26 @@ NEUTRAL_CHEMISTRY = 50.0
 class ChemistryProfile:
     """Resolved chemistry for one lineup, in normalized -1..+1 units."""
 
-    relational: float   # team + pair chemistry
-    spacing: float      # how much floor the lineup stretches
+    relational: float      # team + pair chemistry
+    character: float       # teamwork / coachability / locker room
+    spacing: float         # how much floor the lineup stretches
     playmaking_fit: float  # is there someone to actually create shots
-    size_fit: float     # can this group rebound and protect the rim
+    size_fit: float        # can this group rebound and protect the rim
 
     @property
     def execution(self) -> float:
         """Single modifier applied to turnovers / assists / shot quality."""
-        return 0.5 * self.relational + 0.3 * self.playmaking_fit + 0.2 * self.spacing
+        return (
+            0.40 * self.relational
+            + 0.20 * self.character
+            + 0.25 * self.playmaking_fit
+            + 0.15 * self.spacing
+        )
 
     def to_dict(self) -> dict:
         return {
             "relational": round(self.relational, 3),
+            "character": round(self.character, 3),
             "spacing": round(self.spacing, 3),
             "playmaking_fit": round(self.playmaking_fit, 3),
             "size_fit": round(self.size_fit, 3),
@@ -69,28 +79,45 @@ def evaluate(team: Team, lineup: Lineup) -> ChemistryProfile:
     pair_average = sum(pairs) / len(pairs) if pairs else NEUTRAL_CHEMISTRY
     relational = normalize(0.4 * team.team_chemistry + 0.6 * pair_average)
 
+    # Character: who these five are, rather than how long they have played
+    # together. Leadership is weighted toward the best leader on the floor --
+    # one strong voice carries a group further than five average ones.
+    character_scores = [
+        0.45 * p.ratings.teamwork
+        + 0.25 * p.ratings.coachability
+        + 0.30 * p.hidden.locker_room_presence
+        for p in lineup
+    ]
+    best_leader = max(
+        0.6 * p.ratings.leadership + 0.4 * p.hidden.leadership_influence for p in lineup
+    )
+    character = normalize(
+        0.75 * (sum(character_scores) / 5.0) + 0.25 * best_leader
+    )
+
     # Spacing: how many of the five can genuinely shoot it, weighted by how
     # willing they are to. One non-shooter is survivable, three is not.
     shooters = [
-        normalize(p.ratings.three_point) * (0.5 + p.tendencies.three_point_rate / 100.0)
+        normalize(C.spacing(p)) * (0.5 + p.tendencies.three_point_rate / 100.0)
         for p in lineup
     ]
     spacing = sum(shooters) / 5.0
 
-    # Playmaking fit: dominated by the best creator, with a bump for a second one.
-    creators = sorted((normalize(p.ratings.playmaking) for p in lineup), reverse=True)
+    # Playmaking fit: dominated by the best creator, with a bump for a second.
+    creators = sorted((normalize(C.playmaking(p)) for p in lineup), reverse=True)
     playmaking_fit = 0.6 * creators[0] + 0.25 * creators[1] + 0.15 * creators[2]
 
     # Size fit: rebounding and rim protection, with a penalty for going small.
     size_fit = (
-        0.5 * normalize(lineup.average("def_rebounding"))
-        + 0.5 * normalize(lineup.average("interior_defense"))
+        0.5 * normalize(sum(C.defensive_rebounding(p) for p in lineup) / 5.0)
+        + 0.5 * normalize(sum(C.interior_defense(p) for p in lineup) / 5.0)
     )
     if len(lineup.bigs()) == 0:
         size_fit -= 0.15
 
     return ChemistryProfile(
         relational=relational,
+        character=character,
         spacing=spacing,
         playmaking_fit=playmaking_fit,
         size_fit=size_fit,
@@ -101,11 +128,18 @@ def drift_after_game(team: Team, minutes_together: dict[frozenset[str], float]) 
     """Nudge pair chemistry toward familiarity after a game.
 
     Called by the league layer once a game finishes. Pairs that share the floor
-    trend upward slowly; everything else decays toward neutral.
+    trend upward slowly; everything else decays toward neutral. Professional,
+    coachable players build rapport faster.
     """
+    rapport = {
+        p.id: 1.0 + normalize(0.5 * p.ratings.teamwork + 0.5 * p.hidden.professionalism) * 0.5
+        for p in team.players
+    }
+
     for key, minutes in minutes_together.items():
         current = team.pair_chemistry.get(key, NEUTRAL_CHEMISTRY)
-        gain = min(1.5, minutes / 20.0)
+        pace = sum(rapport.get(pid, 1.0) for pid in key) / max(1, len(key))
+        gain = min(1.5, minutes / 20.0) * pace
         team.pair_chemistry[key] = min(100.0, current + gain)
 
     for key, value in list(team.pair_chemistry.items()):

@@ -8,7 +8,9 @@ matchup-based logic later without touching the possession engine.
 
 from __future__ import annotations
 
+from .. import composites as C
 from ..models import Lineup, Player
+from ..ratings import normalize
 from ..tactics import slider_mod
 from .state import TeamState
 
@@ -112,5 +114,8 @@ class RotationManager:
     def rest_bench(self, team_state: TeamState, seconds: float) -> None:
         on_court_ids = {p.id for p in team_state.on_court}
         for player in team_state.team.players:
-            if player.id not in on_court_ids:
-                player.condition = min(100.0, player.condition + seconds * BENCH_RECOVERY_PER_SECOND)
+            if player.id in on_court_ids:
+                continue
+            # Well-conditioned players get their wind back faster.
+            rate = BENCH_RECOVERY_PER_SECOND * (1.0 + normalize(C.endurance(player)) * 0.4)
+            player.condition = min(100.0, player.condition + seconds * rate)

@@ -455,6 +455,96 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 .diff-positive { color: var(--home); }
 .diff-negative { color: var(--away); }
 
+/* ---------------- squad & player profile ---------------- */
+.squad-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+}
+@media (max-width: 900px) { .squad-layout { grid-template-columns: minmax(0, 1fr); } }
+
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-right: 1px solid var(--hairline);
+  max-height: 620px;
+  overflow-y: auto;
+}
+.roster-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hairline-soft);
+  cursor: pointer;
+}
+.roster-row:hover { background: var(--raised); }
+.roster-row.is-selected { background: var(--raised); box-shadow: inset 3px 0 0 var(--accent); }
+.roster-row.is-starter .player-name { font-weight: 600; }
+.roster-name { display: grid; gap: 1px; min-width: 0; }
+.roster-meta { font: 500 10px/1.4 var(--mono); color: var(--muted); letter-spacing: .04em; }
+.roster-ovr { font: 700 13px/1 var(--mono); font-variant-numeric: tabular-nums; }
+
+.profile { padding: 14px 16px 4px; min-width: 0; }
+.profile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 14px;
+}
+.profile-head h3 { font-size: 18px; }
+.muted-line { margin: 3px 0 0; font: 500 11px/1.5 var(--mono); color: var(--muted); letter-spacing: .04em; }
+.profile-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.attr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: 4px 22px;
+}
+.attr-group { break-inside: avoid; margin-bottom: 12px; }
+.attr-heading {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.attr-list { list-style: none; margin: 0; padding: 0; }
+.attr-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+}
+.attr-name { font-size: 12px; color: var(--ink-2); }
+.attr-value {
+  min-width: 26px;
+  text-align: center;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font: 600 11px/1.5 var(--mono);
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--accent) calc(var(--heat, 0) * 30%), transparent);
+}
+.attr-value.is-elite { color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.scouting { border-top: 1px dashed var(--hairline); padding-top: 12px; margin-top: 4px; }
+.scouting .attr-heading { color: var(--away); }
+.composite-group .attr-heading { color: var(--home); }
+
+.scout-switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.scout-switch input { accent-color: var(--accent); }
+
 /* ---------------- teams ---------------- */
 .team-layout { display: grid; gap: var(--gap); padding: var(--gap); }
 .tactics-grid { padding: 14px; display: grid; gap: 14px; }
@@ -670,23 +760,42 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
           These are the inputs the engine reads on every possession. Schemes carry
           explicit effect tables — <strong>pace and space</strong> lifts three-point rate and
           pushes tempo while thinning the offensive glass; <strong>drop coverage</strong> trades
-          three-point defence for rim protection. The sliders layer on top of that.
+          three-point defense for rim protection. The sliders layer on top.
         </p>
       </div>
 
       <div class="card">
         <div class="card-head">
-          <h2>Roster</h2>
-          <span class="label">Bold = starters</span>
+          <h2>Squad</h2>
+          <label class="scout-switch">
+            <input type="checkbox" id="scout-toggle" />
+            <span>Show scouted attributes</span>
+          </label>
         </div>
-        <div class="sheet table-scroll">
-          <table id="roster"></table>
+        <div class="squad-layout">
+          <ul id="roster-list" class="roster-list"></ul>
+          <div class="profile">
+            <div class="profile-head">
+              <div>
+                <h3 id="profile-name">—</h3>
+                <p class="muted-line" id="profile-meta"></p>
+              </div>
+              <div class="profile-badges">
+                <span class="chip"><span class="chip-label">Personality</span><span class="chip-value" id="profile-personality">—</span></span>
+                <span class="chip"><span class="chip-label">Overall</span><span class="chip-value" id="profile-ovr">—</span></span>
+              </div>
+            </div>
+            <div id="attribute-groups" class="attr-grid"></div>
+            <div id="scouting" class="attr-grid scouting" hidden></div>
+          </div>
         </div>
         <p class="note">
-          Ratings are on a 0–99 scale where 50 is league average. Tendencies (how
-          often a player <em>wants</em> the ball, and from where) are stored separately from
-          ability, so a low-usage elite shooter and a high-volume chucker can share a
-          three-point rating and behave nothing alike.
+          81 visible attributes on a 1–99 scale where 50 is league average. The
+          engine never reads one directly — <strong>composites</strong> blend them into the
+          ~25 numbers a possession turns on, so no single attribute dominates and
+          balance lives in one file. Tick <em>scouted attributes</em> to reveal the 14
+          hidden ones a manager would need to scout for, plus the composites
+          this player's ratings add up to.
         </p>
       </div>
     </div>

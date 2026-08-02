@@ -5,22 +5,24 @@ possession: it burns clock, decides whether the ball is turned over, picks a
 shooter and a shot, resolves it, handles fouls and free throws, and rebounds
 the miss. Every branch emits play-by-play events.
 
-All tuning constants live at the top of this module. The general shape is:
+The engine never touches a raw attribute. Every skill it reads comes from
+`bballsim/composites.py`, which blends the 81 visible attributes into the ~25
+numbers basketball actually turns on. Tuning therefore happens in two places
+and only two: the baselines below, and the blends in `composites.py`.
+
+The general shape of every probability:
 
     probability = league_baseline
-                  + rating_advantage * sensitivity
+                  + composite_advantage * sensitivity
                   + tactical_modifiers
-                  + chemistry / fatigue / situational modifiers
-
-Ratings and tactics enter as normalized (-1..+1) values so the sensitivity
-numbers below read as "how many percentage points does a full scale of talent
-move this outcome".
+                  + chemistry / fatigue / clutch / situational modifiers
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .. import composites as C
 from ..chemistry import ChemistryProfile
 from ..chemistry import evaluate as evaluate_chemistry
 from ..models import Lineup, Player
@@ -31,18 +33,17 @@ from .rng import SimRandom
 from .state import GameState, TeamState
 
 # --------------------------------------------------------------------------
-# League baselines. These are the numbers a perfectly average team produces
-# against a perfectly average defence with neutral tactics.
+# League baselines: what a perfectly average team produces against a perfectly
+# average defence with neutral tactics.
 # --------------------------------------------------------------------------
 
-BASE_POSSESSION_SECONDS = 14.5
+BASE_POSSESSION_SECONDS = 15.0
 POSSESSION_SECONDS_SPREAD = 5.5
 MIN_POSSESSION_SECONDS = 2.5
 
 BASE_TURNOVER_RATE = 0.132
 BASE_STEAL_SHARE = 0.60          # share of turnovers that are steals
 
-# Shot mix: how often each zone is attacked, before tactics/tendencies.
 BASE_SHOT_MIX: dict[ShotZone, float] = {
     ShotZone.RIM: 0.30,
     ShotZone.PAINT: 0.12,
@@ -68,24 +69,40 @@ SHOOTING_SENSITIVITY: dict[ShotZone, float] = {
     ShotZone.ABOVE_BREAK_THREE: 0.130,
 }
 
+# Which defensive composite guards which zone.
+INTERIOR_ZONES = (ShotZone.RIM, ShotZone.PAINT)
+
 BASE_ASSIST_RATE = 0.60          # share of made field goals that are assisted
-BASE_OFF_REBOUND_RATE = 0.235
+BASE_OFF_REBOUND_RATE = 0.268
 BASE_BLOCK_RATE = 0.058          # of two-point attempts
 BASE_SHOOTING_FOUL_RATE = 0.105
 BASE_NON_SHOOTING_FOUL_RATE = 0.105
-BASE_FT_PCT = 0.715
+BASE_FT_PCT = 0.737
 
 CHEMISTRY_TURNOVER_SENSITIVITY = 0.045
 CHEMISTRY_SHOT_QUALITY_SENSITIVITY = 0.030
 FATIGUE_SHOOTING_PENALTY = 0.070   # at fully gassed
 FATIGUE_TURNOVER_PENALTY = 0.030
-# Seconds of floor time that cost an average-stamina player one point of condition.
-FATIGUE_SECONDS_PER_POINT = 16.0
+FATIGUE_SECONDS_PER_POINT = 16.0   # floor time costing average stamina one point
+
+# Shot selection: a player with poor judgement drifts toward shots he cannot
+# make. This scales how much `shot_quality` pulls the mix toward his strengths.
+SHOT_SELECTION_WEIGHT = 0.35
+
+# Clutch only applies inside the last two minutes of a one-possession game.
+CLUTCH_SECONDS = 120.0
+CLUTCH_MARGIN = 6
+CLUTCH_SHOOTING_SWING = 0.055
+CLUTCH_TURNOVER_SWING = 0.035
+
+# Consistency (hidden) sets how far a player's night drifts from his rating.
+# Drawn once per game in `PossessionEngine.set_form`.
+MAX_FORM_SWING = 9.0
 
 
 @dataclass
 class SideContext:
-    """Everything the engine needs to know about one team for one possession."""
+    """Everything the engine needs about one team for one possession."""
 
     state: TeamState
     lineup: Lineup
@@ -99,6 +116,29 @@ class SideContext:
 class PossessionEngine:
     def __init__(self, rng: SimRandom) -> None:
         self.rng = rng
+        # player id -> tonight's form modifier, in rating points.
+        self.form: dict[str, float] = {}
+
+    # ------------------------------------------------------------------
+    # Nightly form
+    # ------------------------------------------------------------------
+    def set_form(self, players: list[Player]) -> None:
+        """Roll each player's form for this game.
+
+        A high-consistency player performs near his rating every night; a low
+        one is a coin flip. This is the hidden `consistency` attribute's only
+        job, and it is why two identical rosters do not play identical games.
+        """
+        for player in players:
+            spread = MAX_FORM_SWING * (1.0 - normalize(player.hidden.consistency) * 0.7)
+            self.form[player.id] = self.rng.gauss(0.0, max(1.0, spread))
+
+    def _skill(self, player: Player, composite) -> float:
+        """A composite, adjusted for tonight's form."""
+        return composite(player) + self.form.get(player.id, 0.0)
+
+    def _lineup_skill(self, lineup: Lineup, composite) -> float:
+        return sum(self._skill(p, composite) for p in lineup) / 5.0
 
     # ------------------------------------------------------------------
     # Entry point
@@ -112,7 +152,7 @@ class PossessionEngine:
         game.possession_count += 1
         offense.box.possessions += 1
 
-        if self._is_turnover(off, deff):
+        if self._is_turnover(game, off, deff):
             self._resolve_turnover(game, off, deff)
             return
 
@@ -138,13 +178,12 @@ class PossessionEngine:
             + offensive_effect(off.tactics, "pace")
             + slider_mod(off.tactics.tempo_after_rebound) * 0.10
         )
-        # Faster teams shorten possessions; pressure defence lengthens them.
+        # Guards who push tempo shorten possessions on their own.
+        pace += normalize(self._lineup_skill(off.lineup, C.transition_threat)) * 0.08
         pressure = slider_mod(deff.tactics.defensive_pressure) * 0.08
         seconds = BASE_POSSESSION_SECONDS * (1.0 - pace + pressure)
         seconds += self.rng.gauss(0.0, POSSESSION_SECONDS_SPREAD)
 
-        # Late-game situations override everything: trailing teams rush, leading
-        # teams milk the clock.
         seconds = self._apply_endgame_urgency(game, off, seconds)
         return max(MIN_POSSESSION_SECONDS, min(game.rules.shot_clock, seconds))
 
@@ -152,14 +191,16 @@ class PossessionEngine:
         last_period = game.period >= game.rules.periods
         if not last_period or game.clock > 120:
             return seconds
-        margin = game.home.score - game.away.score
-        if off.state is game.away:
-            margin = -margin
-        if margin < 0:                     # trailing: hurry
+        margin = self._margin_for(game, off)
+        if margin < 0:                      # trailing: hurry
             return seconds * 0.55
         if margin > 0 and game.clock < 60:  # leading: bleed the clock
             return min(game.rules.shot_clock, seconds * 1.6)
         return seconds
+
+    def _margin_for(self, game: GameState, side: SideContext) -> int:
+        margin = game.home.score - game.away.score
+        return -margin if side.state is game.away else margin
 
     def _burn_clock(self, game: GameState, seconds: float) -> None:
         seconds = min(seconds, game.clock)
@@ -172,7 +213,8 @@ class PossessionEngine:
         ids = team_state.on_court.ids()
         for player in team_state.on_court:
             team_state.box.line(player.id, player.name).seconds += seconds
-            drain = seconds * (1.0 - normalize(player.ratings.stamina) * 0.5) / FATIGUE_SECONDS_PER_POINT
+            stamina = C.endurance(player)
+            drain = seconds * (1.0 - normalize(stamina) * 0.5) / FATIGUE_SECONDS_PER_POINT
             player.condition = max(0.0, player.condition - drain)
         for i in range(len(ids)):
             for j in range(i + 1, len(ids)):
@@ -180,33 +222,59 @@ class PossessionEngine:
                 team_state.pair_seconds[key] = team_state.pair_seconds.get(key, 0.0) + seconds
 
     # ------------------------------------------------------------------
+    # Clutch
+    # ------------------------------------------------------------------
+    def _is_clutch(self, game: GameState) -> bool:
+        return (
+            game.period >= game.rules.periods
+            and game.clock <= CLUTCH_SECONDS
+            and abs(game.home.score - game.away.score) <= CLUTCH_MARGIN
+        )
+
+    def _clutch_edge(self, game: GameState, player: Player) -> float:
+        """Normalized crunch-time edge, or 0 outside crunch time.
+
+        Blends the visible clutch composite with the hidden
+        `big_game_performance` -- which is exactly the sort of thing a manager
+        only learns by watching a player in April.
+        """
+        if not self._is_clutch(game):
+            return 0.0
+        return normalize(0.7 * C.clutch(player) + 0.3 * player.hidden.big_game_performance)
+
+    # ------------------------------------------------------------------
     # Turnovers
     # ------------------------------------------------------------------
-    def _is_turnover(self, off: SideContext, deff: SideContext) -> bool:
-        handling = off.lineup.average("ball_handling")
-        iq = off.lineup.average("basketball_iq")
-        pressure_skill = deff.lineup.average("steal")
+    def _is_turnover(self, game: GameState, off: SideContext, deff: SideContext) -> bool:
+        security = self._lineup_skill(off.lineup, C.ball_security)
+        pressure_skill = self._lineup_skill(deff.lineup, C.steal_threat)
 
         rate = BASE_TURNOVER_RATE
-        rate -= advantage(0.6 * handling + 0.4 * iq, pressure_skill) * 0.055
+        rate -= advantage(security, pressure_skill) * 0.055
         rate += offensive_effect(off.tactics, "turnover_rate") * 0.5
         rate += defensive_effect(deff.tactics, "steal_rate") * 0.5
         rate += slider_mod(deff.tactics.defensive_pressure) * 0.030
         rate += slider_mod(off.tactics.ball_movement) * 0.012
         rate -= off.chemistry.execution * CHEMISTRY_TURNOVER_SENSITIVITY
         rate += self._fatigue(off.lineup) * FATIGUE_TURNOVER_PENALTY
+
+        if self._is_clutch(game):
+            handler = max(off.lineup, key=lambda p: p.tendencies.usage)
+            rate -= self._clutch_edge(game, handler) * CLUTCH_TURNOVER_SWING
+
         return self.rng.chance(self._bounded(rate, 0.02, 0.35))
 
     def _resolve_turnover(self, game: GameState, off: SideContext, deff: SideContext) -> None:
         loser = self.rng.weighted_choice(
             off.lineup.players,
-            [self._usage_weight(p) * (1.4 - normalize(p.ratings.ball_handling)) for p in off.lineup],
+            [self._usage_weight(p) * (1.4 - normalize(self._skill(p, C.ball_security)))
+             for p in off.lineup],
         )
         stealer = None
         if self.rng.chance(BASE_STEAL_SHARE + defensive_effect(deff.tactics, "steal_rate")):
             stealer = self.rng.weighted_choice(
                 deff.lineup.players,
-                [0.5 + normalize(p.ratings.steal) + normalize(p.ratings.speed) * 0.3 for p in deff.lineup],
+                [0.5 + normalize(self._skill(p, C.steal_threat)) for p in deff.lineup],
             )
 
         off.state.box.line(loser.id, loser.name).turnovers += 1
@@ -231,7 +299,7 @@ class PossessionEngine:
         rate += defensive_effect(deff.tactics, "foul_rate") * 0.5
         rate -= slider_mod(deff.tactics.foul_discipline) * 0.020
         rate += slider_mod(deff.tactics.defensive_pressure) * 0.015
-        rate -= normalize(deff.lineup.average("discipline")) * 0.015
+        rate -= normalize(self._lineup_skill(deff.lineup, C.foul_avoidance)) * 0.020
         return self.rng.chance(self._bounded(rate, 0.005, 0.20))
 
     def _resolve_non_shooting_foul(self, game: GameState, off: SideContext, deff: SideContext) -> bool:
@@ -259,7 +327,7 @@ class PossessionEngine:
     def _pick_fouler(self, deff: SideContext) -> Player:
         return self.rng.weighted_choice(
             deff.lineup.players,
-            [max(0.15, 1.0 - normalize(p.ratings.discipline)) for p in deff.lineup],
+            [max(0.15, 1.0 - normalize(self._skill(p, C.foul_avoidance))) for p in deff.lineup],
         )
 
     def _charge_foul(self, game: GameState, side: SideContext, player: Player) -> None:
@@ -272,18 +340,17 @@ class PossessionEngine:
     def _resolve_shot_attempt(
         self, game: GameState, off: SideContext, deff: SideContext, putback: bool
     ) -> None:
-        shooter = self._pick_shooter(off, putback)
+        shooter = self._pick_shooter(game, off, putback)
         zone = ShotZone.RIM if putback else self._pick_zone(off, deff, shooter)
 
         defender = self._pick_defender(deff, zone)
-        make_pct = self._make_probability(off, deff, shooter, defender, zone)
+        make_pct = self._make_probability(game, off, deff, shooter, defender, zone)
 
-        # A foul can happen on the shot itself.
         if self.rng.chance(self._shooting_foul_rate(off, deff, shooter, defender, zone)):
             self._resolve_shooting_foul(game, off, deff, shooter, defender, zone, make_pct)
             return
 
-        if not zone.is_three and self.rng.chance(self._block_rate(off, deff, defender, zone)):
+        if not zone.is_three and self.rng.chance(self._block_rate(deff, defender, zone)):
             self._record_shot(off, shooter, zone, made=False)
             deff.state.box.line(defender.id, defender.name).blocks += 1
             self._emit(
@@ -315,17 +382,28 @@ class PossessionEngine:
             )
             self._rebound(game, off, deff)
 
-    def _pick_shooter(self, off: SideContext, putback: bool) -> Player:
+    def _pick_shooter(self, game: GameState, off: SideContext, putback: bool) -> Player:
         if putback:
-            weights = [0.4 + normalize(p.ratings.off_rebounding) + normalize(p.ratings.finishing) * 0.5
-                       for p in off.lineup]
+            weights = [
+                0.4 + normalize(self._skill(p, C.offensive_rebounding))
+                + normalize(self._skill(p, C.shooting_rim)) * 0.5
+                for p in off.lineup
+            ]
         else:
             weights = [self._usage_weight(p) for p in off.lineup]
+            if self._is_clutch(game):
+                # Late in a close game the ball finds whoever handles it best.
+                weights = [
+                    w * (1.0 + max(0.0, self._clutch_edge(game, p)) * 1.2)
+                    for w, p in zip(weights, off.lineup)
+                ]
         return self.rng.weighted_choice(off.lineup.players, weights)
 
     def _usage_weight(self, player: Player) -> float:
         base = 0.35 + player.tendencies.usage / 100.0
-        skill = 1.0 + normalize(player.ratings.finishing) * 0.15 + normalize(player.ratings.three_point) * 0.15
+        # Creators and finishers command more of the offence than their raw
+        # tendency alone suggests.
+        skill = 1.0 + normalize(C.shot_creation(player)) * 0.20
         fatigue = 0.7 + 0.3 * (player.condition / 100.0)
         return max(0.05, base * skill * fatigue)
 
@@ -338,11 +416,13 @@ class PossessionEngine:
         rim_push = (
             offensive_effect(off.tactics, "rim_rate")
             + (shooter.tendencies.rim_rate - 50.0) / 100.0 * 0.60
-            + normalize(shooter.ratings.speed) * 0.15
+            + normalize(shooter.ratings.acceleration) * 0.15
         )
-        # Good rim protection and heavy help push shots back out.
+        post_push = (shooter.tendencies.post_up_rate - 50.0) / 100.0 * 0.50
+
         rim_push -= defensive_effect(deff.tactics, "rim_pct") * -1.0
         rim_push -= slider_mod(deff.tactics.help_intensity) * 0.15
+        rim_push -= normalize(self._lineup_skill(deff.lineup, C.help_defense)) * 0.12
         three_push -= slider_mod(deff.tactics.close_out_hard) * 0.15
 
         weights: dict[ShotZone, float] = {}
@@ -350,56 +430,56 @@ class PossessionEngine:
             weight = base
             if zone.is_three:
                 weight *= 1.0 + three_push
-            elif zone in (ShotZone.RIM, ShotZone.PAINT):
+            elif zone is ShotZone.RIM:
                 weight *= 1.0 + rim_push
+            elif zone is ShotZone.PAINT:
+                weight *= 1.0 + rim_push * 0.4 + post_push
             else:
                 weight *= 1.0 - three_push * 0.5 - rim_push * 0.3
             weights[zone] = max(0.01, weight)
+
+        # Shot selection: good judgement shifts attempts toward the zones this
+        # shooter is actually good at; poor judgement leaves the mix alone.
+        judgement = normalize(self._skill(shooter, C.shot_quality))
+        if judgement != 0.0:
+            for zone in weights:
+                edge = normalize(self._skill(shooter, C.SHOOTING_BY_ZONE[zone.value]))
+                weights[zone] = max(0.01, weights[zone] * (1.0 + judgement * edge * SHOT_SELECTION_WEIGHT))
 
         zones = list(weights.keys())
         return self.rng.weighted_choice(zones, [weights[z] for z in zones])
 
     def _pick_defender(self, deff: SideContext, zone: ShotZone) -> Player:
-        if zone in (ShotZone.RIM, ShotZone.PAINT):
-            weights = [0.3 + normalize(p.ratings.interior_defense) + normalize(p.ratings.block) * 0.5
-                       for p in deff.lineup]
-        else:
-            weights = [0.3 + normalize(p.ratings.perimeter_defense) for p in deff.lineup]
+        composite = C.interior_defense if zone in INTERIOR_ZONES else C.perimeter_defense
+        weights = [0.3 + normalize(self._skill(p, composite)) for p in deff.lineup]
         return self.rng.weighted_choice(deff.lineup.players, weights)
 
     def _make_probability(
         self,
+        game: GameState,
         off: SideContext,
         deff: SideContext,
         shooter: Player,
         defender: Player,
         zone: ShotZone,
     ) -> float:
-        shooter_attr = {
-            ShotZone.RIM: shooter.ratings.finishing,
-            ShotZone.PAINT: 0.5 * shooter.ratings.finishing + 0.5 * shooter.ratings.post_game,
-            ShotZone.MID_RANGE: shooter.ratings.mid_range,
-            ShotZone.CORNER_THREE: shooter.ratings.three_point,
-            ShotZone.ABOVE_BREAK_THREE: shooter.ratings.three_point,
-        }[zone]
-        defender_attr = (
-            defender.ratings.interior_defense
-            if zone in (ShotZone.RIM, ShotZone.PAINT)
-            else defender.ratings.perimeter_defense
+        shooter_skill = self._skill(shooter, C.SHOOTING_BY_ZONE[zone.value])
+        defense_composite = C.interior_defense if zone in INTERIOR_ZONES else C.perimeter_defense
+
+        # The primary defender matters most, but team defence behind him and
+        # the quality of the contest both move the number.
+        effective_defense = (
+            0.55 * self._skill(defender, defense_composite)
+            + 0.25 * self._lineup_skill(deff.lineup, defense_composite)
+            + 0.20 * self._skill(defender, C.contest_quality)
         )
-        # Team defence matters as much as the primary defender.
-        team_defense = (
-            deff.lineup.average("interior_defense")
-            if zone in (ShotZone.RIM, ShotZone.PAINT)
-            else deff.lineup.average("perimeter_defense")
-        )
-        effective_defense = 0.65 * defender_attr + 0.35 * team_defense
 
         pct = BASE_FG_PCT[zone]
-        pct += advantage(shooter_attr, effective_defense) * SHOOTING_SENSITIVITY[zone]
+        pct += advantage(shooter_skill, effective_defense) * SHOOTING_SENSITIVITY[zone]
         pct += off.chemistry.execution * CHEMISTRY_SHOT_QUALITY_SENSITIVITY
         pct += off.chemistry.spacing * 0.012
         pct -= self._fatigue(off.lineup) * FATIGUE_SHOOTING_PENALTY
+        pct += self._clutch_edge(game, shooter) * CLUTCH_SHOOTING_SWING
 
         if zone.is_three:
             pct += defensive_effect(deff.tactics, "three_pct")
@@ -407,6 +487,7 @@ class PossessionEngine:
         else:
             pct += defensive_effect(deff.tactics, "rim_pct")
             pct -= slider_mod(deff.tactics.help_intensity) * 0.018
+            pct -= normalize(self._lineup_skill(deff.lineup, C.help_defense)) * 0.020
 
         return self._bounded(pct, 0.05, 0.95)
 
@@ -436,16 +517,20 @@ class PossessionEngine:
         rate += slider_mod(off.tactics.ball_movement) * 0.15
         rate += off.chemistry.execution * 0.10
         rate += 0.10 if zone.is_three else -0.05
+        # Off-ball movement earns the pass as much as the passer does.
+        rate += normalize(self._skill(shooter, C.off_ball_gravity)) * 0.06
         if not self.rng.chance(self._bounded(rate, 0.05, 0.95)):
             return None
         candidates = [p for p in off.lineup if p.id != shooter.id]
-        weights = [0.2 + normalize(p.ratings.playmaking) + p.tendencies.pass_first / 200.0
-                   for p in candidates]
+        weights = [
+            0.2 + normalize(self._skill(p, C.playmaking)) + p.tendencies.pass_first / 200.0
+            for p in candidates
+        ]
         return self.rng.weighted_choice(candidates, weights)
 
-    def _block_rate(self, off: SideContext, deff: SideContext, defender: Player, zone: ShotZone) -> float:
-        rate = BASE_BLOCK_RATE * (1.6 if zone in (ShotZone.RIM, ShotZone.PAINT) else 0.5)
-        rate += normalize(defender.ratings.block) * 0.045
+    def _block_rate(self, deff: SideContext, defender: Player, zone: ShotZone) -> float:
+        rate = BASE_BLOCK_RATE * (1.6 if zone in INTERIOR_ZONES else 0.5)
+        rate += normalize(self._skill(defender, C.block_threat)) * 0.045
         rate += defensive_effect(deff.tactics, "block_rate") * 0.5
         return self._bounded(rate, 0.0, 0.30)
 
@@ -455,9 +540,9 @@ class PossessionEngine:
     def _shooting_foul_rate(
         self, off: SideContext, deff: SideContext, shooter: Player, defender: Player, zone: ShotZone
     ) -> float:
-        rate = BASE_SHOOTING_FOUL_RATE * (1.5 if zone in (ShotZone.RIM, ShotZone.PAINT) else 0.45)
-        rate += normalize(shooter.ratings.drawing_fouls) * 0.045
-        rate -= normalize(defender.ratings.discipline) * 0.025
+        rate = BASE_SHOOTING_FOUL_RATE * (1.5 if zone in INTERIOR_ZONES else 0.45)
+        rate += normalize(self._skill(shooter, C.foul_drawing)) * 0.045
+        rate -= normalize(self._skill(defender, C.foul_avoidance)) * 0.030
         rate += defensive_effect(deff.tactics, "foul_rate") * 0.5
         rate -= slider_mod(deff.tactics.foul_discipline) * 0.025
         return self._bounded(rate, 0.005, 0.45)
@@ -473,7 +558,6 @@ class PossessionEngine:
         make_pct: float,
     ) -> None:
         self._charge_foul(game, deff, defender)
-        # And-one: the shot still goes in some of the time.
         and_one = self.rng.chance(make_pct * 0.45)
 
         if and_one:
@@ -495,7 +579,8 @@ class PossessionEngine:
             self._shoot_free_throws(game, off, shooter, zone.points)
 
     def _shoot_free_throws(self, game: GameState, off: SideContext, shooter: Player, count: int) -> None:
-        pct = BASE_FT_PCT + normalize(shooter.ratings.free_throw) * 0.16
+        pct = BASE_FT_PCT + normalize(self._skill(shooter, C.free_throw)) * 0.16
+        pct += self._clutch_edge(game, shooter) * 0.03
         pct = self._bounded(pct, 0.30, 0.99)
         line = off.state.box.line(shooter.id, shooter.name)
         for i in range(count):
@@ -523,17 +608,20 @@ class PossessionEngine:
     # ------------------------------------------------------------------
     def _rebound(self, game: GameState, off: SideContext, deff: SideContext) -> None:
         rate = BASE_OFF_REBOUND_RATE
-        rate += advantage(off.lineup.average("off_rebounding"), deff.lineup.average("def_rebounding")) * 0.11
+        rate += advantage(
+            self._lineup_skill(off.lineup, C.offensive_rebounding),
+            self._lineup_skill(deff.lineup, C.defensive_rebounding),
+        ) * 0.11
         rate += slider_mod(off.tactics.offensive_rebounding) * 0.055
         rate += offensive_effect(off.tactics, "oreb_rate") * 0.5
         rate -= defensive_effect(deff.tactics, "dreb_rate") * 0.5
         offensive = self.rng.chance(self._bounded(rate, 0.05, 0.55))
 
         side = off if offensive else deff
-        attribute = "off_rebounding" if offensive else "def_rebounding"
+        composite = C.offensive_rebounding if offensive else C.defensive_rebounding
         rebounder = self.rng.weighted_choice(
             side.lineup.players,
-            [0.25 + normalize(getattr(p.ratings, attribute)) + p.tendencies.crash_glass / 300.0
+            [0.25 + normalize(self._skill(p, composite)) + p.tendencies.crash_glass / 300.0
              for p in side.lineup],
         )
         line = side.state.box.line(rebounder.id, rebounder.name)
@@ -552,7 +640,6 @@ class PossessionEngine:
         )
 
         if offensive and game.clock > 1.0:
-            # Second-chance possession: short clock, usually a putback attempt.
             self._burn_clock(game, min(game.clock, self.rng.uniform(2.0, 7.0)))
             putback = self.rng.chance(0.55)
             self._resolve_shot_attempt(game, off, deff, putback=putback)

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .ratings import Ratings, Tendencies, overall
+from .ratings import HiddenAttributes, Ratings, Tendencies, overall, personality_label
 from .tactics import Tactics
 
 
@@ -43,6 +43,7 @@ class Player:
 
     ratings: Ratings = field(default_factory=Ratings)
     tendencies: Tendencies = field(default_factory=Tendencies)
+    hidden: HiddenAttributes = field(default_factory=HiddenAttributes)
 
     # Live, per-game state. Reset by the engine at tip-off.
     condition: float = 100.0   # 0-100 fatigue-adjusted freshness
@@ -59,7 +60,12 @@ class Player:
 
     @property
     def overall(self) -> float:
-        return overall(self.ratings)
+        return overall(self.ratings, self.position.value)
+
+    @property
+    def personality(self) -> str:
+        """Derived FM-style label rather than a stored number."""
+        return personality_label(self.ratings, self.hidden)
 
     def to_dict(self) -> dict:
         return {
@@ -72,9 +78,17 @@ class Player:
             "overall": self.overall,
             "condition": round(self.condition, 1),
             "injured": self.injured,
+            "personality": self.personality,
             "ratings": self.ratings.to_dict(),
             "tendencies": self.tendencies.to_dict(),
         }
+
+    def scouted_dict(self) -> dict:
+        """Everything above plus the hidden attributes -- for tooling and tests,
+        never for the roster UI."""
+        data = self.to_dict()
+        data["hidden"] = self.hidden.to_dict()
+        return data
 
 
 @dataclass

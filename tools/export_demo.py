@@ -21,11 +21,44 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from bballsim import composites as C
 from bballsim.chemistry import evaluate as evaluate_chemistry
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
 from bballsim.models import Lineup
 from bballsim.placeholder import make_teams
+from bballsim.ratings import (
+    ATTRIBUTE_GROUPS,
+    ATTRIBUTE_LABELS,
+    HiddenAttributes,
+    Ratings,
+    display_name,
+)
+
+# The composites the engine actually reads. Exported alongside the raw
+# attributes so the page can show what a rating set adds up to.
+EXPORTED_COMPOSITES = {
+    "Rim finishing": C.shooting_rim,
+    "Paint scoring": C.shooting_paint,
+    "Mid-range": C.shooting_mid,
+    "Corner three": C.shooting_corner_three,
+    "Above the break": C.shooting_above_break_three,
+    "Shot creation": C.shot_creation,
+    "Shot selection": C.shot_quality,
+    "Playmaking": C.playmaking,
+    "Ball security": C.ball_security,
+    "Off-ball gravity": C.off_ball_gravity,
+    "Interior defense": C.interior_defense,
+    "Perimeter defense": C.perimeter_defense,
+    "Help defense": C.help_defense,
+    "Steal threat": C.steal_threat,
+    "Rim protection": C.block_threat,
+    "Offensive glass": C.offensive_rebounding,
+    "Defensive glass": C.defensive_rebounding,
+    "Foul avoidance": C.foul_avoidance,
+    "Endurance": C.endurance,
+    "Clutch": C.clutch,
+}
 
 # Event types, as small integers. Order must match EVENT_TYPES in the page.
 EVENT_CODES = [
@@ -78,10 +111,16 @@ def export_team(league: League, team) -> dict:
                 "pos": p.position.value,
                 "age": p.age,
                 "height": p.height_inches,
+                "weight": p.weight_lbs,
                 "jersey": p.jersey,
                 "ovr": p.overall,
+                "personality": p.personality,
                 "ratings": {k: round(v) for k, v in p.ratings.to_dict().items()},
                 "tendencies": {k: round(v) for k, v in p.tendencies.to_dict().items()},
+                # Normally invisible. Shipped so the demo can show what a
+                # scouting report would eventually reveal.
+                "hidden": {k: round(v) for k, v in p.hidden.to_dict().items()},
+                "composites": {k: round(fn(p), 1) for k, fn in EXPORTED_COMPOSITES.items()},
             }
             for p in team.players
         ],
@@ -161,6 +200,11 @@ def main() -> None:
             "trackerSpeed": league.tracker_speed,
         },
         "eventTypes": EVENT_CODES,
+        "attributeGroups": {g: list(keys) for g, keys in ATTRIBUTE_GROUPS.items()},
+        "attributeLabels": ATTRIBUTE_LABELS,
+        "attributeNames": {k: display_name(k) for k in Ratings.attribute_names()},
+        "hiddenNames": {k: display_name(k) for k in HiddenAttributes.attribute_names()},
+        "compositeOrder": list(EXPORTED_COMPOSITES),
         "teams": [export_team(league, t) for t in league.teams.values()],
         "games": [export_game(g, league) for g in finals],
         "standings": league.standings_table(),
