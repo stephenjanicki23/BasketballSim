@@ -486,7 +486,30 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 .roster-row.is-starter .player-name { font-weight: 600; }
 .roster-name { display: grid; gap: 1px; min-width: 0; }
 .roster-meta { font: 500 10px/1.4 var(--mono); color: var(--muted); letter-spacing: .04em; }
-.roster-ovr { font: 700 13px/1 var(--mono); font-variant-numeric: tabular-nums; }
+/* ---- star rating: the headline number, in place of a raw overall ---- */
+.stars { display: inline-flex; gap: 1px; line-height: 1; white-space: nowrap; }
+.stars .star { font-size: 13px; color: color-mix(in srgb, var(--muted) 50%, transparent); }
+.stars .star.is-full { color: var(--accent); }
+/* Half star: fill the left half only, so 3.5 reads differently from 4. */
+.stars .star.is-half {
+  color: var(--accent);
+  background: linear-gradient(to right, var(--accent) 50%, color-mix(in srgb, var(--muted) 50%, transparent) 50%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.stars.is-compact .star { font-size: 11px; }
+
+.bio-line { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 7px 0 0; }
+.bio-fact { display: inline-flex; align-items: baseline; gap: 6px; }
+.bio-label {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.bio-value { font-size: 12px; color: var(--ink-2); }
+.potential-stars { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 
 .profile { padding: 14px 16px 4px; min-width: 0; }
 .profile-head {
@@ -815,10 +838,11 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
               <div>
                 <h3 id="profile-name">—</h3>
                 <p class="muted-line" id="profile-meta"></p>
+                <p class="bio-line" id="profile-bio"></p>
               </div>
               <div class="profile-badges">
                 <span class="chip"><span class="chip-label">Personality</span><span class="chip-value" id="profile-personality">—</span></span>
-                <span class="chip"><span class="chip-label">Overall</span><span class="chip-value" id="profile-ovr">—</span></span>
+                <span class="chip"><span class="chip-label">Rating</span><span class="chip-value" id="profile-stars">—</span></span>
                 <span class="chip"><span class="chip-label">Tier</span><span class="chip-value" id="profile-tier">—</span></span>
                 <span class="chip"><span class="chip-label">Archetype</span><span class="chip-value" id="profile-archetype">—</span></span>
               </div>

@@ -19,6 +19,7 @@ from .ability import (
     generate_ratings,
     make_ability,
 )
+from .biography import draw_age, draw_height, draw_weight, make_biography
 from .models import Player, Position, Team
 from .ratings import HiddenAttributes, Ratings, Tendencies, clamp
 from .tactics import DefensiveScheme, OffensiveScheme, Tactics
@@ -164,10 +165,6 @@ _CHARACTER_ATTRIBUTES = frozenset({
     "winning_mentality",
 })
 
-_POSITION_HEIGHT: dict[Position, int] = {
-    Position.PG: 74, Position.SG: 77, Position.SF: 79, Position.PF: 81, Position.C: 83,
-}
-
 _ROSTER_SHAPE = [
     Position.PG, Position.SG, Position.SF, Position.PF, Position.C,
     Position.PG, Position.SG, Position.SF, Position.PF, Position.C,
@@ -188,6 +185,8 @@ def _make_player(
     target_ca: float,
     first_name: str,
     last_name: str,
+    season_start_year: int = 2026,
+    draft_size: int = 16,
 ) -> Player:
     """Build a player from a CA target rather than from raw attribute draws.
 
@@ -196,7 +195,9 @@ def _make_player(
     Character attributes are drawn separately -- being a good pro has nothing
     to do with being a good player, and they are excluded from CA entirely.
     """
-    age = rng.randint(19, 35)
+    # Age first, because everything else keys off it: PA headroom shrinks with
+    # age, and the draft class is derived from how long he has been in the league.
+    age = draw_age(rng, target_ca)
     archetype = rng.choice(POSITION_ARCHETYPES[position.value])
     ability = make_ability(rng, target_ca, age)
 
@@ -244,20 +245,26 @@ def _make_player(
         crash_glass=gauss(ratings.offensive_rebounding, 2.4),
     )
 
+    height_inches = draw_height(rng, position.value)
+    bio = make_biography(
+        rng, age, season_start_year, ability.potential, draft_size=draft_size
+    )
+
     return Player(
         id=f"{team_abbr}-{index:02d}",
         first_name=first_name,
         last_name=last_name,
         position=position,
         age=age,
-        height_inches=_POSITION_HEIGHT[position] + rng.randint(-2, 2),
-        weight_lbs=180 + (_POSITION_HEIGHT[position] - 74) * 9 + rng.randint(-12, 12),
+        height_inches=height_inches,
+        weight_lbs=draw_weight(rng, height_inches, ratings.strength),
         jersey=index,
         ratings=ratings,
         tendencies=tendencies,
         hidden=hidden,
         ability=ability,
         archetype=archetype,
+        bio=bio,
     )
 
 
@@ -267,6 +274,8 @@ def make_team(
     name: str,
     abbreviation: str,
     surnames: list[str] | None = None,
+    season_start_year: int = 2026,
+    draft_size: int = 16,
 ) -> Team:
     # Surnames come from a league-wide pool when one is supplied, so no two
     # players anywhere share a name.
@@ -275,10 +284,11 @@ def make_team(
 
     players: list[Player] = []
     for index, position in enumerate(_ROSTER_SHAPE):
-        target_ca = max(30.0, min(195.0, _SLOT_CA[index] + rng.gauss(0, 7.0)))
+        target_ca = max(30.0, min(195.0, _SLOT_CA[index] + rng.gauss(0, 4.0)))
         players.append(_make_player(
             rng, abbreviation, index + 1, position, target_ca,
             first_names[index], surnames[index],
+            season_start_year=season_start_year, draft_size=draft_size,
         ))
 
     team = Team(
@@ -304,15 +314,20 @@ def make_team(
     return team
 
 
-def make_teams(count: int = 8, seed: int = 7) -> list[Team]:
+def make_teams(count: int = 8, seed: int = 7, season_start_year: int = 2026) -> list[Team]:
     rng = random.Random(seed)
     count = min(count, len(_TEAM_NAMES))
+    # Two rounds for a league this size, so pick numbers stay coherent.
+    draft_size = count * 2
     needed = count * len(_ROSTER_SHAPE)
     if needed > len(_SURNAMES):
         raise ValueError(f"need {needed} unique surnames, pool has {len(_SURNAMES)}")
     pool = rng.sample(_SURNAMES, needed)
     size = len(_ROSTER_SHAPE)
     return [
-        make_team(rng, *_TEAM_NAMES[i], surnames=pool[i * size:(i + 1) * size])
+        make_team(
+            rng, *_TEAM_NAMES[i], surnames=pool[i * size:(i + 1) * size],
+            season_start_year=season_start_year, draft_size=draft_size,
+        )
         for i in range(count)
     ]

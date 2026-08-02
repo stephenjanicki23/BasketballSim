@@ -24,10 +24,14 @@ from bballsim.ability import (
     ca_to_scale,
     current_ability,
     develop,
+    expected_headroom,
     generate_ratings,
     make_ability,
     scout,
+    star_tier,
+    stars,
 )
+from bballsim.biography import make_biography
 from bballsim.engine.game import GameSimulator
 from bballsim.engine.possession import PossessionEngine
 from bballsim.engine.rng import SimRandom
@@ -515,3 +519,163 @@ class TestCurrentAndPotentialAbility(unittest.TestCase):
         self.assertEqual(ca_tier(150), "All-Star")
         self.assertEqual(ca_tier(100), "Rotation player")
         self.assertEqual(ca_tier(10), "Amateur")
+
+
+class TestStarRating(unittest.TestCase):
+    """The headline number a manager sees: 0.5 to 5 stars."""
+
+    def test_ten_tiers_map_onto_ten_half_star_steps(self):
+        values = sorted({stars(ca) for ca in range(0, 201)})
+        self.assertEqual(values, [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0])
+
+    def test_stars_never_decrease_as_ca_rises(self):
+        previous = 0.0
+        for ca in range(0, 201):
+            value = stars(ca)
+            self.assertGreaterEqual(value, previous)
+            previous = value
+
+    def test_star_ends_of_the_scale(self):
+        self.assertEqual(stars(200), 5.0)
+        self.assertEqual(stars(0), 0.5)
+
+    def test_star_tier_round_trips_with_the_ca_tier(self):
+        for ca in (195, 170, 150, 133, 118, 100, 85, 65, 45, 20):
+            self.assertEqual(star_tier(stars(ca)), ca_tier(ca))
+
+    def test_potential_stars_are_never_below_current_stars(self):
+        for team in make_teams(8):
+            for player in team.players:
+                self.assertGreaterEqual(player.potential_stars, player.stars)
+
+    def test_every_player_lands_on_a_valid_half_star(self):
+        for team in make_teams(4):
+            for player in team.players:
+                self.assertIn(player.stars * 2, range(1, 11))
+
+
+class TestBiography(unittest.TestCase):
+    SEASON = 2026
+
+    @classmethod
+    def setUpClass(cls):
+        cls.players = [p for team in make_teams(8, season_start_year=cls.SEASON)
+                       for p in team.players]
+
+    def test_every_player_has_a_full_biography(self):
+        for player in self.players:
+            bio = player.bio
+            self.assertTrue(bio.nationality)
+            self.assertTrue(bio.background)
+            self.assertIn(bio.background_type, {"College", "International", "Prep"})
+            self.assertIsNotNone(bio.draft)
+
+    # -- the rule the user asked for: gap shrinks as age rises ---------
+    def test_bigger_ca_pa_gap_means_a_younger_player(self):
+        ages = [p.age for p in self.players]
+        gaps = [p.ability.headroom for p in self.players]
+        mean_age = sum(ages) / len(ages)
+        mean_gap = sum(gaps) / len(gaps)
+        covariance = sum((a - mean_age) * (g - mean_gap) for a, g in zip(ages, gaps))
+        age_var = sum((a - mean_age) ** 2 for a in ages) ** 0.5
+        gap_var = sum((g - mean_gap) ** 2 for g in gaps) ** 0.5
+        correlation = covariance / (age_var * gap_var)
+        # Strongly negative: older players are closer to their ceiling.
+        self.assertLess(correlation, -0.6, f"age/headroom correlation {correlation:.2f}")
+
+    def test_the_biggest_gaps_belong_to_the_youngest_players(self):
+        by_gap = sorted(self.players, key=lambda p: -p.ability.headroom)
+        top_ten = by_gap[:10]
+        bottom_ten = by_gap[-10:]
+        self.assertLess(
+            sum(p.age for p in top_ten) / 10,
+            sum(p.age for p in bottom_ten) / 10,
+        )
+
+    def test_expected_headroom_falls_monotonically_with_age(self):
+        previous = float("inf")
+        for age in range(18, 40):
+            value = expected_headroom(age)
+            self.assertLessEqual(value, previous)
+            previous = value
+
+    def test_veterans_are_essentially_at_their_ceiling(self):
+        veterans = [p for p in self.players if p.age >= 30]
+        self.assertTrue(veterans)
+        for player in veterans:
+            self.assertLess(player.ability.headroom, 8.0)
+
+    # -- the rule the user asked for: draft class fits the age ---------
+    def test_draft_class_is_consistent_with_age(self):
+        for player in self.players:
+            years_pro = self.SEASON - player.bio.draft.year
+            self.assertGreaterEqual(years_pro, 0, "nobody is drafted in the future")
+            age_at_draft = player.age - years_pro
+            self.assertGreaterEqual(age_at_draft, 18, player.name)
+            self.assertLessEqual(age_at_draft, 23, player.name)
+
+    def test_a_rookie_belongs_to_the_current_class(self):
+        rng = __import__("random").Random(3)
+        for _ in range(50):
+            bio = make_biography(rng, age=19, season_start_year=self.SEASON,
+                                 potential_ability=150.0)
+            self.assertEqual(bio.draft.year, self.SEASON)
+
+    def test_older_players_belong_to_older_classes(self):
+        young = [p.bio.draft.year for p in self.players if p.age <= 22]
+        old = [p.bio.draft.year for p in self.players if p.age >= 31]
+        self.assertTrue(young and old)
+        self.assertGreater(sum(young) / len(young), sum(old) / len(old) + 5)
+
+    # -- draft position ------------------------------------------------
+    def test_draft_position_tracks_potential_not_current_ability(self):
+        drafted = [p for p in self.players if not p.bio.draft.undrafted]
+        early = [p for p in drafted if p.bio.draft.pick <= 4]
+        late = [p for p in drafted if p.bio.draft.pick >= 12]
+        self.assertTrue(early and late)
+        self.assertGreater(
+            sum(p.ability.potential for p in early) / len(early),
+            sum(p.ability.potential for p in late) / len(late),
+        )
+
+    def test_undrafted_players_still_have_a_class_year(self):
+        undrafted = [p for p in self.players if p.bio.draft.undrafted]
+        for player in undrafted:
+            self.assertIsNotNone(player.bio.draft.year)
+            self.assertIsNone(player.bio.draft.pick)
+            self.assertIn("Undrafted", player.bio.draft.label)
+
+    # -- physicals -----------------------------------------------------
+    def test_bigs_are_taller_than_guards(self):
+        guards = [p.height_inches for p in self.players if p.position.value in ("PG", "SG")]
+        bigs = [p.height_inches for p in self.players if p.position.value in ("PF", "C")]
+        self.assertGreater(sum(bigs) / len(bigs), sum(guards) / len(guards) + 4)
+
+    def test_heights_and_weights_are_plausible(self):
+        for player in self.players:
+            self.assertGreaterEqual(player.height_inches, 68)
+            self.assertLessEqual(player.height_inches, 90)
+            self.assertGreaterEqual(player.weight_lbs, 150)
+            self.assertLessEqual(player.weight_lbs, 330)
+            self.assertRegex(player.height, r"^\d'\d{1,2}\"$")
+
+    def test_taller_players_weigh_more(self):
+        tall = [p.weight_lbs for p in self.players if p.height_inches >= 82]
+        short = [p.weight_lbs for p in self.players if p.height_inches <= 75]
+        self.assertGreater(sum(tall) / len(tall), sum(short) / len(short))
+
+    # -- nationality ---------------------------------------------------
+    def test_the_league_is_mostly_but_not_entirely_american(self):
+        american = sum(1 for p in self.players if p.bio.nationality == "United States")
+        share = american / len(self.players)
+        self.assertGreater(share, 0.5)
+        self.assertLess(share, 0.95)
+
+    def test_international_backgrounds_do_not_repeat_the_country(self):
+        for player in self.players:
+            if player.bio.background_type != "International":
+                continue
+            country = player.bio.nationality
+            self.assertLessEqual(
+                player.bio.background.count(country), 1, player.bio.background
+            )

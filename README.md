@@ -16,7 +16,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 64 tests
+python3 -m unittest discover -s tests    # 85 tests
 ```
 
 In the browser: the left column is the schedule, click any game to open the
@@ -71,6 +71,32 @@ Position-specific skills are stored for *every* player, not just that position.
 A centre with real Isolation is a matchup problem, and the engine would rather
 know about it than treat the attribute as absent.
 
+## Star ratings and player identity
+
+A player's headline number is a **0.5–5 star rating**, not a raw overall. The
+ten CA tiers map exactly onto the ten half-star steps, so the star rating *is*
+the tier table rendered — 5 stars is generational, 4 an All-Star, 3 an average
+starter, 1 a G-League player. `potential_stars` shows the same thing for PA, and
+can never sit below a player's current stars.
+
+Every player also carries a biography, in `bballsim/biography.py`: age, height,
+weight, position, nationality, the college or club he came from, and his draft
+class. Two consistency rules are enforced there rather than left to callers:
+
+- **Draft class follows age.** The draft year is
+  `season − (age − the age he entered the league)`, and the entry age depends on
+  his route in: a four-year college senior arrives at 22, a one-and-done at 19,
+  an international at 19–22. A 30-year-old is therefore never in last year's
+  class, and a test asserts every player's age-at-draft lands between 18 and 23.
+- **Draft position follows potential, not current ability.** Teams draft the
+  player they think they are getting, which is what makes a bust possible: a
+  first-round pick whose CA never caught up with the PA he was taken on.
+
+Nationality is weighted to look like an NBA roster — around 70% American with a
+long tail of basketball nations — and background follows from it: Americans come
+mostly through college with a small prep/G-League route, internationals split
+between a home club and a US college.
+
 ## Current and Potential Ability
 
 Underneath the visible attributes sit two hidden numbers on a **0–200 scale**:
@@ -98,6 +124,13 @@ Stretch Big, Rim Runner, Defensive Anchor, Post Scorer, Playmaking Big.
 **Age redistributes the same budget.** A 20-year-old and a 34-year-old at
 identical CA are not identical players: the young man carries his ability in
 speed and quickness, the veteran in decision making and defensive IQ.
+
+**Age also sets the size of the gap.** Headroom is
+`years_to_ceiling × per_year + residue`, so it shrinks monotonically as age
+rises — a 19-year-old averages ~35 points of room, a 27-year-old ~2.5, and past
+that essentially none. Across a generated league the correlation between age and
+CA/PA gap runs below −0.6, which is the point: two players with the same CA are
+not the same asset if one is 20 and the other is 31.
 
 ### The hard rule
 
@@ -240,8 +273,9 @@ with a cursor and appends whatever comes back.
 
 ```
 bballsim/
-  ability.py       CA/PA on 0-200, archetypes, the CA solver, development,
-                   scouting -- and the CA <= PA invariant
+  ability.py       CA/PA on 0-200, star ratings, archetypes, the CA solver,
+                   development, scouting -- and the CA <= PA invariant
+  biography.py     age, height, weight, nationality, college/club, draft class
   ratings.py       81 visible + 14 hidden attributes, the 1-20 scale, tiers,
                    display labels, derived personality
   composites.py    attributes -> the ~25 numbers a possession reads

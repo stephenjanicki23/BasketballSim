@@ -57,6 +57,30 @@ def ca_tier(ca: float) -> str:
     return CA_TIERS[-1][1]
 
 
+# --------------------------------------------------------------------------
+# Star rating. Ten tiers, ten half-star steps -- the star rating *is* the tier
+# table, rendered. 0.5 stars is an amateur, 5 stars is generational.
+# --------------------------------------------------------------------------
+
+MIN_STARS = 0.5
+MAX_STARS = 5.0
+
+
+def stars(ca: float) -> float:
+    """CA as a 0.5-5.0 star rating, in half-star steps."""
+    for index, (floor, _label) in enumerate(CA_TIERS):
+        if ca >= floor:
+            return MAX_STARS - index * 0.5
+    return MIN_STARS
+
+
+def star_tier(star_value: float) -> str:
+    """The tier label a star rating stands for."""
+    index = int(round((MAX_STARS - star_value) / 0.5))
+    index = max(0, min(len(CA_TIERS) - 1, index))
+    return CA_TIERS[index][1]
+
+
 def ca_to_scale(ca: float) -> float:
     """CA (0-200) as a 1-20 rating, for display next to attributes."""
     return SCALE_MIN + (ca / CA_MAX) * (SCALE_MAX - SCALE_MIN)
@@ -413,18 +437,39 @@ def generate_ratings(
     return build((low + high) / 2.0)
 
 
+# Age at which a player is assumed to have reached his ceiling. Past it,
+# headroom is only the small residue below.
+CEILING_AGE = 27
+MAX_HEADROOM_PER_YEAR = 6.5
+MIN_HEADROOM_PER_YEAR = 1.5
+RESIDUAL_HEADROOM = 5.0
+
+
 def make_ability(rng: random.Random, ca: float, age: int, ceiling: float | None = None) -> Ability:
     """CA plus a plausible PA for a player of this age.
 
-    A 19-year-old can be a long way short of his ceiling; a 33-year-old is
-    essentially at it. The gap is what a scout is really trying to estimate.
+    **The gap between CA and PA is a function of age**, and deliberately so: a
+    19-year-old can be a long way short of his ceiling, a 33-year-old is
+    essentially at it. Headroom is `years_to_ceiling * per_year + residue`, so
+    it shrinks monotonically in expectation as age rises and is never negative
+    -- meaning CA <= PA holds before `Ability`'s own clamp has to intervene.
+
+    That relationship is what makes a scout's job interesting. Two players with
+    the same CA are not the same asset if one is 20 and the other is 31.
     """
     if ceiling is None:
-        growth_years = max(0.0, 27 - age)
-        # Headroom shrinks with age and is never negative, so CA <= PA holds
-        # before Ability's own clamp ever has to intervene.
-        ceiling = ca + growth_years * rng.uniform(1.5, 6.5) + rng.uniform(0.0, 6.0)
+        growth_years = max(0.0, CEILING_AGE - age)
+        per_year = rng.uniform(MIN_HEADROOM_PER_YEAR, MAX_HEADROOM_PER_YEAR)
+        ceiling = ca + growth_years * per_year + rng.uniform(0.0, RESIDUAL_HEADROOM)
     return Ability(current=ca, potential=ceiling)
+
+
+def expected_headroom(age: int) -> float:
+    """Mean CA/PA gap for a player of this age -- the curve `make_ability` draws
+    from. Exposed so scouting and tests can reason about it directly."""
+    growth_years = max(0.0, CEILING_AGE - age)
+    mean_per_year = (MIN_HEADROOM_PER_YEAR + MAX_HEADROOM_PER_YEAR) / 2.0
+    return growth_years * mean_per_year + RESIDUAL_HEADROOM / 2.0
 
 
 # --------------------------------------------------------------------------

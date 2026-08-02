@@ -773,8 +773,8 @@ function renderTeamDetail() {
     nameWrap.appendChild(el("span", "player-name", player.name));
     nameWrap.appendChild(el("span", "roster-meta", `${player.age} · ${player.personality}`));
     row.appendChild(nameWrap);
-    const ovrCell = el("span", "roster-ovr", String(displayValue(player.ovr)));
-    ovrCell.title = `${player.ovr.toFixed(1)} — ${tierLabel(player.ovr)}`;
+    const ovrCell = starRow(player.stars, "is-compact");
+    ovrCell.title = `${player.stars} stars — ${player.tier}`;
     row.appendChild(ovrCell);
 
     const open = () => { state.playerId = player.id; renderTeamDetail(); };
@@ -796,9 +796,28 @@ function renderPlayer() {
   if (!player) return;
 
   $("#profile-name").textContent = player.name;
+  const bio = player.bio || {};
   $("#profile-meta").textContent =
-    `${player.pos} · ${player.age} years · ${formatHeight(player.height)} · ${player.weight} lb · #${player.jersey}`;
-  $("#profile-ovr").textContent = String(displayValue(player.ovr));
+    `${player.pos} · ${player.age} years · ${player.height} · ${player.weight} lb · #${player.jersey}`;
+
+  const bioLine = $("#profile-bio");
+  bioLine.textContent = "";
+  const facts = [
+    ["Nationality", bio.nationality],
+    [bio.background_type || "Background", bio.background],
+    ["Draft", bio.draft ? bio.draft.label : null],
+  ];
+  for (const [label, value] of facts) {
+    if (!value) continue;
+    const item = el("span", "bio-fact");
+    item.appendChild(el("span", "bio-label", label));
+    item.appendChild(el("span", "bio-value", value));
+    bioLine.appendChild(item);
+  }
+
+  const starBox = $("#profile-stars");
+  starBox.textContent = "";
+  starBox.appendChild(starRow(player.stars));
   $("#profile-tier").textContent = player.tier;
   $("#profile-archetype").textContent = player.archetype || "—";
   $("#profile-personality").textContent = player.personality;
@@ -839,7 +858,12 @@ function abilityPanel(player) {
   const report = player.scouting;
 
   const wrap = el("div", "attr-group ability-group");
-  wrap.appendChild(el("h4", "attr-heading", "Ability (0–200)"));
+  wrap.appendChild(el("h4", "attr-heading", "Ability (0\u2013200)"));
+
+  const potentialRow = el("div", "potential-stars");
+  potentialRow.appendChild(el("span", "bio-label", "Potential"));
+  potentialRow.appendChild(starRow(player.potentialStars));
+  wrap.appendChild(potentialRow);
 
   const bar = el("div", "ability-bar");
   const fill = el("span", "ability-current");
@@ -870,8 +894,20 @@ function abilityPanel(player) {
   return wrap;
 }
 
-function formatHeight(inches) {
-  return `${Math.floor(inches / 12)}'${inches % 12}"`;
+/* Half-star glyphs. The ten CA tiers are exactly ten half-star steps, so a
+ * star rating is the tier table rendered rather than a second scale. */
+function starRow(value, className) {
+  const wrap = el("span", `stars ${className || ""}`.trim());
+  wrap.setAttribute("role", "img");
+  wrap.setAttribute("aria-label", `${value} out of 5 stars`);
+  for (let i = 1; i <= 5; i += 1) {
+    let glyph = "\u2606";
+    let state = "empty";
+    if (value >= i) { glyph = "\u2605"; state = "full"; }
+    else if (value >= i - 0.5) { glyph = "\u2605"; state = "half"; }
+    wrap.appendChild(el("span", `star is-${state}`, glyph));
+  }
+  return wrap;
 }
 
 function attributeColumn(title, keys, values, names, extraClass) {

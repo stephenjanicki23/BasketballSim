@@ -9,7 +9,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .ability import Ability, Archetype, ca_tier, ca_to_scale, current_ability
+from .ability import (
+    Ability,
+    Archetype,
+    ca_tier,
+    ca_to_scale,
+    current_ability,
+    star_tier,
+    stars,
+)
+from .biography import Biography
 from .ratings import HiddenAttributes, Ratings, Tendencies, personality_label
 from .tactics import Tactics
 
@@ -50,6 +59,7 @@ class Player:
     # were generated from; the invariant CA <= PA is enforced by Ability.
     ability: Ability = field(default_factory=Ability)
     archetype: Archetype | None = None
+    bio: Biography = field(default_factory=Biography)
 
     # Live, per-game state. Reset by the engine at tip-off.
     condition: float = 100.0   # 0-100 fatigue-adjusted freshness
@@ -84,6 +94,24 @@ class Player:
         return ca_tier(self.current_ability)
 
     @property
+    def stars(self) -> float:
+        """Current ability as 0.5-5.0 stars, in half-star steps.
+
+        This is the headline number a manager sees instead of a raw rating --
+        the ten CA tiers map exactly onto the ten half-star steps.
+        """
+        return stars(self.current_ability)
+
+    @property
+    def potential_stars(self) -> float:
+        """What he could become. Never below his current stars, since PA >= CA."""
+        return stars(self.ability.potential)
+
+    @property
+    def height(self) -> str:
+        return f"{self.height_inches // 12}'{self.height_inches % 12}\""
+
+    @property
     def personality(self) -> str:
         """Derived FM-style label rather than a stored number."""
         return personality_label(self.ratings, self.hidden)
@@ -97,6 +125,12 @@ class Player:
             "age": self.age,
             "jersey": self.jersey,
             "overall": self.overall,
+            "stars": self.stars,
+            "star_tier": star_tier(self.stars),
+            "height_inches": self.height_inches,
+            "height": self.height,
+            "weight_lbs": self.weight_lbs,
+            "bio": self.bio.to_dict(),
             "condition": round(self.condition, 1),
             "injured": self.injured,
             "personality": self.personality,
@@ -113,6 +147,7 @@ class Player:
         data["hidden"] = self.hidden.to_dict()
         data["ability"] = self.ability.to_dict()
         data["ability"]["recomputed_current"] = round(self.current_ability, 1)
+        data["potential_stars"] = self.potential_stars
         return data
 
 
