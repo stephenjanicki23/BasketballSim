@@ -19,6 +19,7 @@ from .ability import (
     stars,
 )
 from .biography import Biography
+from .coach import Coach
 from .lineup import DEFAULT_RULES, LineupRules, choose_lineup, describe
 from .ratings import HiddenAttributes, Ratings, Tendencies, personality_label
 from .tactics import Tactics
@@ -162,6 +163,7 @@ class Team:
     division: str = ""
     players: list[Player] = field(default_factory=list)
     tactics: Tactics = field(default_factory=Tactics)
+    coach: Coach | None = None
 
     # Ordered player ids. Index 0-4 is the starting five; the rest is the bench
     # rotation order. Empty means "let the engine pick by overall".
@@ -223,6 +225,7 @@ class Team:
             "division": self.division,
             "team_chemistry": self.team_chemistry,
             "tactics": self.tactics.to_dict(),
+            "coach": self.coach.to_dict() if self.coach else None,
         }
         if include_players:
             data["players"] = [p.to_dict() for p in self.players]

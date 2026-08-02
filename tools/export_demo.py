@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bballsim import composites as C
 from bballsim.ability import CA_MAX, CA_TIERS, scout
 from bballsim.chemistry import evaluate as evaluate_chemistry
+from bballsim.coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
 from bballsim.models import Lineup
@@ -113,6 +114,7 @@ def export_team(league: League, team) -> dict:
         "city": team.city,
         "name": team.name,
         "conference": team.conference,
+        "coach": team.coach.to_dict() if team.coach else None,
         "chemistry": round(team.team_chemistry, 1),
         "lineupChemistry": chemistry.to_dict(),
         "tactics": team.tactics.to_dict(),
@@ -245,6 +247,11 @@ def main() -> None:
         "attributeNames": {k: display_name(k) for k in Ratings.attribute_names()},
         "hiddenNames": {k: display_name(k) for k in HiddenAttributes.attribute_names()},
         "compositeOrder": list(EXPORTED_COMPOSITES),
+        "coachScale": {
+            "max": COACH_MAX,
+            "labels": [[key, label] for key, label in COACH_RATING_LABELS],
+            "tiers": [[floor, label] for floor, label in COACH_TIERS],
+        },
         "abilityScale": {
             "max": CA_MAX,
             "tiers": [[floor, label] for floor, label in CA_TIERS],

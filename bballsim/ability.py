@@ -499,13 +499,15 @@ def develop(
     professionalism: float,
     work_rate: float,
     minutes_played: float = 1800.0,
+    coaching: float = 1.0,
 ) -> float:
     """Advance one season of CA. Returns the change, positive or negative.
 
-    Growth is driven by headroom (how far short of PA he is), age, and the
-    hidden attributes that decide whether a player actually improves. Past 30
-    the multiplier goes negative and CA falls back regardless of PA -- an
-    ageing player's ceiling stops mattering.
+    Growth is driven by headroom (how far short of PA he is), age, the hidden
+    attributes that decide whether a player actually improves, and his head
+    coach's development rating. Past 30 the multiplier goes negative and CA
+    falls back regardless of PA -- an ageing player's ceiling stops mattering,
+    though a good coach still slows the decline.
     """
     from .ratings import normalize  # local import keeps the module import-light
 
@@ -516,13 +518,15 @@ def develop(
     playing_time = min(1.2, 0.4 + minutes_played / 2000.0)
 
     if multiplier > 0:
-        # The closer to PA, the harder each point is to add.
+        # The closer to PA, the harder each point is to add. `coaching` is the
+        # head coach's development multiplier -- a good one gets a prospect to
+        # his ceiling years sooner.
         room = ability.headroom
-        change = room * 0.30 * multiplier * application * playing_time
+        change = room * 0.30 * multiplier * application * playing_time * coaching
         change *= rng.uniform(0.55, 1.45)
     else:
         # Decline is proportional to what he has, softened by professionalism.
-        change = ability.current * 0.05 * multiplier * (2.0 - application)
+        change = ability.current * 0.05 * multiplier * (2.0 - application) / max(0.5, coaching)
         change *= rng.uniform(0.6, 1.4)
 
     ability.set_current(ability.current + change)

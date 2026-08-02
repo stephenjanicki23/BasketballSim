@@ -6,16 +6,29 @@ game, re-sim a day, or debug a weird box score by re-running the same seed.
 
 from __future__ import annotations
 
+import hashlib
 import random
 from typing import Sequence, TypeVar
 
 T = TypeVar("T")
 
 
+def seed_from_string(text: str) -> int:
+    """A stable integer seed for a string.
+
+    Deliberately *not* `hash()`: Python salts string hashing per process, so
+    `hash("game-3")` differs between runs and the same seed would replay a
+    different game tomorrow. A digest is the same everywhere, forever, which
+    is the whole point of seeding a save.
+    """
+    digest = hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big") % (2**31)
+
+
 class SimRandom:
     def __init__(self, seed: int | str | None = None) -> None:
         if isinstance(seed, str):
-            seed = abs(hash(seed)) % (2**31)
+            seed = seed_from_string(seed)
         self.seed = seed if seed is not None else random.randrange(2**31)
         self._random = random.Random(self.seed)
 

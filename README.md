@@ -136,6 +136,51 @@ otherwise combine into four guards. When no legal replacement exists the
 substitution is simply declined: a tired centre stays on rather than being
 swapped for a fourth guard.
 
+## Coaches
+
+Every team has a head coach — thirty of them, one each, in
+`bballsim/coach.py`. Seven ratings on a **0–100 scale**, each with a job in the
+simulation:
+
+| Rating | What it does |
+|---|---|
+| **Offense** | what his team shoots, and how much the ball moves (assist rate) |
+| **Defense** | what the opposition shoots, and the defensive glass |
+| **Tactics** | turnovers, and how fully a scheme's effect table actually lands |
+| **Player Development** | how fast CA climbs toward PA (`ability.develop`) |
+| **Leadership** | how quickly a locker room gels (chemistry drift) |
+| **Scouting Eye** | how accurate the club's read on potential is (`ability.scout`) |
+| **Overall Reputation** | standing, not skill — see below |
+
+A Spoelstra-shaped coach reads Reputation 99, Offense 95, Defense 99,
+Development 92, Tactics 99, Leadership 98, Scouting Eye 88 — "All-time great",
+specialism *Defensive specialist*.
+
+**Reputation is not ability.** It is what the league thinks of a coach, which
+correlates with how good he is but lags it: a coach can be overrated on the
+back of one good roster, or underrated after a rebuild. It is *drawn from* the
+six visible skills with noise rather than computed from them — weighted toward
+the things outsiders can see (offense, defense, tactics) and lagging the ones
+they cannot (development, scouting). So the best-regarded half of the league is
+genuinely better than the rest, but somebody in it is always misjudged, and
+hiring on reputation alone is a mistake you can make.
+
+Generation gives each coach a *leaning* rather than a flat quality level —
+offensive, defensive, tactician, developer, motivator, evaluator or balanced —
+which spends ability in one area at the cost of another. Quality itself skews
+low, so elite head coaches are scarce.
+
+Coaches are worth about what the research says they are. Across a controlled
+paired test — identical rosters, identical seeds, only the coach differs — the
+best and worst head coaches in a generated league are **about five points a
+game** apart. Big enough to weigh when hiring; not enough to carry a bad
+roster. Every rating is read somewhere, and `tests/test_coach.py` asserts each
+channel separately: offense lifts assists and scoring, defense lowers what the
+opposition scores, tactics cuts turnovers, and the three off-court ratings are
+tested where they do their work rather than in a box score. A team with no
+coach at all simulates identically to one with an average coach — `None` is
+neutral, not a penalty.
+
 ## Stats
 
 `bballsim/league/stats.py` accumulates season totals as each game finalises,
@@ -269,29 +314,36 @@ driven by a condition score that drains with floor time and recovers on the
 bench, weighted by depth-chart rank so stars grind out ~36 minutes and the
 rotation runs about nine deep.
 
-Every game is seeded by its game id, so a game always replays identically.
+Every game is seeded by its game id, so a game always replays identically —
+including in a fresh process. That last part is not free: Python salts string
+hashing per run, so `hash("game-3")` differs every time the program starts, and
+so does iteration order over any set of strings. Both had leaked into the sim —
+`SimRandom` seeded off `hash()`, and the placeholder drew character attributes
+while iterating a `frozenset` — which meant the same seed produced a different
+game tomorrow. `rng.seed_from_string` now uses a digest, the attribute list is
+an ordered tuple, and `tests/test_engine.py` shells out with three different
+`PYTHONHASHSEED` values to prove a seed survives a restart.
 
 ### Calibration
 
-Simulated across a placeholder league, per team-game:
-
-Across the 30-team league, per team-game:
+Across the full 30-team season (435 games), per team-game:
 
 | | sim | NBA (recent) |
 |---|---|---|
-| Points | 109.7 | 114 |
-| Possessions | 101.5 (84–119) | 99 (96–104) |
-| FG% / 3P% / FT% | .435 / .354 / .761 | .472 / .366 / .783 |
-| AST / TOV / REB | 26.1 / 14.5 / 54.3 | 26.5 / 13.5 / 53 |
-| STL / BLK / PF | 9.5 / 5.1 / 17.9 | 7.5 / 5.0 / 19 |
+| Points | 108.5 | 114 |
+| Possessions | 98.4 (92–109) | 99 (96–104) |
+| FG% / 3P% / FT% | .443 / .359 / .769 | .472 / .366 / .783 |
+| AST / TOV / REB | 26.1 / 15.0 / 51.1 | 26.5 / 13.5 / 53 |
+| STL / BLK / PF | 9.5 / 5.1 / 19.5 | 7.5 / 5.0 / 19 |
+| OREB% | .269 | .235 |
+| Score SD / mean margin | 15.0 / 15.7 | ~13 / ~11.5 |
 
-Per-game averages by position land close too — rebounds run PG 3.4, SG 4.0,
-SF 4.9, PF 7.8, C 8.8 against a real 3.5 / 3.8 / 5.0 / 6.8 / 9.0, and blocks
-are near-exact. The stats page is what surfaced the one that was off: assists
-were spread too evenly, so the assister weighting is now steep on playmaking
-and the leaders are point guards at 9+ rather than a five-way split.
-| OREB% | .264 | .235 |
-| Score SD / mean margin | 14.6 / 15.8 | ~13 / ~11.5 |
+Positions separate the way they should. Among rotation players (24+ minutes a
+game), rebounds run PG 3.8, SG 6.0, SF 6.5, PF 10.1, C 10.1 and blocks PG 0.30
+through C 1.14 — the guard/big split is right, though wings rebound more than
+real ones do. The stats page is what surfaced the assist bug: assists were
+spread too evenly, so the assister weighting is now steep on playmaking and the
+leaders are lead guards at 7–8 rather than a five-way split.
 
 The scale change from 0–99 to 1–20 moved almost none of these, because the
 engine works in normalized units — `(rating − average) / average` — rather than
@@ -308,7 +360,7 @@ clamp in `_possession_length` keeps the league's fastest team about 15% quicker
 than its slowest, and the placeholder now draws each team's pace slider around
 its scheme's own tempo instead of independently, so no coach doubles down.
 
-One known gap: **games are more spread out than real ones** — mean margin 15.8
+One known gap: **games are more spread out than real ones** — mean margin 15.7
 against a real 11.5, so blowouts show up more often than they should. That is
 what you get when every possession is an independent coin flip. Real games
 correlate: pace is shared, leads change how both teams play, garbage time pulls
@@ -338,6 +390,7 @@ with a cursor and appends whatever comes back.
 bballsim/
   ability.py       CA/PA on 0-200, star ratings, archetypes, the CA solver,
                    development, scouting -- and the CA <= PA invariant
+  coach.py         head coaches: seven ratings, and where each one is read
   lineup.py        what a legal modern five looks like, and how to pick one
   biography.py     age, height, weight, nationality, college/club, draft class
   ratings.py       81 visible + 14 hidden attributes, the 1-20 scale, tiers,
@@ -353,7 +406,7 @@ bballsim/
     rotation.py    fatigue and substitutions
     events.py      play-by-play event types
     boxscore.py    stat accumulation
-    rng.py         seeded, reproducible randomness
+    rng.py         seeded randomness, reproducible across processes
     state.py       rules config + mutable game state
   league/
     calendar.py    fixtures, tip-off times, game status

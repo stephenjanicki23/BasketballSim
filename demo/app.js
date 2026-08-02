@@ -954,6 +954,8 @@ function renderTeamDetail() {
   }
   tactics.appendChild(sliders);
 
+  renderCoach(team);
+
   // --- roster list -----------------------------------------------------
   if (!state.playerId || !team.players.some((p) => p.id === state.playerId)) {
     state.playerId = team.players[0].id;
@@ -983,6 +985,51 @@ function renderTeamDetail() {
   });
 
   renderPlayer();
+}
+
+/* The head coach: a name, what he is known for, and the seven ratings the
+ * engine reads. Bars rather than a table -- there are only seven of them, and
+ * what matters when you look at a coach is the shape, not the digits. */
+function renderCoach(team) {
+  const panel = $("#coach-panel");
+  const tag = $("#coach-tag");
+  panel.textContent = "";
+  tag.textContent = "";
+
+  const coach = team.coach;
+  if (!coach) {
+    panel.appendChild(el("p", "muted-line", "No head coach appointed."));
+    return;
+  }
+
+  const scale = state.data.coachScale || {};
+  const max = scale.max || 100;
+  const labels = scale.labels || [];
+
+  tag.textContent = `${coach.tier} · ${coach.specialism}`;
+
+  const head = el("div", "coach-head");
+  head.appendChild(el("span", "coach-name", coach.name));
+  const tenure = coach.seasons_coached === 1 ? "1 season" : `${coach.seasons_coached} seasons`;
+  head.appendChild(el("span", "coach-sub",
+    `${coach.age} years · ${coach.nationality} · ${tenure} as a head coach`));
+  panel.appendChild(head);
+
+  const bars = el("div", "coach-ratings");
+  for (const [key, label] of labels) {
+    const value = coach.ratings[key];
+    if (value === undefined) continue;
+    const wrap = el("div", "slider" + (key === "reputation" ? " is-reputation" : ""));
+    wrap.appendChild(el("span", "slider-label", label));
+    const track = el("span", "slider-track");
+    const fill = el("span", "slider-fill");
+    fill.style.width = `${Math.max(0, Math.min(100, (value / max) * 100))}%`;
+    track.appendChild(fill);
+    wrap.appendChild(track);
+    wrap.appendChild(el("span", "slider-value", String(Math.round(value))));
+    bars.appendChild(wrap);
+  }
+  panel.appendChild(bars);
 }
 
 /* An 81-attribute roster will not fit in a table, so the profile follows the

@@ -6,6 +6,8 @@ Run with:  python3 -m unittest discover -s tests -v
 from __future__ import annotations
 
 import copy
+import os
+import subprocess
 import sys
 import unittest
 from datetime import date, datetime, timedelta, timezone
@@ -80,6 +82,32 @@ class TestGameSimulation(unittest.TestCase):
         self.assertEqual(
             [e.description for e in a.events], [e.description for e in b.events]
         )
+
+    def test_the_same_seed_reproduces_the_game_in_a_fresh_process(self):
+        """Reproducibility has to survive a restart, not just a loop.
+
+        Python salts string hashing per process, so anything that seeds off
+        `hash()` -- or iterates a set of attribute names while drawing from a
+        seeded RNG -- replays a *different* game tomorrow. That is invisible
+        in-process, which is why this shells out with two different hash seeds.
+        """
+        script = (
+            "import copy;"
+            "from bballsim.placeholder import make_teams;"
+            "from bballsim.engine.game import GameSimulator;"
+            "a, b = make_teams(2);"
+            "r = GameSimulator('g', copy.deepcopy(a), copy.deepcopy(b), seed='g').simulate();"
+            "print(r.home_score, r.away_score, len(r.events))"
+        )
+        root = Path(__file__).resolve().parents[1]
+        runs = []
+        for hash_seed in ("0", "1", "12345"):
+            env = {**os.environ, "PYTHONHASHSEED": hash_seed, "PYTHONPATH": str(root)}
+            runs.append(subprocess.run(
+                [sys.executable, "-c", script],
+                capture_output=True, text=True, cwd=root, env=env, check=True,
+            ).stdout.strip())
+        self.assertEqual(len(set(runs)), 1, f"seed 'g' replayed differently: {runs}")
 
     def test_different_seeds_diverge(self):
         a = sim(self.teams[0], self.teams[1], seed="one")

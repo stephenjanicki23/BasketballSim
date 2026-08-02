@@ -679,6 +679,15 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 .chip-label { font: 600 9px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .chip-value { font-size: 13px; font-weight: 600; }
 
+.coach-grid { padding: 14px; display: grid; gap: 14px; }
+.coach-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.coach-name { font-size: 17px; font-weight: 600; }
+.coach-sub { font-size: 12px; color: var(--muted); }
+.coach-ratings { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 20px; }
+/* Reputation is standing rather than skill, so it reads apart from the six. */
+.coach-ratings .slider.is-reputation .slider-label { color: var(--ink); font-weight: 600; }
+.coach-ratings .slider.is-reputation .slider-fill { background: var(--home); }
+
 .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 20px; }
 .slider { display: grid; grid-template-columns: 1fr 96px 26px; align-items: center; gap: 10px; }
 .slider-label { font-size: 12px; color: var(--ink-2); }
@@ -919,6 +928,22 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
           explicit effect tables — <strong>pace and space</strong> lifts three-point rate and
           pushes tempo while thinning the offensive glass; <strong>drop coverage</strong> trades
           three-point defense for rim protection. The sliders layer on top.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Head Coach</h2>
+          <span class="muted-line" id="coach-tag"></span>
+        </div>
+        <div class="coach-grid" id="coach-panel"></div>
+        <p class="note">
+          Every rating here is read somewhere in the simulation: offense and defense move
+          what each side shoots, tactics drives turnovers and how fully a scheme's effects
+          land, development sets how fast a player closes on his ceiling, leadership how
+          quickly a locker room gels, and the scouting eye how accurate the club's read on
+          potential is. <strong>Reputation is standing, not skill</strong> — it is drawn from the
+          visible ratings with noise, so a coach can be over- or underrated.
         </p>
       </div>
 

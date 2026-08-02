@@ -23,6 +23,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .. import composites as C
+from ..coach import (
+    COACH_ASSIST_SWING,
+    COACH_REBOUND_SWING,
+    COACH_SCHEME_SWING,
+    COACH_SHOOTING_SWING,
+    COACH_TURNOVER_SWING,
+    defensive_edge,
+    offensive_edge,
+    tactical_edge,
+)
 from ..chemistry import ChemistryProfile
 from ..chemistry import evaluate as evaluate_chemistry
 from ..models import Lineup, Player
@@ -120,6 +130,19 @@ class SideContext:
     def tactics(self):
         return self.state.team.tactics
 
+    @property
+    def coach(self):
+        return self.state.team.coach
+
+    @property
+    def scheme_execution(self) -> float:
+        """How fully this team's scheme actually lands.
+
+        A scheme is a plan; a tactical coach gets more of it than a poor one,
+        so the effect tables are scaled rather than applied flat.
+        """
+        return 1.0 + tactical_edge(self.coach) * COACH_SCHEME_SWING
+
 
 class PossessionEngine:
     def __init__(self, rng: SimRandom) -> None:
@@ -183,7 +206,7 @@ class PossessionEngine:
     def _possession_length(self, game: GameState, off: SideContext, deff: SideContext) -> float:
         pace = (
             slider_mod(off.tactics.pace) * 0.35
-            + offensive_effect(off.tactics, "pace")
+            + offensive_effect(off.tactics, "pace") * off.scheme_execution
             + slider_mod(off.tactics.tempo_after_rebound) * 0.10
         )
         # Guards who push tempo shorten possessions on their own.
@@ -260,12 +283,13 @@ class PossessionEngine:
 
         rate = BASE_TURNOVER_RATE
         rate -= advantage(security, pressure_skill) * 0.055
-        rate += offensive_effect(off.tactics, "turnover_rate") * 0.5
-        rate += defensive_effect(deff.tactics, "steal_rate") * 0.5
+        rate += offensive_effect(off.tactics, "turnover_rate") * 0.5 * off.scheme_execution
+        rate += defensive_effect(deff.tactics, "steal_rate") * 0.5 * deff.scheme_execution
         rate += slider_mod(deff.tactics.defensive_pressure) * 0.030
         rate += slider_mod(off.tactics.ball_movement) * 0.012
         rate -= off.chemistry.execution * CHEMISTRY_TURNOVER_SENSITIVITY
         rate += self._fatigue(off.lineup) * FATIGUE_TURNOVER_PENALTY
+        rate -= tactical_edge(off.coach) * COACH_TURNOVER_SWING
 
         if self._is_clutch(game):
             handler = max(off.lineup, key=lambda p: p.tendencies.usage)
@@ -489,6 +513,9 @@ class PossessionEngine:
         pct += off.chemistry.spacing * 0.012
         pct -= self._fatigue(off.lineup) * FATIGUE_SHOOTING_PENALTY
         pct += self._clutch_edge(game, shooter) * CLUTCH_SHOOTING_SWING
+        # Coaching: better looks on one end, harder ones on the other.
+        pct += offensive_edge(off.coach) * COACH_SHOOTING_SWING
+        pct -= defensive_edge(deff.coach) * COACH_SHOOTING_SWING
 
         if zone.is_three:
             pct += defensive_effect(deff.tactics, "three_pct")
@@ -528,6 +555,7 @@ class PossessionEngine:
         rate += 0.10 if zone.is_three else -0.05
         # Off-ball movement earns the pass as much as the passer does.
         rate += normalize(self._skill(shooter, C.off_ball_gravity)) * 0.06
+        rate += offensive_edge(off.coach) * COACH_ASSIST_SWING
         if not self.rng.chance(self._bounded(rate, 0.05, 0.95)):
             return None
         candidates = [p for p in off.lineup if p.id != shooter.id]
@@ -630,6 +658,7 @@ class PossessionEngine:
         rate += slider_mod(off.tactics.offensive_rebounding) * 0.055
         rate += offensive_effect(off.tactics, "oreb_rate") * 0.5
         rate -= defensive_effect(deff.tactics, "dreb_rate") * 0.5
+        rate -= defensive_edge(deff.coach) * COACH_REBOUND_SWING
         offensive = self.rng.chance(self._bounded(rate, 0.05, 0.55))
 
         side = off if offensive else deff

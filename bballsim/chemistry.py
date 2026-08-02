@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from . import composites as C
+from .coach import chemistry_multiplier
 from .models import Lineup, Team
 from .ratings import fraction, normalize
 
@@ -138,6 +139,8 @@ def drift_after_game(team: Team, minutes_together: dict[frozenset[str], float]) 
     trend upward slowly; everything else decays toward neutral. Professional,
     coachable players build rapport faster.
     """
+    # A coach who can lead a room gets it to gel faster.
+    coaching = chemistry_multiplier(team.coach)
     rapport = {
         p.id: 1.0 + normalize(0.5 * p.ratings.teamwork + 0.5 * p.hidden.professionalism) * 0.5
         for p in team.players
@@ -146,7 +149,7 @@ def drift_after_game(team: Team, minutes_together: dict[frozenset[str], float]) 
     for key, minutes in minutes_together.items():
         current = team.pair_chemistry.get(key, NEUTRAL_CHEMISTRY)
         pace = sum(rapport.get(pid, 1.0) for pid in key) / max(1, len(key))
-        gain = min(1.5, minutes / 20.0) * pace
+        gain = min(1.5, minutes / 20.0) * pace * coaching
         team.pair_chemistry[key] = min(100.0, current + gain)
 
     for key, value in list(team.pair_chemistry.items()):

@@ -20,6 +20,7 @@ from .ability import (
     make_ability,
 )
 from .biography import draw_age, draw_height, draw_weight, make_biography
+from .coach import make_coaches
 from .models import Player, Position, Team
 from .ratings import HiddenAttributes, Ratings, Tendencies, clamp
 from .tactics import DefensiveScheme, OffensiveScheme, Tactics
@@ -235,15 +236,6 @@ _POSITION_PROFILE: dict[Position, dict[str, float]] = {
     },
 }
 
-# Character attributes are drawn on their own axis: being a good pro has
-# nothing to do with being a good player.
-_CHARACTER_ATTRIBUTES = frozenset({
-    "leadership", "work_rate", "teamwork", "coachability", "confidence",
-    "composure", "competitive_drive", "focus", "discipline", "aggression",
-    "mental_toughness", "pressure_handling", "emotional_control",
-    "winning_mentality",
-})
-
 # A 12-man roster's positional make-up. Every team carries at least two of
 # each position, then fills the last two places with whatever the front office
 # fancied -- so squads are not identical and the starting five is not forced
@@ -275,12 +267,17 @@ SUPERSTAR_BUMP = (8.0, 30.0)
 
 # Character attributes are drawn on their own axis: being a good pro has
 # nothing to do with being a good player.
-_CHARACTER_ATTRIBUTES = frozenset({
+#
+# A tuple, not a set: these are drawn in order from a seeded RNG, and Python
+# salts string hashing per process, so iterating a set here would hand each
+# attribute a different draw in every run and the same seed would generate a
+# different league tomorrow.
+_CHARACTER_ATTRIBUTES: tuple[str, ...] = (
     "leadership", "work_rate", "teamwork", "coachability", "confidence",
     "composure", "competitive_drive", "focus", "discipline", "aggression",
     "mental_toughness", "pressure_handling", "emotional_control",
     "winning_mentality",
-})
+)
 
 _ROSTER_SHAPE = [
     Position.PG, Position.SG, Position.SF, Position.PF, Position.C,
@@ -493,10 +490,14 @@ def make_teams(count: int = 8, seed: int = 7, season_start_year: int = 2026) -> 
         raise ValueError(f"need {needed} unique surnames, pool has {len(_SURNAMES)}")
     pool = rng.sample(_SURNAMES, needed)
     size = _ROSTER_SIZE
-    return [
+    coaches = make_coaches(rng, count)
+    teams = [
         make_team(
             rng, *_TEAM_NAMES[i], surnames=pool[i * size:(i + 1) * size],
             season_start_year=season_start_year, draft_size=draft_size,
         )
         for i in range(count)
     ]
+    for team, coach in zip(teams, coaches):
+        team.coach = coach
+    return teams
