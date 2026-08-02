@@ -799,7 +799,8 @@ function renderPlayer() {
   $("#profile-meta").textContent =
     `${player.pos} · ${player.age} years · ${formatHeight(player.height)} · ${player.weight} lb · #${player.jersey}`;
   $("#profile-ovr").textContent = String(displayValue(player.ovr));
-  $("#profile-tier").textContent = tierLabel(player.ovr);
+  $("#profile-tier").textContent = player.tier;
+  $("#profile-archetype").textContent = player.archetype || "—";
   $("#profile-personality").textContent = player.personality;
 
   const groups = $("#attribute-groups");
@@ -816,6 +817,8 @@ function renderPlayer() {
     scouting.appendChild(
       attributeColumn("Scouted", keys, player.hidden, state.data.hiddenNames, "scouted")
     );
+    scouting.appendChild(abilityPanel(player));
+
     const composites = el("div", "attr-group composite-group");
     composites.appendChild(el("h4", "attr-heading", "Engine composites"));
     const listEl = el("ul", "attr-list");
@@ -825,6 +828,46 @@ function renderPlayer() {
     composites.appendChild(listEl);
     scouting.appendChild(composites);
   }
+}
+
+/* CA/PA: the two hidden numbers everything else is generated from. Shown as a
+ * bar so headroom -- the gap a scout is actually trying to estimate -- reads at
+ * a glance, with the scout's own (deliberately imprecise) range beneath it. */
+function abilityPanel(player) {
+  const { current, potential, headroom, tier, potential_tier } = player.ability;
+  const max = state.data.abilityScale.max;
+  const report = player.scouting;
+
+  const wrap = el("div", "attr-group ability-group");
+  wrap.appendChild(el("h4", "attr-heading", "Ability (0–200)"));
+
+  const bar = el("div", "ability-bar");
+  const fill = el("span", "ability-current");
+  fill.style.width = `${(current / max) * 100}%`;
+  const ceiling = el("span", "ability-potential");
+  ceiling.style.width = `${(potential / max) * 100}%`;
+  bar.appendChild(ceiling);
+  bar.appendChild(fill);
+  wrap.appendChild(bar);
+
+  const rows = el("ul", "attr-list");
+  const add = (label, value, extra) => {
+    const row = el("li", "attr-row");
+    row.appendChild(el("span", "attr-name", label));
+    const chip = el("span", "attr-value ability-value", String(Math.round(value)));
+    row.appendChild(chip);
+    if (extra) row.title = extra;
+    rows.appendChild(row);
+  };
+  add("Current (CA)", current, tier);
+  add("Potential (PA)", potential, potential_tier);
+  add("Headroom", headroom);
+  wrap.appendChild(rows);
+
+  wrap.appendChild(el("p", "scout-note",
+    `Scout: CA ${report.current_range[0]}–${report.current_range[1]}, ` +
+    `PA ${report.potential_range[0]}–${report.potential_range[1]} — ${report.verdict}`));
+  return wrap;
 }
 
 function formatHeight(inches) {

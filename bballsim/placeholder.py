@@ -12,6 +12,13 @@ from __future__ import annotations
 
 import random
 
+from .ability import (
+    Archetype,
+    POSITION_ARCHETYPES,
+    ca_tier,
+    generate_ratings,
+    make_ability,
+)
 from .models import Player, Position, Team
 from .ratings import HiddenAttributes, Ratings, Tendencies, clamp
 from .tactics import DefensiveScheme, OffensiveScheme, Tactics
@@ -168,56 +175,52 @@ _ROSTER_SHAPE = [
 ]
 
 
+# Roster slot -> target Current Ability. A league's best players sit around
+# 155-165 (All-Star), starters 120-140, the twelfth man near 75.
+_SLOT_CA = (162, 148, 138, 132, 126, 118, 110, 103, 96, 89, 82, 75)
+
+
 def _make_player(
     rng: random.Random,
     team_abbr: str,
     index: int,
     position: Position,
-    tier: float,
+    target_ca: float,
     first_name: str,
     last_name: str,
 ) -> Player:
-    """tier is 0..1 -- how good this player is relative to his team's roster.
+    """Build a player from a CA target rather than from raw attribute draws.
 
-    On the 1-20 scale the tiers are the point: a roster's best player lands
-    around 15-17 (high-end starter to All-Star), his rotation sits at 10-12,
-    and the twelfth man is an 8 who can do one thing. Players are given a
-    handful of spikes and holes rather than a flat profile, because a scale
-    this short is only useful if it produces obvious strengths and weaknesses.
+    Order matters: age and archetype are chosen first, then PA, then the
+    attribute set is *solved* so that `current_ability()` returns the target.
+    Character attributes are drawn separately -- being a good pro has nothing
+    to do with being a good player, and they are excluded from CA entirely.
     """
-    skill_base = 7.5 + tier * 7.0      # twelfth man ~7.5, best player ~14.5
-    character_base = rng.gauss(10.5, 2.0)  # independent of on-court ability
-    profile = _POSITION_PROFILE[position]
+    age = rng.randint(19, 35)
+    archetype = rng.choice(POSITION_ARCHETYPES[position.value])
+    ability = make_ability(rng, target_ca, age)
 
-    # Specialisation: a few attributes he is known for, a few he cannot do.
-    skills = [n for n in Ratings.attribute_names() if n not in _CHARACTER_ATTRIBUTES]
-    spikes = set(rng.sample(skills, rng.randint(3, 6)))
-    holes = set(rng.sample([n for n in skills if n not in spikes], rng.randint(3, 6)))
+    ratings = generate_ratings(
+        rng,
+        ca=ability.current,
+        position=position.value,
+        archetype=archetype,
+        age=age,
+        position_profile=_POSITION_PROFILE[position],
+    )
 
-    def draw(attribute: str) -> float:
-        if attribute in _CHARACTER_ATTRIBUTES:
-            return clamp(rng.gauss(character_base, 1.6))
-        base = skill_base + profile.get(attribute, 0.0)
-        if attribute in spikes:
-            base += rng.uniform(1.8, 3.6)
-        elif attribute in holes:
-            base -= rng.uniform(1.8, 3.6)
-        return clamp(rng.gauss(base, 1.3))
-
-    ratings = Ratings(**{name: draw(name) for name in Ratings.attribute_names()})
-
-    age = rng.randint(20, 35)
-    # Young players have room to grow; a 33-year-old is what he is.
-    growth_left = max(0.0, (28 - age) / 8.0)
+    # Character and mental, on their own axis and outside the CA budget.
+    character_base = rng.gauss(10.5, 2.2)
+    for name in _CHARACTER_ATTRIBUTES:
+        setattr(ratings, name, clamp(rng.gauss(character_base, 1.8)))
 
     def gauss(mu: float, sigma: float) -> float:
         return clamp(rng.gauss(mu, sigma))
 
     hidden = HiddenAttributes(
-        potential_ability=clamp(skill_base + growth_left * rng.uniform(0.8, 5.5)),
         injury_proneness=gauss(9.0, 3.2),
-        consistency=gauss(10.5 + tier * 2.0, 2.8),
-        big_game_performance=gauss(10.0 + tier * 1.6, 3.0),
+        consistency=gauss(9.5 + (target_ca / 200.0) * 4.0, 2.8),
+        big_game_performance=gauss(9.5 + (target_ca / 200.0) * 3.5, 3.0),
         development_rate=gauss(10.5, 3.0),
         learning_ability=gauss(10.5, 3.0),
         loyalty=gauss(10.0, 3.6),
@@ -230,8 +233,10 @@ def _make_player(
         locker_room_presence=gauss(character_base, 2.6),
     )
 
+    # Tendencies follow the attributes the archetype produced, so a Rim Runner
+    # who cannot shoot does not spend his night launching threes.
     tendencies = Tendencies(
-        usage=gauss(7.0 + tier * 8.0, 1.6),
+        usage=gauss(5.0 + (target_ca / 200.0) * 12.0, 1.6),
         three_point_rate=gauss(ratings.three_point, 2.4),
         rim_rate=gauss((ratings.layups + ratings.close_shot) / 2, 2.4),
         post_up_rate=gauss(ratings.post_moves, 2.4),
@@ -251,6 +256,8 @@ def _make_player(
         ratings=ratings,
         tendencies=tendencies,
         hidden=hidden,
+        ability=ability,
+        archetype=archetype,
     )
 
 
@@ -268,10 +275,9 @@ def make_team(
 
     players: list[Player] = []
     for index, position in enumerate(_ROSTER_SHAPE):
-        # Starters (first five slots) get the top tiers.
-        tier = max(0.0, 1.0 - index * 0.075 + rng.gauss(0, 0.08))
+        target_ca = max(30.0, min(195.0, _SLOT_CA[index] + rng.gauss(0, 7.0)))
         players.append(_make_player(
-            rng, abbreviation, index + 1, position, min(1.0, tier),
+            rng, abbreviation, index + 1, position, target_ca,
             first_names[index], surnames[index],
         ))
 

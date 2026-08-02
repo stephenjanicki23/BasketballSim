@@ -14,6 +14,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bballsim import composites as C
+from bballsim.ability import (
+    Ability,
+    Archetype,
+    CA_MAX,
+    CA_MIN,
+    POSITION_ARCHETYPES,
+    ca_tier,
+    ca_to_scale,
+    current_ability,
+    develop,
+    generate_ratings,
+    make_ability,
+    scout,
+)
 from bballsim.engine.game import GameSimulator
 from bballsim.engine.possession import PossessionEngine
 from bballsim.engine.rng import SimRandom
@@ -30,7 +44,6 @@ from bballsim.ratings import (
     Tendencies,
     advantage,
     normalize,
-    overall,
     personality_label,
     tier_label,
     to_display,
@@ -77,9 +90,13 @@ class TestAttributeSchema(unittest.TestCase):
         r = Ratings(three_point=500, layups=-40)
         self.assertEqual(r.three_point, SCALE_MAX)
         self.assertEqual(r.layups, SCALE_MIN)
-        h = HiddenAttributes(potential_ability=500, injury_proneness=-3)
-        self.assertEqual(h.potential_ability, SCALE_MAX)
+        h = HiddenAttributes(injury_proneness=-3)
         self.assertEqual(h.injury_proneness, SCALE_MIN)
+
+    def test_potential_ability_is_not_a_1_20_attribute(self):
+        # PA lives on the 0-200 CA scale in ability.py, not among the 1-20s.
+        self.assertNotIn("potential_ability", HiddenAttributes.attribute_names())
+        self.assertNotIn("potential_ability", Ratings.attribute_names())
 
     def test_round_trips_through_dict(self):
         original = make_teams(1)[0].players[0]
@@ -143,11 +160,12 @@ class TestComposites(unittest.TestCase):
         for zone in ShotZone:
             self.assertIn(zone.value, C.SHOOTING_BY_ZONE)
 
-    def test_overall_is_position_aware(self):
-        big = Player(id="c", first_name="Big", last_name="Man", position=Position.C)
+    def test_current_ability_is_position_aware(self):
+        big = Ratings()
         for key in ("rim_protection", "defensive_rebounding", "interior_defense", "blocks"):
-            setattr(big.ratings, key, 18.0)
-        self.assertGreater(overall(big.ratings, "C"), overall(big.ratings, "PG"))
+            setattr(big, key, 18.0)
+        # The same attributes are worth more CA at centre than at point guard.
+        self.assertGreater(current_ability(big, "C"), current_ability(big, "PG"))
 
 
 class TestPersonality(unittest.TestCase):
@@ -326,3 +344,174 @@ class TestRatingsDriveOutcomes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCurrentAndPotentialAbility(unittest.TestCase):
+    """CA/PA on the 0-200 scale, and the invariant between them."""
+
+    def setUp(self):
+        self.rng = __import__("random").Random(11)
+
+    # -- the hard rule -------------------------------------------------
+    def test_ca_can_never_exceed_pa_on_construction(self):
+        self.assertEqual(Ability(current=180, potential=120).current, 120)
+        self.assertEqual(Ability(current=999, potential=999).current, CA_MAX)
+        self.assertEqual(Ability(current=-40, potential=-40).current, CA_MIN)
+
+    def test_ca_can_never_exceed_pa_via_set_current(self):
+        ability = Ability(current=100, potential=140)
+        ability.set_current(500)
+        self.assertEqual(ability.current, 140)
+        ability.set_current(-20)
+        self.assertEqual(ability.current, CA_MIN)
+
+    def test_ca_can_never_exceed_pa_through_a_round_trip(self):
+        restored = Ability.from_dict({"current": 190, "potential": 130})
+        self.assertLessEqual(restored.current, restored.potential)
+
+    def test_ca_can_never_exceed_pa_through_development(self):
+        # Hammer a young player with maximum development for many seasons.
+        ability = Ability(current=90, potential=140)
+        for age in range(18, 40):
+            develop(self.rng, ability, age, 20.0, 20.0, 20.0, minutes_played=3000)
+            self.assertLessEqual(ability.current, ability.potential)
+        self.assertLessEqual(ability.current, 140.0)
+
+    def test_every_generated_player_satisfies_the_rule(self):
+        for team in make_teams(8):
+            for player in team.players:
+                self.assertLessEqual(player.ability.current, player.ability.potential)
+
+    # -- CA is a budget, not a label -----------------------------------
+    def test_generated_attributes_reproduce_the_target_ca(self):
+        for target in (60.0, 100.0, 140.0, 180.0):
+            for position in ("PG", "SG", "SF", "PF", "C"):
+                archetype = self.rng.choice(POSITION_ARCHETYPES[position])
+                ratings = generate_ratings(
+                    self.rng, ca=target, position=position, archetype=archetype, age=25
+                )
+                self.assertAlmostEqual(
+                    current_ability(ratings, position), target, delta=0.5,
+                    msg=f"{position} {archetype.value} at CA {target}",
+                )
+
+    def test_stored_ca_matches_recomputed_ca_for_every_player(self):
+        for team in make_teams(8):
+            for player in team.players:
+                self.assertAlmostEqual(
+                    player.current_ability, player.ability.current, delta=0.5
+                )
+
+    def test_higher_ca_means_a_better_player(self):
+        weak = generate_ratings(self.rng, 70, "SF", Archetype.THREE_AND_D_WING, 25)
+        strong = generate_ratings(self.rng, 170, "SF", Archetype.THREE_AND_D_WING, 25)
+        weak_mean = sum(weak.to_dict().values()) / len(weak.to_dict())
+        strong_mean = sum(strong.to_dict().values()) / len(strong.to_dict())
+        self.assertGreater(strong_mean, weak_mean + 3.0)
+
+    # -- same CA, different players ------------------------------------
+    def test_same_ca_different_archetype_gives_a_different_distribution(self):
+        anchor = generate_ratings(self.rng, 150, "C", Archetype.DEFENSIVE_ANCHOR, 26)
+        stretch = generate_ratings(self.rng, 150, "C", Archetype.STRETCH_BIG, 26)
+
+        # Equally good...
+        self.assertAlmostEqual(current_ability(anchor, "C"), current_ability(stretch, "C"), delta=0.5)
+        # ...at completely different things.
+        self.assertGreater(anchor.rim_protection, stretch.rim_protection + 2.0)
+        self.assertGreater(stretch.three_point, anchor.three_point + 2.0)
+
+    def test_same_ca_guard_archetypes_diverge_too(self):
+        general = generate_ratings(self.rng, 145, "PG", Archetype.FLOOR_GENERAL, 26)
+        scorer = generate_ratings(self.rng, 145, "PG", Archetype.SCORING_GUARD, 26)
+        self.assertGreater(general.court_vision, scorer.court_vision + 1.5)
+        self.assertGreater(scorer.pull_up_shooting, general.pull_up_shooting + 1.5)
+
+    def test_archetypes_are_position_appropriate(self):
+        for team in make_teams(4):
+            for player in team.players:
+                self.assertIn(player.archetype, POSITION_ARCHETYPES[player.position.value])
+
+    # -- age -----------------------------------------------------------
+    def test_age_shifts_the_distribution_not_the_total(self):
+        young = generate_ratings(self.rng, 140, "SG", Archetype.SCORING_GUARD, 20)
+        old = generate_ratings(self.rng, 140, "SG", Archetype.SCORING_GUARD, 34)
+        # Same ability...
+        self.assertAlmostEqual(current_ability(young, "SG"), current_ability(old, "SG"), delta=0.5)
+        # ...but the young man carries it in his legs and the veteran in his head.
+        self.assertGreater(young.speed + young.quickness, old.speed + old.quickness)
+        self.assertGreater(old.decision_making + old.defensive_iq,
+                           young.decision_making + young.defensive_iq)
+
+    def test_young_players_get_headroom_and_old_players_do_not(self):
+        young = [make_ability(self.rng, 110, 19).headroom for _ in range(60)]
+        old = [make_ability(self.rng, 110, 34).headroom for _ in range(60)]
+        self.assertGreater(sum(young) / len(young), sum(old) / len(old) + 15)
+
+    # -- development ---------------------------------------------------
+    def test_young_players_grow_and_old_players_decline(self):
+        def total_change(age: int) -> float:
+            change = 0.0
+            for _ in range(40):
+                ability = Ability(current=110, potential=170)
+                change += develop(self.rng, ability, age, 12.0, 12.0, 12.0)
+            return change / 40
+
+        self.assertGreater(total_change(20), 0.0)
+        self.assertGreater(total_change(20), total_change(26))
+        self.assertLess(total_change(34), 0.0)
+
+    def test_a_player_at_his_ceiling_cannot_grow(self):
+        ability = Ability(current=150, potential=150)
+        change = develop(self.rng, ability, 21, 20.0, 20.0, 20.0)
+        self.assertAlmostEqual(change, 0.0, places=6)
+        self.assertEqual(ability.current, 150)
+
+    def test_professionalism_and_work_rate_speed_development(self):
+        def grown(quality: float) -> float:
+            total = 0.0
+            for _ in range(40):
+                ability = Ability(current=100, potential=180)
+                total += develop(self.rng, ability, 21, quality, quality, quality)
+            return total / 40
+
+        self.assertGreater(grown(18.0), grown(4.0))
+
+    # -- scouting ------------------------------------------------------
+    def test_scouting_brackets_the_truth_and_narrows_with_accuracy(self):
+        ability = Ability(current=120, potential=165)
+        vague = scout(ability, age=20, accuracy=0.2)
+        sharp = scout(ability, age=20, accuracy=0.95)
+
+        for report in (vague, sharp):
+            self.assertLessEqual(report.current_low, ability.current)
+            self.assertGreaterEqual(report.current_high, ability.current)
+            self.assertLessEqual(report.potential_low, ability.potential)
+            self.assertGreaterEqual(report.potential_high, ability.potential)
+
+        vague_width = vague.potential_high - vague.potential_low
+        sharp_width = sharp.potential_high - sharp.potential_low
+        self.assertGreater(vague_width, sharp_width)
+
+    def test_potential_is_harder_to_judge_than_current_ability(self):
+        report = scout(Ability(current=120, potential=165), age=19, accuracy=0.5)
+        self.assertGreater(
+            report.potential_high - report.potential_low,
+            report.current_high - report.current_low,
+        )
+
+    def test_scout_flags_prospects(self):
+        prospect = scout(Ability(current=100, potential=175), age=20, accuracy=0.8)
+        veteran = scout(Ability(current=140, potential=140), age=33, accuracy=0.8)
+        self.assertEqual(prospect.verdict, "Elite prospect")
+        self.assertEqual(veteran.verdict, "Past his peak")
+
+    # -- display -------------------------------------------------------
+    def test_ca_maps_onto_the_1_20_scale(self):
+        self.assertAlmostEqual(ca_to_scale(0), SCALE_MIN)
+        self.assertAlmostEqual(ca_to_scale(CA_MAX), SCALE_MAX)
+
+    def test_ca_tiers_are_ordered(self):
+        self.assertEqual(ca_tier(190), "Generational")
+        self.assertEqual(ca_tier(150), "All-Star")
+        self.assertEqual(ca_tier(100), "Rotation player")
+        self.assertEqual(ca_tier(10), "Amateur")

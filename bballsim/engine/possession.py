@@ -37,7 +37,7 @@ from .state import GameState, TeamState
 # average defence with neutral tactics.
 # --------------------------------------------------------------------------
 
-BASE_POSSESSION_SECONDS = 14.2
+BASE_POSSESSION_SECONDS = 14.8
 POSSESSION_SECONDS_SPREAD = 5.5
 MIN_POSSESSION_SECONDS = 2.5
 
@@ -53,9 +53,9 @@ BASE_SHOT_MIX: dict[ShotZone, float] = {
 }
 
 BASE_FG_PCT: dict[ShotZone, float] = {
-    ShotZone.RIM: 0.635,
-    ShotZone.PAINT: 0.440,
-    ShotZone.MID_RANGE: 0.415,
+    ShotZone.RIM: 0.652,
+    ShotZone.PAINT: 0.458,
+    ShotZone.MID_RANGE: 0.428,
     ShotZone.CORNER_THREE: 0.372,
     ShotZone.ABOVE_BREAK_THREE: 0.342,
 }
@@ -76,7 +76,7 @@ BASE_ASSIST_RATE = 0.60          # share of made field goals that are assisted
 BASE_OFF_REBOUND_RATE = 0.268
 BASE_BLOCK_RATE = 0.058          # of two-point attempts
 BASE_SHOOTING_FOUL_RATE = 0.105
-BASE_NON_SHOOTING_FOUL_RATE = 0.120
+BASE_NON_SHOOTING_FOUL_RATE = 0.108
 BASE_FT_PCT = 0.737
 
 CHEMISTRY_TURNOVER_SENSITIVITY = 0.045

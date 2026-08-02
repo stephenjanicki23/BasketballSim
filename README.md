@@ -16,7 +16,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 42 tests
+python3 -m unittest discover -s tests    # 64 tests
 ```
 
 In the browser: the left column is the schedule, click any game to open the
@@ -26,7 +26,7 @@ forward, and **Tracker speed** to control how fast the play-by-play reveals
 
 ## Ratings
 
-Every player carries **81 visible attributes** and **15 hidden ones**, on a
+Every player carries **81 visible attributes** and **14 hidden ones**, on a
 **1–20 scale** — Football Manager style, not 0–100:
 
 | | | | |
@@ -49,8 +49,11 @@ to 15 across a season rather than in one jump. Chemistry stays on its own
 Visible attributes live in `Ratings`, grouped
 for display into Shooting, Playmaking, Finishing, Defense, Rebounding,
 Athleticism, Basketball IQ, Intangibles, Mental, and Guard/Wing/Big skills.
-Hidden attributes live in `HiddenAttributes` — potential, injury proneness,
-consistency, big-game performance, development rate, and the personality set.
+Hidden attributes live in `HiddenAttributes` — injury proneness, consistency,
+big-game performance, development rate, and the personality set. Potential
+Ability is *not* among them: it sits on the 0–200 CA scale described below,
+because CA is the budget these attributes are generated from rather than another
+attribute.
 
 Three things are worth knowing about how the list was resolved:
 
@@ -67,6 +70,60 @@ Three things are worth knowing about how the list was resolved:
 Position-specific skills are stored for *every* player, not just that position.
 A centre with real Isolation is a matchup problem, and the engine would rather
 know about it than treat the attribute as absent.
+
+## Current and Potential Ability
+
+Underneath the visible attributes sit two hidden numbers on a **0–200 scale**:
+
+| | |
+|---|---|
+| **CA** | what the player is now |
+| **PA** | the ceiling he could realistically reach |
+
+**CA is a budget, not a label.** It is defined as a position-weighted sum of
+the visible attributes, so a player cannot be handed a high CA and poor
+attributes — they are the same fact at two resolutions. Generation runs the
+relationship backwards: pick a CA, an archetype and an age, then *solve* for the
+attribute set that spends exactly that budget. The solver bisects on a level
+offset until `current_ability()` returns the target, which is why the stored CA
+and the recomputed CA agree to within 0.005 across every generated player.
+
+That is what makes **two players with the same CA play differently**. At CA 150
+a Defensive Anchor and a Stretch Big are equally good; the archetype decides
+*where* the budget goes, so one has rim protection 18 and three-point 6 and the
+other has it the other way round. Twelve archetypes ship, gated by position —
+Floor General, Scoring Guard, Three-and-D, Slasher, Shot Creator, Point Forward,
+Stretch Big, Rim Runner, Defensive Anchor, Post Scorer, Playmaking Big.
+
+**Age redistributes the same budget.** A 20-year-old and a 34-year-old at
+identical CA are not identical players: the young man carries his ability in
+speed and quickness, the veteran in decision making and defensive IQ.
+
+### The hard rule
+
+> **CA can never exceed PA.**
+
+Enforced in `Ability.__post_init__` and `Ability.set_current()` rather than by
+callers, so no path can break it — not construction, not a JSON round-trip, not
+development. Four tests attack it from each of those directions, including
+hammering a player with maximum development for 22 straight seasons.
+
+Intangibles and Mental are deliberately **outside** the CA budget. Leadership
+and temperament are character, not ability; excluding them stops an archetype
+from buying CA with attributes that do not make a player better at basketball.
+
+### Development and scouting
+
+`develop()` advances one season. Growth is driven by headroom, an age curve, and
+the hidden attributes that decide whether a player actually improves
+(development rate, professionalism, work rate). Past 30 the age multiplier goes
+negative and CA falls back regardless of PA — an ageing player's ceiling stops
+mattering.
+
+`scout()` returns a deliberately imprecise view: a CA range, a PA range and a
+verdict ("Elite prospect", "Past his peak"). PA is always the wider bracket, and
+wider still for a teenager — you can watch what a player is now, but his ceiling
+is a guess.
 
 ### Composites: the layer between attributes and basketball
 
@@ -139,13 +196,13 @@ Simulated across a placeholder league, per team-game:
 
 | | sim | NBA (recent) |
 |---|---|---|
-| Points | 109.4 | 114 |
-| Possessions | 100.1 | 99 |
-| FG% / 3P% / FT% | .433 / .361 / .776 | .472 / .366 / .783 |
-| AST / TOV / REB | 22.1 / 13.6 / 54.0 | 26.5 / 13.5 / 53 |
-| STL / BLK / PF | 8.4 / 5.3 / 19.1 | 7.5 / 5.0 / 19 |
-| OREB% | .256 | .235 |
-| Score SD / mean margin | 16.2 / 17.3 | ~13 / ~11.5 |
+| Points | 107.8 | 114 |
+| Possessions | 100.7 | 99 |
+| FG% / 3P% / FT% | .425 / .363 / .759 | .472 / .366 / .783 |
+| AST / TOV / REB | 25.1 / 13.6 / 55.1 | 26.5 / 13.5 / 53 |
+| STL / BLK / PF | 8.2 / 5.8 / 17.9 | 7.5 / 5.0 / 19 |
+| OREB% | .237 | .235 |
+| Score SD / mean margin | 16.0 / 15.8 | ~13 / ~11.5 |
 
 The scale change from 0–99 to 1–20 moved almost none of these, because the
 engine works in normalized units — `(rating − average) / average` — rather than
@@ -155,7 +212,7 @@ with the scale: the nightly form swing, and the placeholder generator.
 Close enough to feel like basketball. Every constant that produces those
 numbers is at the top of `bballsim/engine/possession.py`.
 
-One known gap: **games are more spread out than real ones** — mean margin 17.3
+One known gap: **games are more spread out than real ones** — mean margin 15.8
 against a real 11.5, so blowouts show up more often than they should. That is
 what you get when every possession is an independent coin flip. Real games
 correlate: pace is shared, leads change how both teams play, garbage time pulls
@@ -183,8 +240,10 @@ with a cursor and appends whatever comes back.
 
 ```
 bballsim/
-  ratings.py       81 visible + 15 hidden attributes, the 1-20 scale, tiers,
-                   display labels, derived personality, positional overall
+  ability.py       CA/PA on 0-200, archetypes, the CA solver, development,
+                   scouting -- and the CA <= PA invariant
+  ratings.py       81 visible + 14 hidden attributes, the 1-20 scale, tiers,
+                   display labels, derived personality
   composites.py    attributes -> the ~25 numbers a possession reads
   tendencies       (in ratings.py) what a player wants to do vs. how good he is
   tactics.py       manager instructions: schemes and sliders, and their effects

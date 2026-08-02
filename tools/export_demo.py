@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bballsim import composites as C
+from bballsim.ability import CA_MAX, CA_TIERS, scout
 from bballsim.chemistry import evaluate as evaluate_chemistry
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
@@ -119,6 +120,12 @@ def export_team(league: League, team) -> dict:
                 "jersey": p.jersey,
                 "ovr": p.overall,
                 "personality": p.personality,
+                "tier": p.tier,
+                "archetype": p.archetype.label if p.archetype else None,
+                # Hidden in a real save; shipped so the demo can show what a
+                # scouting department would eventually work out.
+                "ability": p.ability.to_dict(),
+                "scouting": scout(p.ability, p.age, accuracy=0.65).to_dict(),
                 "ratings": {k: round(v, 1) for k, v in p.ratings.to_dict().items()},
                 "tendencies": {k: round(v, 1) for k, v in p.tendencies.to_dict().items()},
                 # Normally invisible. Shipped so the demo can show what a
@@ -209,6 +216,10 @@ def main() -> None:
         "attributeNames": {k: display_name(k) for k in Ratings.attribute_names()},
         "hiddenNames": {k: display_name(k) for k in HiddenAttributes.attribute_names()},
         "compositeOrder": list(EXPORTED_COMPOSITES),
+        "abilityScale": {
+            "max": CA_MAX,
+            "tiers": [[floor, label] for floor, label in CA_TIERS],
+        },
         "scale": {
             "min": SCALE_MIN,
             "max": SCALE_MAX,

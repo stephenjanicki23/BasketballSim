@@ -9,7 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .ratings import HiddenAttributes, Ratings, Tendencies, overall, personality_label
+from .ability import Ability, Archetype, ca_tier, ca_to_scale, current_ability
+from .ratings import HiddenAttributes, Ratings, Tendencies, personality_label
 from .tactics import Tactics
 
 
@@ -45,6 +46,11 @@ class Player:
     tendencies: Tendencies = field(default_factory=Tendencies)
     hidden: HiddenAttributes = field(default_factory=HiddenAttributes)
 
+    # Hidden CA/PA on the 0-200 scale. CA is the budget the attributes above
+    # were generated from; the invariant CA <= PA is enforced by Ability.
+    ability: Ability = field(default_factory=Ability)
+    archetype: Archetype | None = None
+
     # Live, per-game state. Reset by the engine at tip-off.
     condition: float = 100.0   # 0-100 fatigue-adjusted freshness
     injured: bool = False
@@ -59,8 +65,23 @@ class Player:
         return f"{initial}{self.last_name}"
 
     @property
+    def current_ability(self) -> float:
+        """CA recomputed from the attributes, 0-200.
+
+        Generation solves for attributes that hit a target CA, so this agrees
+        with `ability.current`. It recomputes rather than reads so that hand-
+        edited attributes cannot silently disagree with the stored number.
+        """
+        return current_ability(self.ratings, self.position.value)
+
+    @property
     def overall(self) -> float:
-        return overall(self.ratings, self.position.value)
+        """The 1-20 face of Current Ability, for display and depth charts."""
+        return round(ca_to_scale(self.current_ability), 1)
+
+    @property
+    def tier(self) -> str:
+        return ca_tier(self.current_ability)
 
     @property
     def personality(self) -> str:
@@ -79,6 +100,8 @@ class Player:
             "condition": round(self.condition, 1),
             "injured": self.injured,
             "personality": self.personality,
+            "tier": self.tier,
+            "archetype": self.archetype.label if self.archetype else None,
             "ratings": self.ratings.to_dict(),
             "tendencies": self.tendencies.to_dict(),
         }
@@ -88,6 +111,8 @@ class Player:
         never for the roster UI."""
         data = self.to_dict()
         data["hidden"] = self.hidden.to_dict()
+        data["ability"] = self.ability.to_dict()
+        data["ability"]["recomputed_current"] = round(self.current_ability, 1)
         return data
 
 

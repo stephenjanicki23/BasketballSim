@@ -235,7 +235,6 @@ class HiddenAttributes:
     hooks development, contracts and locker-room systems will need.
     """
 
-    potential_ability: float = LEAGUE_AVERAGE   # ceiling, not current ability
     injury_proneness: float = LEAGUE_AVERAGE
     consistency: float = LEAGUE_AVERAGE         # night-to-night variance
     big_game_performance: float = LEAGUE_AVERAGE
@@ -384,7 +383,6 @@ DISPLAY_OVERRIDES: dict[str, str] = {
     "three_point": "Three-Point",
     "mid_range": "Mid-Range",
     "euro_step": "Euro Step",
-    "potential_ability": "Potential Ability (PA)",
     "rebound_timing": "Timing",
     "rebound_positioning": "Rebound Positioning",
     "passing_from_post": "Passing from the Post",
@@ -471,43 +469,7 @@ def personality_label(ratings: Ratings, hidden: HiddenAttributes) -> str:
     return "Balanced"
 
 
-# --------------------------------------------------------------------------
-# Overall. Display and depth-chart sorting only -- never used inside a
-# possession, which reads composites instead.
-# --------------------------------------------------------------------------
-
-_OVERALL_CORE: dict[str, float] = {
-    "close_shot": 0.7, "layups": 0.7, "mid_range": 0.5, "three_point": 1.1,
-    "finishing_through_contact": 0.5, "offensive_versatility": 0.5,
-    "passing": 0.7, "ball_handling": 0.6, "court_vision": 0.6,
-    "decision_making": 0.7,
-    "perimeter_defense": 0.9, "interior_defense": 0.8, "defensive_iq": 0.7,
-    "shot_contest": 0.5, "defensive_rebounding": 0.6,
-    "speed": 0.4, "strength": 0.4, "quickness": 0.4, "vertical_leap": 0.3,
-    "offensive_awareness": 0.5, "defensive_awareness": 0.5,
-}
-
-# Position tilts the weighting: a centre is not judged on ball handling the
-# way a point guard is.
-_OVERALL_BY_POSITION: dict[str, dict[str, float]] = {
-    "PG": {"passing": 1.3, "ball_handling": 1.2, "court_vision": 1.2,
-           "pick_and_roll_handler": 0.9, "decision_making": 1.0,
-           "interior_defense": 0.2, "defensive_rebounding": 0.2, "strength": 0.2},
-    "SG": {"three_point": 1.4, "pull_up_shooting": 0.7, "catch_and_shoot": 0.6,
-           "interior_defense": 0.3, "defensive_rebounding": 0.3},
-    "SF": {"offensive_versatility": 0.8, "wing_defense": 0.7, "cutting": 0.4},
-    "PF": {"defensive_rebounding": 1.0, "offensive_rebounding": 0.5,
-           "interior_defense": 1.0, "strength": 0.7, "ball_handling": 0.3,
-           "post_moves": 0.5},
-    "C": {"rim_protection": 1.1, "defensive_rebounding": 1.2, "blocks": 0.8,
-          "interior_defense": 1.2, "strength": 0.9, "post_moves": 0.6,
-          "screen_setting": 0.4, "ball_handling": 0.1, "three_point": 0.4},
-}
-
-
-def overall(ratings: Ratings, position: str = "SF") -> float:
-    weights = dict(_OVERALL_CORE)
-    weights.update(_OVERALL_BY_POSITION.get(position, {}))
-    total = sum(weights.values())
-    score = sum(getattr(ratings, key) * weight for key, weight in weights.items())
-    return round(score / total, 1)
+# Overall lives in `ability.py` now: it is the 1-20 face of Current Ability,
+# which is itself a position-weighted sum of the attributes above. Keeping one
+# definition means a player's headline number and his attributes can never
+# disagree. See `ability.current_ability()` and `ability.ca_to_scale()`.
