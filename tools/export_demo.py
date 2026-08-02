@@ -27,6 +27,7 @@ from bballsim.chemistry import evaluate as evaluate_chemistry
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
 from bballsim.models import Lineup
+from bballsim.league.stats import STAT_COLUMNS
 from bballsim.placeholder import make_teams
 from bballsim.ratings import (
     ATTRIBUTE_GROUPS,
@@ -257,6 +258,15 @@ def main() -> None:
         "teams": [export_team(league, t) for t in league.teams.values()],
         "games": [export_game(g, league, g.id in detailed_ids) for g in finals],
         "standings": league.standings_table(),
+        "statColumns": [
+            {"key": key, "label": label, "perGame": per_game}
+            for key, label, per_game in STAT_COLUMNS
+        ],
+        "playerStats": [
+            {k: v for k, v in row.items() if k != "totals"}
+            for row in league.stats.player_table(minimum_games=5)
+        ],
+        "teamStats": league.stats.team_table(),
     }
 
     raw = json.dumps(payload, separators=(",", ":")).encode()

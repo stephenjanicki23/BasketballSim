@@ -32,6 +32,7 @@ from bballsim.ability import (
     stars,
 )
 from bballsim.biography import make_biography
+from bballsim.lineup import BIGS, DEFAULT_RULES, GUARDS, LineupRules, can_swap, choose_lineup, describe
 from bballsim.engine.game import GameSimulator
 from bballsim.engine.possession import PossessionEngine
 from bballsim.engine.rng import SimRandom
@@ -716,10 +717,48 @@ class TestLeagueComposition(unittest.TestCase):
             share = best_positions.count(position) / len(best_positions)
             self.assertLess(share, 0.45, f"{position} leads {share:.0%} of teams")
 
-    def test_every_starting_five_covers_every_position(self):
+    def test_every_starting_five_is_a_legal_shape(self):
+        # Not "one of each position" -- modern lineups legitimately field two
+        # bigs and no small forward, or three guards. Legality is the rule.
         for team in self.teams:
-            positions = {p.position.value for p in team.starters()}
-            self.assertEqual(positions, {"PG", "SG", "SF", "PF", "C"}, team.abbreviation)
+            positions = [p.position.value for p in team.starters()]
+            self.assertEqual(
+                DEFAULT_RULES.violations(positions), [], f"{team.abbreviation}: {positions}"
+            )
+
+    def test_lineup_shapes_vary_across_the_league(self):
+        shapes = {describe([p.position.value for p in t.starters()]) for t in self.teams}
+        self.assertGreater(len(shapes), 3, f"only {shapes}")
+
+    def test_no_team_starts_five_of_the_same_kind(self):
+        """The failure this rule exists to prevent: a team whose five best
+        players are all bigs playing all five of them."""
+        for team in self.teams:
+            positions = [p.position.value for p in team.starters()]
+            for position in set(positions):
+                self.assertLessEqual(positions.count(position), 2, team.abbreviation)
+            self.assertGreaterEqual(sum(1 for p in positions if p in GUARDS), 1)
+            self.assertGreaterEqual(sum(1 for p in positions if p in BIGS), 1)
+
+    def test_a_big_heavy_roster_still_fields_guards(self):
+        """Directly construct the pathological case: nine centres and three
+        guards, with the centres far better. Ability alone would start five
+        centres."""
+        team = copy.deepcopy(self.teams[0])
+        # The seven best players are centres; the guards and wings are the
+        # worst on the roster. Picking on ability alone starts five centres.
+        shape = ([Position.C] * 7) + [Position.PG, Position.SG, Position.SF,
+                                      Position.PF, Position.PG]
+        for index, player in enumerate(team.players):
+            player.position = shape[index]
+            player.ability.potential = 200.0
+            player.ability.set_current(190.0 - index * 6)
+        team.depth_chart = [p.id for p in team.players]
+
+        positions = [p.position.value for p in team.starters()]
+        self.assertEqual(DEFAULT_RULES.violations(positions), [], positions)
+        self.assertLessEqual(positions.count("C"), 2, positions)
+        self.assertGreaterEqual(sum(1 for p in positions if p in GUARDS), 1, positions)
 
     def test_the_depth_chart_leads_with_the_best_starter(self):
         for team in self.teams:

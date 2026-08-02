@@ -244,13 +244,21 @@ _CHARACTER_ATTRIBUTES = frozenset({
     "winning_mentality",
 })
 
-# A roster is five starters -- one of each position -- plus a seven-man bench.
-_STARTER_POSITIONS = (Position.PG, Position.SG, Position.SF, Position.PF, Position.C)
-_BENCH_POSITIONS = (
-    Position.PG, Position.SG, Position.SF, Position.PF, Position.C,
-    Position.SG, Position.SF,
+# A 12-man roster's positional make-up. Every team carries at least two of
+# each position, then fills the last two places with whatever the front office
+# fancied -- so squads are not identical and the starting five is not forced
+# into one shape. `Team.starters()` picks the strongest *legal* five from
+# whatever this produces, which is what stops a big-heavy roster from putting
+# five bigs on the floor.
+_ROSTER_CORE = (
+    Position.PG, Position.PG, Position.SG, Position.SG, Position.SF,
+    Position.SF, Position.PF, Position.PF, Position.C, Position.C,
 )
-_ROSTER_SIZE = len(_STARTER_POSITIONS) + len(_BENCH_POSITIONS)
+_ROSTER_FLEX_WEIGHTS = (
+    (Position.PG, 1.0), (Position.SG, 1.6), (Position.SF, 1.8),
+    (Position.PF, 1.4), (Position.C, 0.8),
+)
+_ROSTER_SIZE = 12
 
 # Target Current Ability by depth. The ladder is fixed; which *position* draws
 # the top rung is shuffled per team, so a franchise player is as likely to be a
@@ -431,20 +439,19 @@ def make_team(
     # Deal the CA ladder to a shuffled set of positions. Each team therefore
     # has its best player at a random position, while the starting five still
     # covers PG through C.
-    starter_positions = rng.sample(_STARTER_POSITIONS, len(_STARTER_POSITIONS))
-    bench_positions = rng.sample(_BENCH_POSITIONS, len(_BENCH_POSITIONS))
+    flex_positions, flex_weights = zip(*_ROSTER_FLEX_WEIGHTS)
+    roster_positions = list(_ROSTER_CORE) + rng.choices(
+        flex_positions, weights=flex_weights, k=_ROSTER_SIZE - len(_ROSTER_CORE)
+    )
+    # Shuffling the positions against a fixed ability ladder is what gives each
+    # team a franchise player at a random position.
+    rng.shuffle(roster_positions)
 
-    starter_ca = list(_STARTER_CA)
+    ladder = list(_STARTER_CA) + list(_BENCH_CA)
     if rng.random() < SUPERSTAR_CHANCE:
-        starter_ca[0] += rng.uniform(*SUPERSTAR_BUMP)
+        ladder[0] += rng.uniform(*SUPERSTAR_BUMP)
 
-    slots = [
-        (position, target)
-        for position, target in zip(starter_positions, starter_ca)
-    ] + [
-        (position, target)
-        for position, target in zip(bench_positions, _BENCH_CA)
-    ]
+    slots = list(zip(roster_positions, ladder))
 
     players: list[Player] = []
     for index, (position, base_ca) in enumerate(slots):
@@ -467,12 +474,12 @@ def make_team(
         tactics=_make_tactics(rng),
         team_chemistry=rng.uniform(40, 70),  # 0-100, not a player rating
     )
-    # Depth chart: the starting five in ability order, then the bench in
-    # ability order. `Team.starters()` takes the first five, so this keeps one
-    # of each position on the floor while the best player leads the rotation.
-    starters = sorted(players[:5], key=lambda p: -p.ability.current)
-    bench = sorted(players[5:], key=lambda p: -p.ability.current)
-    team.depth_chart = [p.id for p in starters + bench]
+    # Depth chart is pure ability order -- the manager's ranking of his squad.
+    # `Team.starters()` then picks the strongest *legal* five out of it, so the
+    # shape constraint lives in one place rather than being baked in here.
+    team.depth_chart = [
+        p.id for p in sorted(players, key=lambda p: -p.ability.current)
+    ]
     return team
 
 

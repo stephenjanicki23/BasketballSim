@@ -9,6 +9,7 @@ matchup-based logic later without touching the possession engine.
 from __future__ import annotations
 
 from .. import composites as C
+from ..lineup import DEFAULT_RULES, can_swap
 from ..models import Lineup, Player
 from ..ratings import normalize
 from ..tactics import slider_mod
@@ -69,12 +70,21 @@ class RotationManager:
 
         swaps: list[tuple[Player, Player]] = []
         used_in: set[str] = set()
+        # The lineup evolves as swaps are chosen, so legality has to be checked
+        # against the running shape rather than the one we started with --
+        # otherwise three individually-legal swaps can combine into four guards.
+        shape = [p.position.value for p in on_court]
+
         for player_out in candidates_out:
-            replacement = self._best_replacement(bench, rank, used_in, player_out, closing)
+            replacement = self._best_replacement(
+                bench, rank, used_in, player_out, closing, on_court=shape,
+            )
             if replacement is None:
                 continue
             used_in.add(replacement.id)
             swaps.append((player_out, replacement))
+            shape.remove(player_out.position.value)
+            shape.append(replacement.position.value)
             if len(swaps) >= 3:
                 break
         return swaps
@@ -89,8 +99,22 @@ class RotationManager:
         used: set[str],
         player_out: Player,
         closing: bool,
+        on_court: list[str] | None = None,
     ) -> Player | None:
         available = [p for p in bench if p.id not in used]
+        # A tired centre cannot be replaced by a fourth guard. Filter to swaps
+        # that leave a legal lineup *before* ranking, so the fallback path
+        # ("nobody rested, take anyone") cannot break the shape either.
+        if on_court is not None:
+            available = [
+                p for p in available
+                if can_swap(on_court, player_out.position.value, p.position.value, DEFAULT_RULES)
+            ]
+            # No legal replacement? Then there is no substitution. A tired
+            # centre stays on rather than being swapped for a fourth guard --
+            # declining is always available, and always legal.
+            if not available:
+                return None
         in_rotation = [p for p in available if rank.get(p.id, 99) < ROTATION_DEPTH]
         options = [p for p in in_rotation if closing or p.condition >= RESTED_THRESHOLD]
         if not options:

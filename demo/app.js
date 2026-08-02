@@ -209,6 +209,9 @@ const state = {
   playerId: null,
   showHidden: false,
   displayScale: 20,
+  statsScope: "players",
+  statsSort: "points",
+  statsDescending: true,
   lastTick: 0,
   frame: null,
 };
@@ -263,6 +266,8 @@ async function boot() {
   renderSchedule();
   renderStandings();
   renderTeams();
+  buildStatTabs();
+  renderStats();
   bindControls();
 
   selectGame(state.data.games[state.data.games.length - 1].id);
@@ -662,6 +667,177 @@ function renderBox() {
     block.appendChild(scroll);
     container.appendChild(block);
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Stats: sortable per-game tables for players and teams
+ * ------------------------------------------------------------------ */
+
+/* The stat tabs. Each names the column it sorts by, so picking a tab is the
+ * same action as sorting -- the table below stays fully sortable by header
+ * click for anything not on the tab strip. */
+const STAT_TABS = [
+  ["points", "Points"],
+  ["rebounds", "Rebounds"],
+  ["assists", "Assists"],
+  ["steals", "Steals"],
+  ["blocks", "Blocks"],
+  ["minutes", "Minutes"],
+  ["fg_pct", "FG%"],
+  ["tp_pct", "3P%"],
+  ["ft_pct", "FT%"],
+  ["turnovers", "Turnovers"],
+];
+
+const PERCENT_KEYS = new Set(["fg_pct", "tp_pct", "ft_pct", "win_pct"]);
+
+// Counts that really are whole numbers; everything else is a per-game rate and
+// reads wrong without a decimal ("8" beside "8.4").
+const WHOLE_KEYS = new Set(["games", "wins", "losses"]);
+
+function formatStat(key, value) {
+  if (value === undefined || value === null) return "—";
+  if (PERCENT_KEYS.has(key)) return value.toFixed(3).replace(/^0/, "");
+  if (WHOLE_KEYS.has(key)) return String(Math.round(value));
+  return value.toFixed(1);
+}
+
+function statsRows() {
+  return state.statsScope === "teams" ? state.data.teamStats : state.data.playerStats;
+}
+
+function statsColumns() {
+  const base = state.statsScope === "teams"
+    ? [
+        { key: "abbreviation", label: "Team", text: true },
+        { key: "wins", label: "W" },
+        { key: "losses", label: "L" },
+        { key: "win_pct", label: "PCT" },
+        { key: "points_against", label: "OPP" },
+        { key: "point_differential", label: "DIFF" },
+      ]
+    : [
+        { key: "name", label: "Player", text: true },
+        { key: "position", label: "POS", text: true },
+        { key: "team_id", label: "Team", text: true },
+        { key: "games", label: "GP" },
+      ];
+  return base.concat(
+    state.data.statColumns
+      .filter((c) => !(state.statsScope === "teams" && c.key === "minutes"))
+      .map((c) => ({ key: c.key, label: c.label }))
+  );
+}
+
+function renderStats() {
+  const columns = statsColumns();
+  const rows = [...statsRows()];
+  const sortKey = state.statsSort;
+  const descending = state.statsDescending;
+  const column = columns.find((c) => c.key === sortKey);
+
+  rows.sort((a, b) => {
+    const left = a[sortKey];
+    const right = b[sortKey];
+    if (column && column.text) {
+      return descending
+        ? String(right).localeCompare(String(left))
+        : String(left).localeCompare(String(right));
+    }
+    return descending ? right - left : left - right;
+  });
+
+  // Tabs reflect the active sort.
+  $$("#stat-tabs .stat-tab").forEach((tab) => {
+    const active = tab.dataset.stat === sortKey;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  $$("#stats-scope button").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.scope === state.statsScope);
+  });
+
+  const table = $("#stats-table");
+  table.textContent = "";
+
+  const thead = el("thead");
+  const headRow = el("tr");
+  headRow.appendChild(el("th", "col-rank", "#"));
+  for (const col of columns) {
+    const th = el("th", col.text ? "col-name" : null);
+    const button = el("button", "sort-button", col.label);
+    if (col.key === sortKey) {
+      button.classList.add("is-sorted");
+      button.appendChild(el("span", "sort-arrow", descending ? "▾" : "▴"));
+    }
+    button.onclick = () => {
+      if (state.statsSort === col.key) state.statsDescending = !state.statsDescending;
+      else { state.statsSort = col.key; state.statsDescending = !col.text; }
+      renderStats();
+    };
+    th.appendChild(button);
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  rows.forEach((row, index) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", "col-rank", String(index + 1)));
+    for (const col of columns) {
+      if (col.key === "name") {
+        const cell = el("td", "col-name");
+        cell.appendChild(el("span", "player-name", row.name));
+        tr.appendChild(cell);
+      } else if (col.key === "team_id" || col.key === "abbreviation") {
+        const label = col.key === "team_id"
+          ? (state.teams.get(row.team_id) || {}).abbr || row.team_id
+          : row.abbreviation;
+        const cell = el("td", "col-name");
+        cell.appendChild(el("span", "player-pos", label));
+        tr.appendChild(cell);
+      } else if (col.text) {
+        const cell = el("td", "col-name");
+        cell.appendChild(el("span", "player-pos", String(row[col.key])));
+        tr.appendChild(cell);
+      } else {
+        const cell = el("td", col.key === sortKey ? "is-sorted-cell" : null,
+          formatStat(col.key, row[col.key]));
+        tr.appendChild(cell);
+      }
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  $("#stats-caption").textContent = state.statsScope === "teams"
+    ? `${rows.length} teams · per game`
+    : `${rows.length} players with 5+ games · per game`;
+}
+
+function buildStatTabs() {
+  const strip = $("#stat-tabs");
+  strip.textContent = "";
+  for (const [key, label] of STAT_TABS) {
+    const tab = el("button", "stat-tab", label);
+    tab.dataset.stat = key;
+    tab.setAttribute("role", "tab");
+    tab.onclick = () => {
+      state.statsSort = key;
+      state.statsDescending = true;
+      renderStats();
+    };
+    strip.appendChild(tab);
+  }
+  $$("#stats-scope button").forEach((button) => {
+    button.onclick = () => {
+      state.statsScope = button.dataset.scope;
+      state.statsSort = "points";
+      state.statsDescending = true;
+      renderStats();
+    };
+  });
 }
 
 /* ------------------------------------------------------------------ *

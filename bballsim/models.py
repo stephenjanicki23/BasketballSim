@@ -19,6 +19,7 @@ from .ability import (
     stars,
 )
 from .biography import Biography
+from .lineup import DEFAULT_RULES, LineupRules, choose_lineup, describe
 from .ratings import HiddenAttributes, Ratings, Tendencies, personality_label
 from .tactics import Tactics
 
@@ -189,8 +190,27 @@ class Team:
         order = {pid: i for i, pid in enumerate(self.depth_chart)}
         return sorted(available, key=lambda p: (order.get(p.id, 999), -p.overall))
 
-    def starters(self) -> list[Player]:
-        return self.rotation()[:5]
+    def starters(self, rules: LineupRules = DEFAULT_RULES) -> list[Player]:
+        """The strongest legal starting five.
+
+        Not simply the top five of the depth chart: a team whose five best
+        players are all bigs would otherwise start five bigs. Depth-chart
+        position is the strength signal, so the manager's ordering is
+        respected wherever it produces a legal shape.
+        """
+        rotation = self.rotation()
+        by_id = {p.id: p for p in rotation}
+        candidates = [
+            (p.id, p.position.value, float(len(rotation) - index))
+            for index, p in enumerate(rotation)
+        ]
+        chosen = choose_lineup(candidates, rules)
+        order = {pid: i for i, pid in enumerate(p.id for p in rotation)}
+        return sorted((by_id[pid] for pid in chosen), key=lambda p: order.get(p.id, 99))
+
+    def lineup_shape(self) -> str:
+        """Guards-wings-bigs, e.g. '2-1-2'."""
+        return describe([p.position.value for p in self.starters()])
 
     def to_dict(self, include_players: bool = False) -> dict:
         data = {

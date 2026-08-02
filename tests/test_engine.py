@@ -17,6 +17,7 @@ from bballsim.chemistry import evaluate as evaluate_chemistry
 from bballsim.engine.events import EventType
 from bballsim.engine.game import GameSimulator
 from bballsim.league import GameStatus, League, build_round_robin
+from bballsim.league.stats import STAT_COLUMNS, PlayerSeasonLine
 from bballsim.models import Lineup
 from bballsim.placeholder import make_teams
 from bballsim.tactics import OffensiveScheme, Tactics
@@ -188,3 +189,94 @@ class TestLeagueFlow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSeasonStats(unittest.TestCase):
+    """Season aggregation: totals in, per-game rates out."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.league = League(name="Stats League", season="2026-27")
+        for team in make_teams(6):
+            cls.league.add_team(team)
+        cls.league.set_schedule(
+            build_round_robin(
+                list(cls.league.teams),
+                start_date=(datetime.now(timezone.utc) + timedelta(days=1)).date(),
+                times_played=1,
+                days_between_rounds=1,
+            )
+        )
+        cls.league.clock.advance(timedelta(days=60))
+        cls.league.tick()
+
+    def test_team_games_played_matches_the_schedule(self):
+        played = len([g for g in self.league.schedule if g.status == GameStatus.FINAL])
+        total = sum(line.games for line in self.league.stats.teams.values())
+        self.assertEqual(total, played * 2)
+
+    def test_team_wins_and_losses_agree_with_the_standings(self):
+        for team_id, line in self.league.stats.teams.items():
+            row = self.league.standings[team_id]
+            self.assertEqual(line.wins, row.wins, team_id)
+            self.assertEqual(line.losses, row.losses, team_id)
+            self.assertEqual(line.games, row.games_played, team_id)
+
+    def test_team_points_agree_with_the_standings(self):
+        for team_id, line in self.league.stats.teams.items():
+            self.assertEqual(line.points, self.league.standings[team_id].points_for)
+            self.assertEqual(
+                line.points_against, self.league.standings[team_id].points_against
+            )
+
+    def test_player_totals_sum_to_their_team_totals(self):
+        for team_id, team_line in self.league.stats.teams.items():
+            roster = [
+                line for line in self.league.stats.players.values()
+                if line.team_id == team_id
+            ]
+            self.assertEqual(sum(l.points for l in roster), team_line.points, team_id)
+            self.assertEqual(sum(l.assists for l in roster), team_line.assists, team_id)
+            self.assertEqual(sum(l.fga for l in roster), team_line.fga, team_id)
+
+    def test_a_did_not_play_is_not_a_game_played(self):
+        for line in self.league.stats.players.values():
+            if line.games:
+                self.assertGreater(line.seconds, 0, line.name)
+
+    def test_per_game_rates_are_totals_over_games(self):
+        line = max(self.league.stats.players.values(), key=lambda l: l.points)
+        self.assertAlmostEqual(line.per_game("points"), line.points / line.games)
+        row = line.to_dict()
+        self.assertAlmostEqual(row["points"], round(line.points / line.games, 3))
+
+    def test_percentages_are_rates_not_per_game_averages(self):
+        line = max(self.league.stats.players.values(), key=lambda l: l.fga)
+        self.assertAlmostEqual(line.fg_pct, line.fgm / line.fga)
+        self.assertLessEqual(line.fg_pct, 1.0)
+        self.assertGreaterEqual(line.fg_pct, 0.0)
+
+    def test_percentages_survive_zero_attempts(self):
+        blank = PlayerSeasonLine(player_id="x")
+        self.assertEqual(blank.fg_pct, 0.0)
+        self.assertEqual(blank.tp_pct, 0.0)
+        self.assertEqual(blank.per_game("points"), 0.0)
+
+    def test_minimum_games_filter(self):
+        everyone = self.league.stats.player_table(minimum_games=1)
+        regulars = self.league.stats.player_table(minimum_games=4)
+        self.assertLessEqual(len(regulars), len(everyone))
+        self.assertTrue(all(row["games"] >= 4 for row in regulars))
+
+    def test_every_stat_column_is_present_on_both_tables(self):
+        player_row = self.league.stats.player_table()[0]
+        team_row = self.league.stats.team_table()[0]
+        for key, _label, _per_game in STAT_COLUMNS:
+            self.assertIn(key, player_row, key)
+            if key != "minutes":  # a team always plays 240 minutes
+                self.assertIn(key, team_row, key)
+
+    def test_players_carry_a_position_and_a_team(self):
+        for row in self.league.stats.player_table():
+            self.assertIn(row["position"], {"PG", "SG", "SF", "PF", "C"})
+            self.assertIn(row["team_id"], self.league.teams)

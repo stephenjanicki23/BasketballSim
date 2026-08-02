@@ -425,7 +425,8 @@ thead th {
   background: var(--panel);
 }
 .col-name, th.col-name { text-align: left; font-family: var(--sans); }
-td.col-name { display: flex; align-items: baseline; gap: 8px; }
+td.col-name { display: table-cell; }
+td.col-name > * + * { margin-left: 8px; }
 .player-pos {
   font: 600 9px/1.6 var(--mono);
   letter-spacing: .1em;
@@ -449,6 +450,73 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 .box-dot.side-away { background: var(--away); }
 .box-name { font-size: 13px; font-weight: 600; }
 .box-points { font: 700 15px/1 var(--mono); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+/* ---------------- stats ---------------- */
+.stats-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.scope-toggle { display: inline-flex; border: 1px solid var(--hairline); border-radius: 7px; overflow: hidden; }
+.scope-toggle button {
+  border: none;
+  border-radius: 0;
+  background: var(--panel);
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.scope-toggle button.is-active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.stat-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.stat-tab {
+  flex: 0 0 auto;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.stat-tab:hover { color: var(--ink); }
+.stat-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.sort-button {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.sort-button:hover { color: var(--ink); border: none; }
+.sort-button.is-sorted { color: var(--accent); }
+.sort-arrow { font-size: 9px; }
+#stats-table td.is-sorted-cell {
+  color: var(--ink);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+#stats-table tbody tr:hover td { background: var(--raised); }
+#stats-table { min-width: 900px; }
+#stats-table .col-rank { width: 34px; }
+#stats-table td, #stats-table th { white-space: nowrap; }
+#stats-table td.col-name { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------------- standings ---------------- */
 .sheet { padding: 14px; }
@@ -678,6 +746,7 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
     </div>
     <nav class="nav" role="tablist" aria-label="Views">
       <button class="nav-tab is-active" role="tab" aria-selected="true" data-view="games">Games</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="stats">Stats</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
     </nav>
@@ -781,6 +850,34 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
         stored total; <code>demo/verify.mjs</code> checks the rebuild against the
         engine's own box score for all 28 games.
       </p>
+    </div>
+  </section>
+
+  <!-- Stats -------------------------------------------------------- -->
+  <section class="view" data-view="stats" role="tabpanel" aria-label="Stats" hidden>
+    <div class="team-layout">
+      <div class="card">
+        <div class="card-head">
+          <h2>Season stats</h2>
+          <div class="stats-controls">
+            <span class="label" id="stats-caption"></span>
+            <div class="scope-toggle" id="stats-scope" role="group" aria-label="Players or teams">
+              <button data-scope="players" class="is-active">Players</button>
+              <button data-scope="teams">Teams</button>
+            </div>
+          </div>
+        </div>
+        <div class="stat-tabs" id="stat-tabs" role="tablist" aria-label="Sort by stat"></div>
+        <div class="sheet table-scroll">
+          <table id="stats-table"></table>
+        </div>
+        <p class="note">
+          Per-game averages over the full 435-game season, accumulated by the league
+          as each game finalises — not from the 30 games that ship with play-by-play.
+          Pick a tab to sort by that stat, or click any column header; click again to
+          reverse. Players need five games to qualify.
+        </p>
+      </div>
     </div>
   </section>
 

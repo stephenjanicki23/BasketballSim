@@ -5,6 +5,8 @@ Endpoints
     GET  /api/teams                         all teams
     GET  /api/teams/<id>                    one team with its roster
     GET  /api/schedule?date=YYYY-MM-DD      fixtures (all, or one day)
+    GET  /api/stats/players?min_games=n     season per-game player stats
+    GET  /api/stats/teams                   season per-game team stats
     GET  /api/games/<id>                    fixture + box score if available
     GET  /api/games/<id>/feed?since=<n>     play-by-play revealed so far
     POST /api/clock/advance {"minutes": n}  push the league clock forward
@@ -25,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 from ..league.calendar import GameStatus
 from ..league.league import League
+from ..league.stats import STAT_COLUMNS
 
 WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
 
@@ -133,6 +136,25 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "now": league.clock.now().isoformat(),
                 "games": [g.to_dict() for g in games],
                 "teams": {t.id: t.to_dict() for t in league.teams.values()},
+            })
+
+        elif parts == ["stats", "players"]:
+            minimum = int(query.get("min_games", ["1"])[0])
+            self._send_json({
+                "columns": [
+                    {"key": key, "label": label, "per_game": per_game}
+                    for key, label, per_game in STAT_COLUMNS
+                ],
+                "rows": league.stats.player_table(minimum_games=minimum),
+            })
+
+        elif parts == ["stats", "teams"]:
+            self._send_json({
+                "columns": [
+                    {"key": key, "label": label, "per_game": per_game}
+                    for key, label, per_game in STAT_COLUMNS
+                ],
+                "rows": league.stats.team_table(),
             })
 
         elif parts == ["standings"]:

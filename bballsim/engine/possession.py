@@ -78,7 +78,7 @@ SHOOTING_SENSITIVITY: dict[ShotZone, float] = {
 # Which defensive composite guards which zone.
 INTERIOR_ZONES = (ShotZone.RIM, ShotZone.PAINT)
 
-BASE_ASSIST_RATE = 0.60          # share of made field goals that are assisted
+BASE_ASSIST_RATE = 0.672         # share of made field goals that are assisted
 BASE_OFF_REBOUND_RATE = 0.268
 BASE_BLOCK_RATE = 0.058          # of two-point attempts
 BASE_SHOOTING_FOUL_RATE = 0.105
@@ -531,8 +531,14 @@ class PossessionEngine:
         if not self.rng.chance(self._bounded(rate, 0.05, 0.95)):
             return None
         candidates = [p for p in off.lineup if p.id != shooter.id]
+        # Steep on playmaking: a lead guard should own the assist column, not
+        # edge it. The coefficient is what separates a 7-assist point guard
+        # from a five-way split.
         weights = [
-            0.2 + normalize(self._skill(p, C.playmaking)) + fraction(p.tendencies.pass_first) * 0.5
+            max(0.04,
+                0.15
+                + normalize(self._skill(p, C.playmaking)) * 1.6
+                + fraction(p.tendencies.pass_first) * 0.6)
             for p in candidates
         ]
         return self.rng.weighted_choice(candidates, weights)

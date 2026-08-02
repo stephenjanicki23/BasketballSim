@@ -17,7 +17,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 93 tests
+python3 -m unittest discover -s tests    # 107 tests
 ```
 
 In the browser: the left column is the schedule, click any game to open the
@@ -105,6 +105,45 @@ Nationality is weighted to look like an NBA roster — around 70% American with 
 long tail of basketball nations — and background follows from it: Americans come
 mostly through college with a small prep/G-League route, internationals split
 between a home club and a US college.
+
+## Lineups
+
+Five players is not five *any* players. `bballsim/lineup.py` defines the shape
+of a modern NBA five and both `Team.starters()` and the substitution logic
+respect it:
+
+| | |
+|---|---|
+| At most 2 at any one position | never three point guards, never five centres |
+| 1–3 guards | somebody has to bring it up |
+| 1–3 bigs | somebody has to protect the rim |
+| At most 2 centres, 3+ distinct positions | |
+
+Everything the league actually plays stays legal — two-big lineups, small-ball
+with a single big, three-guard looks. What it rules out is the shape that only
+appears when a sim picks purely on ability. Across a generated league the
+starting fives come out 2-1-2, 1-2-2, 2-0-3, 1-1-3, 2-2-1, 3-1-1 and 3-0-2.
+
+`starters()` brute-forces the strongest legal five rather than taking the top
+five of the depth chart — greedy selection can paint itself into an illegal
+corner by taking the best player first. It searches the top ten and widens to
+the whole roster if no legal five exists up there, which is what happens when a
+team's ten best players are all bigs.
+
+Substitutions are checked the same way, against the *running* lineup rather
+than the one the possession started with — three individually legal swaps could
+otherwise combine into four guards. When no legal replacement exists the
+substitution is simply declined: a tired centre stays on rather than being
+swapped for a fourth guard.
+
+## Stats
+
+`bballsim/league/stats.py` accumulates season totals as each game finalises,
+and derives per-game rates on read. Both tables are exposed by the API
+(`/api/stats/players`, `/api/stats/teams`) and rendered in the demo's Stats tab:
+pick a stat tab to sort by it, or click any column header; click again to
+reverse. Percentages are true rates (makes over attempts), not averages of
+per-game percentages.
 
 ## Current and Potential Ability
 
@@ -240,11 +279,17 @@ Across the 30-team league, per team-game:
 
 | | sim | NBA (recent) |
 |---|---|---|
-| Points | 108.2 | 114 |
-| Possessions | 99.6 (84–119) | 99 (96–104) |
-| FG% / 3P% / FT% | .439 / .356 / .770 | .472 / .366 / .783 |
-| AST / TOV / REB | 23.1 / 15.1 / 52.4 | 26.5 / 13.5 / 53 |
-| STL / BLK / PF | 9.5 / 5.1 / 18.6 | 7.5 / 5.0 / 19 |
+| Points | 109.7 | 114 |
+| Possessions | 101.5 (84–119) | 99 (96–104) |
+| FG% / 3P% / FT% | .435 / .354 / .761 | .472 / .366 / .783 |
+| AST / TOV / REB | 26.1 / 14.5 / 54.3 | 26.5 / 13.5 / 53 |
+| STL / BLK / PF | 9.5 / 5.1 / 17.9 | 7.5 / 5.0 / 19 |
+
+Per-game averages by position land close too — rebounds run PG 3.4, SG 4.0,
+SF 4.9, PF 7.8, C 8.8 against a real 3.5 / 3.8 / 5.0 / 6.8 / 9.0, and blocks
+are near-exact. The stats page is what surfaced the one that was off: assists
+were spread too evenly, so the assister weighting is now steep on playmaking
+and the leaders are point guards at 9+ rather than a five-way split.
 | OREB% | .264 | .235 |
 | Score SD / mean margin | 14.6 / 15.8 | ~13 / ~11.5 |
 
@@ -293,6 +338,7 @@ with a cursor and appends whatever comes back.
 bballsim/
   ability.py       CA/PA on 0-200, star ratings, archetypes, the CA solver,
                    development, scouting -- and the CA <= PA invariant
+  lineup.py        what a legal modern five looks like, and how to pick one
   biography.py     age, height, weight, nationality, college/club, draft class
   ratings.py       81 visible + 14 hidden attributes, the 1-20 scale, tiers,
                    display labels, derived personality
@@ -311,6 +357,7 @@ bballsim/
     state.py       rules config + mutable game state
   league/
     calendar.py    fixtures, tip-off times, game status
+    stats.py       season totals -> per-game rates, for players and teams
     league.py      standings, the sim clock, tick(), the tracker feed
   api/server.py    stdlib HTTP: JSON API + static files
   placeholder.py   THROWAWAY teams and players — delete when real data lands
@@ -325,6 +372,8 @@ web/               the tracker UI (vanilla JS, no build step)
 | `GET /api/teams`, `/api/teams/<id>` | teams, roster with ratings |
 | `GET /api/schedule?date=&team=` | fixtures |
 | `GET /api/standings` | standings table |
+| `GET /api/stats/players?min_games=n` | season per-game player stats |
+| `GET /api/stats/teams` | season per-game team stats |
 | `GET /api/games/<id>` | fixture + box score when final |
 | `GET /api/games/<id>/feed?since=<n>` | play-by-play revealed so far |
 | `POST /api/clock/advance` | `{"minutes": n}` or `{"days": n}` |

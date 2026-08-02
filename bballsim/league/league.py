@@ -14,6 +14,7 @@ from ..chemistry import drift_after_game
 from ..engine.game import GameRules, GameSimulator
 from ..models import Team
 from .calendar import GameStatus, ScheduledGame
+from .stats import SeasonStats
 
 # Game seconds revealed per real-time second. 1.0 = watch in real time,
 # 20.0 = a 48-minute game plays out in roughly two and a half minutes.
@@ -82,6 +83,8 @@ class League:
     rules: GameRules = field(default_factory=GameRules)
     clock: LeagueClock = field(default_factory=LeagueClock)
     tracker_speed: float = DEFAULT_TRACKER_SPEED
+    # Season totals, folded in as each game finalises.
+    stats: SeasonStats = field(default_factory=SeasonStats)
 
     # ------------------------------------------------------------------
     # Setup
@@ -159,6 +162,10 @@ class League:
         if result is None:
             return
 
+        # The stats layer only sees box scores, so hand it the roster detail
+        # it cannot infer -- which team a player belongs to, and his position.
+        self.stats.add_game(result, roster=self._roster_lookup(game))
+
         home_row = self.standings.setdefault(game.home_team_id, StandingsRow(game.home_team_id))
         away_row = self.standings.setdefault(game.away_team_id, StandingsRow(game.away_team_id))
         home_row.points_for += result.home_score
@@ -180,6 +187,16 @@ class League:
             pair_minutes = getattr(result, f"{box_owner}_pair_minutes", None)
             if pair_minutes:
                 drift_after_game(team, pair_minutes)
+
+    def _roster_lookup(self, game: ScheduledGame) -> dict[str, tuple[str, str]]:
+        lookup: dict[str, tuple[str, str]] = {}
+        for team_id in (game.home_team_id, game.away_team_id):
+            team = self.teams.get(team_id)
+            if team is None:
+                continue
+            for player in team.players:
+                lookup[player.id] = (team_id, player.position.value)
+        return lookup
 
     # ------------------------------------------------------------------
     # Tracker feed
