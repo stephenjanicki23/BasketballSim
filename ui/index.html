@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Basketball Manager</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div id="boot">
+  <span class="label">Basketball Manager</span>
+  <p id="boot-status">Unpacking the season…</p>
+</div>
+
+<div id="app" hidden>
+  <header class="masthead">
+    <div class="wordmark">
+      <h1>Basketball Manager</h1>
+      <span class="label" id="season-label"></span>
+    </div>
+    <nav class="nav" role="tablist" aria-label="Views">
+      <button class="nav-tab is-active" role="tab" aria-selected="true" data-view="games">Games</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="stats">Stats</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
+    </nav>
+    <div class="league-bar" id="league-controls" hidden>
+      <span class="label">Sim date</span>
+      <span id="sim-date" class="sim-date">—</span>
+      <button id="adv-15" title="Advance the league clock 15 minutes">+15 min</button>
+      <button id="adv-day" title="Advance one day">+1 day</button>
+      <button id="adv-week" title="Advance one week">+1 week</button>
+      <button id="skip-next" title="Jump to the next tip-off">Skip to next tip-off</button>
+      <label class="label" for="league-speed">Tracker speed</label>
+      <select id="league-speed" aria-label="How fast a live game reveals">
+        <option value="1">Real time</option>
+        <option value="8">8×</option>
+        <option value="20" selected>20×</option>
+        <option value="60">60×</option>
+        <option value="240">240×</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- Games ------------------------------------------------------- -->
+  <section class="view games-layout" data-view="games" role="tabpanel" aria-label="Games">
+    <div class="card">
+      <div class="card-head">
+        <h2>Schedule</h2>
+        <span class="label">Final</span>
+      </div>
+      <ul id="schedule"></ul>
+    </div>
+
+    <div class="card">
+      <div class="scoreboard">
+        <div class="board-side away">
+          <span class="board-abbr" id="away-abbr">—</span>
+          <span class="board-city" id="away-city"></span>
+          <span class="board-score" id="away-score">0</span>
+        </div>
+        <div class="board-middle">
+          <span class="board-period" id="period">Q1</span>
+          <span class="board-clock" id="clock">12:00</span>
+          <span class="state-pill" id="game-state">Live</span>
+        </div>
+        <div class="board-side home">
+          <span class="board-abbr" id="home-abbr">—</span>
+          <span class="board-city" id="home-city"></span>
+          <span class="board-score" id="home-score">0</span>
+        </div>
+      </div>
+
+      <div id="no-detail" class="empty" hidden>
+        <p>This game was played earlier in the season.</p>
+        <p class="muted" id="no-detail-text">Only the most recent 30 games ship with full
+          play-by-play — a 870-game season of possession-by-possession data would be tens
+          of megabytes. Pick a game from the bottom of the schedule to watch one unfold.</p>
+      </div>
+
+      <div id="tracker-body">
+      <div class="transport">
+        <button id="play" aria-pressed="false"><span id="play-icon">▶</span><span id="play-text">Play</span></button>
+        <button id="restart" title="Back to tip-off">↺ Tip-off</button>
+        <button id="to-final">Jump to final</button>
+        <label class="label" for="speed">Speed</label>
+        <select id="speed" aria-label="Playback speed">
+          <option value="1">Real time</option>
+          <option value="8">8×</option>
+          <option value="30" selected>30×</option>
+          <option value="120">120×</option>
+        </select>
+        <span class="grow">
+          <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the game" />
+        </span>
+        <span id="tipoff-label"></span>
+      </div>
+
+      <div class="flow-wrap">
+        <div class="flow-head">
+          <div class="flow-legend">
+            <span class="label">Game flow</span>
+            <span class="legend-item"><span class="legend-swatch away"></span><span class="legend-text" id="flow-away-name">Away leads</span></span>
+            <span class="legend-item"><span class="legend-swatch home"></span><span class="legend-text" id="flow-home-name">Home leads</span></span>
+            <span id="flow-label"></span>
+          </div>
+          <span id="flow-readout"></span>
+        </div>
+        <svg id="flow" viewBox="0 0 1000 132" preserveAspectRatio="none" role="img"
+             aria-label="Score margin over the course of the game">
+          <defs>
+            <clipPath id="clip-above"><rect x="0" y="0" width="1000" height="66" /></clipPath>
+            <clipPath id="clip-below"><rect x="0" y="66" width="1000" height="66" /></clipPath>
+          </defs>
+          <g id="flow-periods"></g>
+          <path id="flow-home-area" d="" />
+          <path id="flow-away-area" d="" />
+          <path id="flow-zero" d="" />
+          <path id="flow-line" d="" />
+          <line id="flow-cursor" x1="0" x2="0" y1="0" y2="0" />
+        </svg>
+        <div style="display:flex;justify-content:flex-end"><span id="flow-peak"></span></div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Game detail">
+        <button class="tracker-tab is-active" role="tab" aria-selected="true" data-tab="pbp">Play-by-play</button>
+        <button class="tracker-tab" role="tab" aria-selected="false" data-tab="box">Box score</button>
+      </div>
+
+      <div id="pane-pbp"><ul id="feed"></ul></div>
+      <div id="pane-box" hidden><div id="box"></div></div>
+
+      </div>
+
+      <p class="note">
+        Every line above came out of the possession engine — shot selection from
+        ratings and tendencies, make probability from the shooter's edge over his
+        defender, assists, rebounds and fouls attributed to real players. The box
+        score is rebuilt live from that same event stream rather than read off a
+        stored total; <code>demo/verify.mjs</code> checks the rebuild against the
+        engine's own box score for all 30 games.
+      </p>
+    </div>
+  </section>
+
+  <!-- Stats -------------------------------------------------------- -->
+  <section class="view" data-view="stats" role="tabpanel" aria-label="Stats" hidden>
+    <div class="team-layout">
+      <div class="card">
+        <div class="card-head">
+          <h2>Season stats</h2>
+          <div class="stats-controls">
+            <span class="label" id="stats-caption"></span>
+            <div class="scope-toggle" id="stats-scope" role="group" aria-label="Players or teams">
+              <button data-scope="players" class="is-active">Players</button>
+              <button data-scope="teams">Teams</button>
+            </div>
+          </div>
+        </div>
+        <div class="stat-tabs" id="stat-tabs" role="tablist" aria-label="Sort by stat"></div>
+        <div class="sheet table-scroll">
+          <table id="stats-table"></table>
+        </div>
+        <p class="note">
+          Per-game averages over the full 870-game season, accumulated by the league
+          as each game finalises — not from the 30 games that ship with play-by-play.
+          Pick a tab to sort by that stat, or click any column header; click again to
+          reverse. Players need five games to qualify.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Standings --------------------------------------------------- -->
+  <section class="view" data-view="standings" role="tabpanel" aria-label="Standings" hidden>
+    <div class="team-layout">
+      <div class="card">
+        <div class="card-head">
+          <h2>Standings</h2>
+          <span class="label">One round robin</span>
+        </div>
+        <div class="sheet table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-rank">#</th>
+                <th class="col-name">Team</th>
+                <th>W</th><th>L</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th>
+              </tr>
+            </thead>
+            <tbody id="standings-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Teams ------------------------------------------------------- -->
+  <section class="view" data-view="teams" role="tabpanel" aria-label="Teams" hidden>
+    <div class="team-layout">
+      <div class="card">
+        <div class="card-head">
+          <h2>Tactics</h2>
+          <select id="team-picker" aria-label="Choose a team"></select>
+        </div>
+        <div class="tactics-grid" id="tactics"></div>
+        <p class="note">
+          These are the inputs the engine reads on every possession. Schemes carry
+          explicit effect tables — <strong>pace and space</strong> lifts three-point rate and
+          pushes tempo while thinning the offensive glass; <strong>drop coverage</strong> trades
+          three-point defense for rim protection. The sliders layer on top.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Head Coach</h2>
+          <span class="muted-line" id="coach-tag"></span>
+        </div>
+        <div class="coach-grid" id="coach-panel"></div>
+        <p class="note">
+          Every rating here is read somewhere in the simulation: offense and defense move
+          what each side shoots, tactics drives turnovers and how fully a scheme's effects
+          land, development sets how fast a player closes on his ceiling, leadership how
+          quickly a locker room gels, and the scouting eye how accurate the club's read on
+          potential is. <strong>Reputation is standing, not skill</strong> — it is drawn from the
+          visible ratings with noise, so a coach can be over- or underrated.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Squad</h2>
+          <div class="squad-controls">
+            <label class="scout-switch" for="scale-toggle">
+              <span>Scale</span>
+              <select id="scale-toggle" aria-label="Rating display scale">
+                <option value="20" selected>1–20</option>
+                <option value="100">0–100</option>
+              </select>
+            </label>
+            <label class="scout-switch">
+              <input type="checkbox" id="scout-toggle" />
+              <span>Show scouted attributes</span>
+            </label>
+          </div>
+        </div>
+        <div class="squad-layout">
+          <ul id="roster-list" class="roster-list"></ul>
+          <div class="profile">
+            <div class="profile-head">
+              <div>
+                <h3 id="profile-name">—</h3>
+                <p class="muted-line" id="profile-meta"></p>
+                <p class="bio-line" id="profile-bio"></p>
+              </div>
+              <div class="profile-badges">
+                <span class="chip"><span class="chip-label">Personality</span><span class="chip-value" id="profile-personality">—</span></span>
+                <span class="chip"><span class="chip-label">Rating</span><span class="chip-value" id="profile-stars">—</span></span>
+                <span class="chip"><span class="chip-label">Tier</span><span class="chip-value" id="profile-tier">—</span></span>
+                <span class="chip"><span class="chip-label">Archetype</span><span class="chip-value" id="profile-archetype">—</span></span>
+              </div>
+            </div>
+            <div id="attribute-groups" class="attr-grid"></div>
+            <div id="scouting" class="attr-grid scouting" hidden></div>
+          </div>
+        </div>
+        <p class="note">
+          81 visible attributes on a <strong>1–20 scale</strong>, Football Manager style:
+          20 is generational, 16–17 an All-Star, 12–13 an average starter, 10–11 a
+          rotation player, 4–5 G League. Twenty steps rather than a hundred so one
+          point means something — 14 → 15 is a real upgrade, and players come out
+          spiky rather than clustered. Hover any value for its tier. The
+          engine never reads one directly — <strong>composites</strong> blend them into the
+          ~25 numbers a possession turns on, so no single attribute dominates and
+          balance lives in one file. Tick <em>scouted attributes</em> to reveal his hidden Current and
+          Potential Ability (0–200) with a scout's estimate of each, the 14 hidden
+          attributes, and the composites his ratings add up to.
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="/app.js"></script>
+<script src="/source-live.js"></script>
+</body>
+</html>

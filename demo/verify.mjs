@@ -1,6 +1,6 @@
 /* Prove the page's box score is not fiction.
  *
- * demo/app.js rebuilds each box score by replaying the event stream. This
+ * ui/app.js rebuilds each box score by replaying the event stream. This
  * checks that rebuild against the box score the Python engine actually
  * produced, for every player in every exported game.
  *
@@ -12,7 +12,7 @@ import { gunzipSync } from "node:zlib";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { newBoxState, applyEvent } = require("./app.js");
+const { newBoxState, applyEvent } = require("../ui/app.js");
 
 const packed = readFileSync(new URL("./data.b64", import.meta.url), "utf8").trim();
 const data = JSON.parse(gunzipSync(Buffer.from(packed, "base64")).toString());

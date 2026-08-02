@@ -56,6 +56,8 @@ since that save are lost. Paying for Starter avoids both problems.
    — a redeploy leaves a season you have been playing exactly where it was.
 
 4. **Open the URL.** Render gives you `basketball-manager-xxxx.onrender.com`.
+   You get the whole app, not just the tracker: Games, Stats, Standings and
+   Teams, with the league-clock controls under the masthead.
 
 ## Adding your domain
 

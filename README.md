@@ -18,13 +18,37 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 191 tests
+python3 -m unittest discover -s tests    # 200 tests
 ```
 
-In the browser: the left column is the schedule, click any game to open the
-tracker. Use **+15 min** / **Skip to next tip-off** to push the league clock
-forward, and **Tracker speed** to control how fast the play-by-play reveals
-(1× is real time, 20× plays a game out in about two and a half minutes).
+In the browser: four tabs — **Games** (schedule and the live tracker),
+**Stats**, **Standings** and **Teams** (squads, player profiles, head coaches).
+The bar under the masthead drives the league clock: **+15 min / +1 day /
++1 week**, **Skip to next tip-off**, and **Tracker speed** for how fast the
+play-by-play reveals (1× is real time, 20× plays a game out in about two and a
+half minutes).
+
+### One interface, two places to run it
+
+`ui/` is the whole front end, and it runs unchanged in two places: the live app
+serves it and backs it with the API, and `demo/build.py` inlines it into a
+single published page with a season baked in. The only difference is where data
+comes from — `ui/source-live.js` fetches, `ui/source-static.js` reads the
+embedded payload — and both implement the same three calls. `bballsim/api/
+payload.py` builds the shapes for both, so the demo and the app cannot drift
+apart and a fix to one always reaches the other.
+
+Weight is split by how the app is used. The bootstrap is the schedule,
+standings and stats (330 KB, 41 KB gzipped); a squad — 12 players with 81
+attributes each — is fetched per team, and a game's play-by-play per game.
+Sending everything at once is about four megabytes of data most visits never
+open.
+
+One thing the split had to get right: the engine simulates a game in full at
+tip-off, so a live game's final score exists from the first second. Reporting
+it would put the result in the schedule rail while the tracker was still in the
+first quarter, so `game_summary` reports the score *as of the tracker clock*
+for a live game. Three tests hold that line.
 
 ## Hosting it
 
@@ -526,10 +550,14 @@ bballsim/
     stats.py       season totals -> per-game rates, for players and teams
     league.py      standings, the sim clock, tick(), the tracker feed
   api/server.py    stdlib HTTP: JSON API + static files
+  api/payload.py   the shapes the front end reads, shared by API and demo
   save.py          the file formats: stored values only, nothing derived
   roster.py        the one place anything asks for teams
   placeholder.py   THROWAWAY generator — ran once to build data/league.json
-web/               the tracker UI (vanilla JS, no build step)
+ui/                the whole front end (vanilla JS, no build step)
+  index.html       markup; styles.css; app.js
+  source-live.js   data from the API        (the running app)
+  source-static.js data from a baked payload (the published demo)
 data/league.json   who is in the league: 30 teams, 360 players, 30 coaches
 data/season.json   what has happened: 870 fixtures, and results
 tools/make_league.py, tools/make_season.py   built them (one-off)

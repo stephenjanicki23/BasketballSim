@@ -21,61 +21,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bballsim import composites as C
-from bballsim.ability import CA_MAX, CA_TIERS, scout
-from bballsim.chemistry import evaluate as evaluate_chemistry
-from bballsim.coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
+from bballsim.api.payload import (
+    EVENT_CODES,
+    bootstrap,
+    game_detail,
+    game_summary,
+    team_squad,
+)
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
-from bballsim.models import Lineup
-from bballsim.league.stats import STAT_COLUMNS
 from bballsim.roster import load_teams
 from bballsim.save import apply_season, read_season, season_exists
-from bballsim.ratings import (
-    ATTRIBUTE_GROUPS,
-    ATTRIBUTE_LABELS,
-    HiddenAttributes,
-    LEAGUE_AVERAGE,
-    RATING_TIERS,
-    SCALE_MAX,
-    SCALE_MIN,
-    Ratings,
-    display_name,
-)
-
-# The composites the engine actually reads. Exported alongside the raw
-# attributes so the page can show what a rating set adds up to.
-EXPORTED_COMPOSITES = {
-    "Rim finishing": C.shooting_rim,
-    "Paint scoring": C.shooting_paint,
-    "Mid-range": C.shooting_mid,
-    "Corner three": C.shooting_corner_three,
-    "Above the break": C.shooting_above_break_three,
-    "Shot creation": C.shot_creation,
-    "Shot selection": C.shot_quality,
-    "Playmaking": C.playmaking,
-    "Ball security": C.ball_security,
-    "Off-ball gravity": C.off_ball_gravity,
-    "Interior defense": C.interior_defense,
-    "Perimeter defense": C.perimeter_defense,
-    "Help defense": C.help_defense,
-    "Steal threat": C.steal_threat,
-    "Rim protection": C.block_threat,
-    "Offensive glass": C.offensive_rebounding,
-    "Defensive glass": C.defensive_rebounding,
-    "Foul avoidance": C.foul_avoidance,
-    "Endurance": C.endurance,
-    "Clutch": C.clutch,
-}
-
-# Event types, as small integers. Order must match EVENT_TYPES in the page.
-EVENT_CODES = [
-    "game_start", "period_start", "period_end", "jump_ball",
-    "shot_made", "shot_missed", "block", "assist", "rebound",
-    "turnover", "steal", "foul", "free_throw_made", "free_throw_missed",
-    "substitution", "timeout", "game_end",
-]
-CODE_BY_TYPE = {name: index for index, name in enumerate(EVENT_CODES)}
 
 
 # A 30-team round robin is 435 games. Shipping full play-by-play for all of
@@ -114,128 +70,17 @@ def build_season(team_count: int = 30) -> League:
     return league
 
 
-def export_team(league: League, team) -> dict:
-    lineup = Lineup(team.starters())
-    chemistry = evaluate_chemistry(team, lineup)
-    return {
-        "id": team.id,
-        "abbr": team.abbreviation,
-        "city": team.city,
-        "name": team.name,
-        "conference": team.conference,
-        "coach": team.coach.to_dict() if team.coach else None,
-        "chemistry": round(team.team_chemistry, 1),
-        "lineupChemistry": chemistry.to_dict(),
-        "tactics": team.tactics.to_dict(),
-        "players": [
-            {
-                "id": p.id,
-                "name": p.name,
-                "short": p.short_name,
-                "pos": p.position.value,
-                "age": p.age,
-                "height": p.height_inches,
-                "weight": p.weight_lbs,
-                "jersey": p.jersey,
-                "ovr": p.overall,
-                "stars": p.stars,
-                "potentialStars": p.potential_stars,
-                "height": p.height,
-                "bio": p.bio.to_dict(),
-                "personality": p.personality,
-                "tier": p.tier,
-                "archetype": p.archetype.label if p.archetype else None,
-                # Hidden in a real save; shipped so the demo can show what a
-                # scouting department would eventually work out.
-                "ability": p.ability.to_dict(),
-                "scouting": scout(p.ability, p.age, accuracy=0.65).to_dict(),
-                "ratings": {k: round(v, 1) for k, v in p.ratings.to_dict().items()},
-                "tendencies": {k: round(v, 1) for k, v in p.tendencies.to_dict().items()},
-                # Normally invisible. Shipped so the demo can show what a
-                # scouting report would eventually reveal.
-                "hidden": {k: round(v, 1) for k, v in p.hidden.to_dict().items()},
-                "composites": {k: round(fn(p), 1) for k, fn in EXPORTED_COMPOSITES.items()},
-            }
-            for p in team.players
-        ],
-    }
+def export_game(game, league, include_events: bool) -> dict:
+    """One fixture for the payload.
 
-
-# Flag bits packed into each event so the page can score it without re-deriving
-# engine logic: 1 = offensive rebound, 2 = three-point attempt, 4 = and-one
-# (the secondary player is the defender, not an assister).
-FLAG_OFFENSIVE_REBOUND = 1
-FLAG_THREE = 2
-FLAG_AND_ONE = 4
-
-
-def event_flags(event) -> int:
-    detail = event.detail
-    flags = 0
-    if detail.get("offensive"):
-        flags |= FLAG_OFFENSIVE_REBOUND
-    if str(detail.get("zone", "")).endswith("three"):
-        flags |= FLAG_THREE
-    if detail.get("and_one"):
-        flags |= FLAG_AND_ONE
-    return flags
-
-
-def export_game(game, league, include_events: bool = True) -> dict:
-    """One fixture. Without `include_events` this is just the result -- enough
-    for the schedule and standings, without the play-by-play weight."""
-    result = game.result
+    Without events this is just the result -- enough for the schedule rail and
+    the standings, without the play-by-play weight.
+    """
     if not include_events:
-        return {
-            "id": game.id,
-            "tipoff": game.tipoff_at.isoformat(),
-            "round": game.round_label,
-            "home": game.home_team_id,
-            "away": game.away_team_id,
-            "homeScore": result.home_score,
-            "awayScore": result.away_score,
-            "periods": result.periods_played,
-            "detailed": False,
-        }
-    return {
-        "detailed": True,
-        "id": game.id,
-        # Who tipped off, so the page can track minutes through substitutions.
-        "homeStarters": [p.id for p in league.teams[game.home_team_id].starters()],
-        "awayStarters": [p.id for p in league.teams[game.away_team_id].starters()],
-        "tipoff": game.tipoff_at.isoformat(),
-        "round": game.round_label,
-        "home": game.home_team_id,
-        "away": game.away_team_id,
-        "homeScore": result.home_score,
-        "awayScore": result.away_score,
-        "periods": result.periods_played,
-        "homeLine": result.home_box.points_by_period,
-        "awayLine": result.away_box.points_by_period,
-        "duration": round(result.duration_game_seconds, 1),
-        "homeBox": result.home_box.to_dict(),
-        "awayBox": result.away_box.to_dict(),
-        # [period, clock, gameSeconds, typeCode, description, homeScore,
-        #  awayScore, teamId, playerId, secondaryId, points, flags]
-        # so the page can rebuild the box score live from the same events.
-        "events": [
-            [
-                e.period,
-                e.clock,
-                round(e.game_seconds, 1),
-                CODE_BY_TYPE[e.type.value],
-                e.description,
-                e.home_score,
-                e.away_score,
-                e.team_id or "",
-                e.player_id or "",
-                e.secondary_player_id or "",
-                e.detail.get("points", 0),
-                event_flags(e),
-            ]
-            for e in result.events
-        ],
-    }
+        return game_summary(game)
+    # `revealed_only=False`: every game in the export has already finished, so
+    # there is no ending left to spoil.
+    return game_detail(game, league, revealed_only=False)
 
 
 def main() -> None:
@@ -244,46 +89,13 @@ def main() -> None:
     # Newest games get the full treatment; everything older is results only.
     detailed_ids = {g.id for g in finals[-DETAILED_GAMES:]}
 
-    payload = {
-        "league": {
-            "name": league.name,
-            "season": league.season,
-            "trackerSpeed": league.tracker_speed,
-        },
-        "eventTypes": EVENT_CODES,
-        "attributeGroups": {g: list(keys) for g, keys in ATTRIBUTE_GROUPS.items()},
-        "attributeLabels": ATTRIBUTE_LABELS,
-        "attributeNames": {k: display_name(k) for k in Ratings.attribute_names()},
-        "hiddenNames": {k: display_name(k) for k in HiddenAttributes.attribute_names()},
-        "compositeOrder": list(EXPORTED_COMPOSITES),
-        "coachScale": {
-            "max": COACH_MAX,
-            "labels": [[key, label] for key, label in COACH_RATING_LABELS],
-            "tiers": [[floor, label] for floor, label in COACH_TIERS],
-        },
-        "abilityScale": {
-            "max": CA_MAX,
-            "tiers": [[floor, label] for floor, label in CA_TIERS],
-        },
-        "scale": {
-            "min": SCALE_MIN,
-            "max": SCALE_MAX,
-            "average": LEAGUE_AVERAGE,
-            "tiers": [[floor, label] for floor, label in RATING_TIERS],
-        },
-        "teams": [export_team(league, t) for t in league.teams.values()],
-        "games": [export_game(g, league, g.id in detailed_ids) for g in finals],
-        "standings": league.standings_table(),
-        "statColumns": [
-            {"key": key, "label": label, "perGame": per_game}
-            for key, label, per_game in STAT_COLUMNS
-        ],
-        "playerStats": [
-            {k: v for k, v in row.items() if k != "totals"}
-            for row in league.stats.player_table(minimum_games=5)
-        ],
-        "teamStats": league.stats.team_table(),
-    }
+    # The same shapes the live API serves, from the same module -- so the
+    # published page and the app cannot drift apart.
+    payload = bootstrap(league, minimum_games=5)
+    payload["live"] = False
+    payload["league"]["trackerSpeed"] = league.tracker_speed
+    payload["teams"] = [team_squad(t) for t in league.teams.values()]
+    payload["games"] = [export_game(g, league, g.id in detailed_ids) for g in finals]
 
     raw = json.dumps(payload, separators=(",", ":")).encode()
     packed = base64.b64encode(gzip.compress(raw, 9)).decode()

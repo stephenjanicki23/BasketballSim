@@ -19,6 +19,7 @@ thing it touches.
 
 from __future__ import annotations
 
+import gzip
 import json
 import mimetypes
 import signal
@@ -31,8 +32,9 @@ from urllib.parse import parse_qs, urlparse
 from ..league.calendar import GameStatus
 from ..league.league import League
 from ..league.stats import STAT_COLUMNS
+from . import payload as views
 
-WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
+WEB_ROOT = Path(__file__).resolve().parents[2] / "ui"
 
 
 class ApiHandler(BaseHTTPRequestHandler):
@@ -50,8 +52,16 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, payload, status: int = 200) -> None:
         body = json.dumps(payload).encode()
+        headers = {"Content-Type": "application/json"}
+        # The bootstrap and a squad are hundreds of kilobytes of repetitive
+        # JSON; over a real network that is the difference between instant and
+        # sluggish. Compressed only when it is worth it and only when asked.
+        if len(body) > 1024 and "gzip" in self.headers.get("Accept-Encoding", ""):
+            body = gzip.compress(body, 6)
+            headers["Content-Encoding"] = "gzip"
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        for key, value in headers.items():
+            self.send_header(key, value)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -128,11 +138,25 @@ class ApiHandler(BaseHTTPRequestHandler):
         league = self.league
         parts = [p for p in path.split("/") if p][1:]  # drop "api"
 
-        if parts == ["league"]:
+        if parts == ["bootstrap"]:
+            # Everything every screen needs, in one round trip. Rosters and
+            # play-by-play are deliberately not in here; they are fetched as
+            # they are opened.
+            minimum = int(query.get("min_games", ["1"])[0])
+            self._send_json(views.bootstrap(league, minimum_games=minimum))
+
+        elif parts == ["league"]:
             self._send_json(league.to_dict())
 
         elif parts == ["teams"]:
             self._send_json([t.to_dict() for t in league.teams.values()])
+
+        elif len(parts) == 3 and parts[0] == "teams" and parts[2] == "squad":
+            team = league.teams.get(parts[1])
+            if team is None:
+                self._send_json({"error": "team not found"}, 404)
+            else:
+                self._send_json(views.team_squad(team))
 
         elif len(parts) == 2 and parts[0] == "teams":
             team = league.teams.get(parts[1])
@@ -184,6 +208,13 @@ class ApiHandler(BaseHTTPRequestHandler):
             else:
                 include = game.status == GameStatus.FINAL
                 self._send_json(game.to_dict(include_result=include))
+
+        elif len(parts) == 3 and parts[0] == "games" and parts[2] == "detail":
+            game = league.game(parts[1])
+            if game is None:
+                self._send_json({"error": "game not found"}, 404)
+            else:
+                self._send_json(views.game_detail(game, league))
 
         elif len(parts) == 3 and parts[0] == "games" and parts[2] == "feed":
             game = league.game(parts[1])

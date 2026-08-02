@@ -23,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from bballsim.api import payload as views
 from bballsim.api.server import serve
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
@@ -230,3 +231,108 @@ class TestSeedingAMountedDisk(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPayloadShapes(unittest.TestCase):
+    """The API and the published demo read the same shapes from the same
+    module. These check the contract the front end depends on."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.league = a_league()
+
+    def test_bootstrap_carries_every_screen_but_no_rosters(self):
+        data = views.bootstrap(self.league)
+        for key in ("league", "teams", "games", "standings", "playerStats",
+                    "teamStats", "statColumns", "attributeGroups", "scale",
+                    "coachScale", "eventTypes"):
+            self.assertIn(key, data, key)
+        # Rosters and play-by-play are fetched as they are opened; carrying
+        # them here is about four megabytes nobody asked for.
+        for team in data["teams"]:
+            self.assertNotIn("players", team)
+        for game in data["games"]:
+            self.assertNotIn("events", game)
+        self.assertTrue(data["live"])
+
+    def test_a_squad_carries_ratings_composites_and_a_coach(self):
+        team = next(iter(self.league.teams.values()))
+        squad = views.team_squad(team)
+        self.assertEqual(len(squad["players"]), len(team.players))
+        player = squad["players"][0]
+        for key in ("ratings", "tendencies", "hidden", "composites", "ability",
+                    "bio", "stars", "tier", "archetype"):
+            self.assertIn(key, player, key)
+        self.assertEqual(len(player["ratings"]), 81)
+        self.assertIsNotNone(squad["coach"])
+
+    def test_a_summary_never_claims_to_carry_play_by_play(self):
+        """`detailed` means "events are in this object", not "events exist"."""
+        game = self.league.schedule[0]
+        self.assertFalse(views.game_summary(game, self.league)["detailed"])
+
+
+class TestALiveGameDoesNotLeakItsEnding(unittest.TestCase):
+    """The engine simulates a game in full at tip-off, so the final score is
+    known from the first second. Reporting it would put the result in the
+    schedule rail while the tracker is still in the first quarter."""
+
+    def setUp(self):
+        self.league = a_league()
+        first = self.league.schedule[0]
+        self.league.clock.jump_to(first.tipoff_at + timedelta(seconds=20))
+        self.league.tick()
+        self.game = first
+        self.assertEqual(self.game.status, GameStatus.LIVE)
+
+    def test_the_schedule_score_matches_the_revealed_play_by_play(self):
+        summary = views.game_summary(self.game, self.league)
+        detail = views.game_detail(self.game, self.league)
+        events = detail["events"]
+        self.assertGreater(len(events), 0, "nothing revealed -- the test proved nothing")
+        self.assertLess(len(events), len(self.game.result.events),
+                        "the whole game was revealed; this cannot detect a leak")
+        # Event row: [period, clock, seconds, type, desc, home, away, ...]
+        self.assertEqual(summary["homeScore"], events[-1][5])
+        self.assertEqual(summary["awayScore"], events[-1][6])
+
+    def test_the_final_score_is_not_reported_early(self):
+        summary = views.game_summary(self.game, self.league)
+        final = (self.game.result.home_score, self.game.result.away_score)
+        self.assertNotEqual((summary["homeScore"], summary["awayScore"]), final)
+
+    def test_a_finished_game_reports_its_final_score(self):
+        self.league.clock.advance(timedelta(days=1))
+        self.league.tick()
+        self.assertEqual(self.game.status, GameStatus.FINAL)
+        summary = views.game_summary(self.game, self.league)
+        self.assertEqual(summary["homeScore"], self.game.result.home_score)
+        self.assertEqual(summary["awayScore"], self.game.result.away_score)
+
+
+class TestTheAppServesTheWholeSite(unittest.TestCase):
+    def test_the_page_and_its_assets_are_served(self):
+        with RunningServer(a_league()) as server:
+            for path in ("/", "/app.js", "/styles.css", "/source-live.js", "/favicon.svg"):
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.port}{path}", timeout=10
+                ) as response:
+                    self.assertEqual(response.status, 200, path)
+
+    def test_the_page_loads_the_live_source_not_the_static_one(self):
+        with RunningServer(a_league()) as server:
+            with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/", timeout=10) as r:
+                html = r.read().decode()
+            self.assertIn("source-live.js", html)
+            self.assertNotIn("source-static.js", html)
+
+    def test_large_json_is_compressed_when_asked(self):
+        with RunningServer(a_league()) as server:
+            url = f"http://127.0.0.1:{server.port}/api/bootstrap"
+            request = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                self.assertEqual(response.headers.get("Content-Encoding"), "gzip")
+                packed = len(response.read())
+            with urllib.request.urlopen(url, timeout=10) as response:
+                plain = len(response.read())
+            self.assertLess(packed, plain / 2, "compression is not earning its keep")

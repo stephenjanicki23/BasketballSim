@@ -1,0 +1,42 @@
+/* Data source: the hosted static demo.
+ *
+ * The Python engine cannot run on a published page, so a whole season is
+ * simulated ahead of time and baked into the document as one gzipped payload.
+ * Everything is already here -- squads, box scores, every event -- so the
+ * "fetches" below are lookups.
+ *
+ * This is one of two implementations of the same contract; the other is
+ * source-live.js, talking to the API. app.js does not know which it has.
+ */
+
+window.BBALL_SOURCE = {
+  live: false,
+
+  async load() {
+    const packed = document.getElementById("payload").textContent.trim();
+    if (typeof DecompressionStream !== "function") {
+      throw new Error("this browser can't unpack the season data (needs DecompressionStream)");
+    }
+    const binary = atob(packed);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    const data = await new Response(stream).json();
+    this._data = data;
+    return data;
+  },
+
+  // Already in the payload, events and all.
+  async gameDetail(gameId) {
+    return this._data.games.find((g) => g.id === gameId) || null;
+  },
+
+  async squad(teamId) {
+    return this._data.teams.find((t) => t.id === teamId) || null;
+  },
+
+  // A published page has no server to talk to; the league clock is fixed.
+  async command() {
+    return null;
+  },
+};

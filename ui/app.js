@@ -1,11 +1,13 @@
-/* Basketball Manager — hosted tracker demo.
+/* Basketball Manager — the user interface.
  *
- * The Python engine cannot run on a static page, so the whole mini-season is
- * simulated ahead of time and shipped as one gzipped payload. Everything you
- * see here is replayed from those events: the play-by-play is the engine's
- * output verbatim, and the box score is rebuilt from the same event stream
- * rather than read off a stored total (demo/verify.mjs checks the rebuild
- * against the engine's own box score for every game).
+ * One UI, two places to run: the live app, served by the Python API, and the
+ * published static page, where a whole season is baked into the document. The
+ * only difference is where data comes from, which is behind `state.source`
+ * (see source-live.js and source-static.js). Everything below is shared.
+ *
+ * The box score is rebuilt from the event stream rather than read off a stored
+ * total — demo/verify.mjs checks that rebuild against the engine's own box
+ * score for every game in the published payload.
  */
 
 const EV = {
@@ -214,6 +216,10 @@ const state = {
   statsDescending: true,
   lastTick: 0,
   frame: null,
+  // Set at boot: where data comes from, and (live only) the poller watching a
+  // game that is still being played.
+  source: null,
+  livePoll: null,
 };
 
 const REDUCED_MOTION = typeof matchMedia === "function"
@@ -234,34 +240,27 @@ function el(tag, className, text) {
  * ------------------------------------------------------------------ */
 
 async function boot() {
-  const packed = document.getElementById("payload").textContent.trim();
   const status = $("#boot-status");
-
-  if (typeof DecompressionStream !== "function") {
-    status.textContent = "This browser can't unpack the season data (needs DecompressionStream).";
+  state.source = window.BBALL_SOURCE;
+  if (!state.source) {
+    status.textContent = "No data source loaded.";
     return;
   }
 
   try {
-    const binary = atob(packed);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-    state.data = await new Response(stream).json();
+    state.data = await state.source.load();
   } catch (error) {
-    status.textContent = `Couldn't unpack the season data: ${error.message}`;
+    status.textContent = `Couldn't load the season: ${error.message}`;
     return;
   }
 
-  for (const team of state.data.teams) {
-    state.teams.set(team.id, team);
-    for (const player of team.players) state.players.set(player.id, player);
-  }
+  indexTeams(state.data.teams);
   state.teamId = state.data.teams[0].id;
 
   $("#boot").remove();
   $("#app").hidden = false;
-  $("#season-label").textContent = `${state.data.league.season} · ${state.data.games.length} games`;
+  document.body.classList.toggle("is-live", Boolean(state.data.live));
+  renderSeasonLabel();
 
   renderSchedule();
   renderStandings();
@@ -269,8 +268,43 @@ async function boot() {
   buildStatTabs();
   renderStats();
   bindControls();
+  if (state.data.live) bindLeagueControls();
 
-  selectGame(state.data.games[state.data.games.length - 1].id);
+  // Open the most interesting game: one in progress, else the last one played,
+  // else the next one up.
+  const games = state.data.games;
+  const live = games.find((g) => g.status === "live");
+  const played = [...games].reverse().find((g) => g.homeScore !== undefined);
+  const target = live || played || games[games.length - 1];
+  if (target) selectGame(target.id);
+}
+
+/* Teams arrive with squads baked in on the static page and without them from
+ * the API, where a squad is fetched per team. Either way they are indexed the
+ * same, and `squadFor` is what the squad screen goes through. */
+function indexTeams(teams) {
+  for (const team of teams) {
+    const existing = state.teams.get(team.id);
+    state.teams.set(team.id, Object.assign(existing || {}, team));
+    for (const player of team.players || []) state.players.set(player.id, player);
+  }
+}
+
+async function squadFor(teamId) {
+  const team = state.teams.get(teamId);
+  if (team && team.players) return team;
+  const loaded = await state.source.squad(teamId);
+  if (loaded) indexTeams([loaded]);
+  return state.teams.get(teamId);
+}
+
+function renderSeasonLabel() {
+  const games = state.data.games;
+  const played = games.filter((g) => g.homeScore !== undefined).length;
+  const label = state.data.live
+    ? `${state.data.league.season} · ${played} of ${games.length} played`
+    : `${state.data.league.season} · ${games.length} games`;
+  $("#season-label").textContent = label;
 }
 
 /* ------------------------------------------------------------------ *
@@ -297,16 +331,21 @@ function renderSchedule() {
 
     const home = state.teams.get(game.home);
     const away = state.teams.get(game.away);
-    const homeWon = game.homeScore > game.awayScore;
+    const played = game.homeScore !== undefined;
+    const homeWon = played && game.homeScore > game.awayScore;
 
     const row = el("li", "fixture");
     row.tabIndex = 0;
     row.dataset.gameId = game.id;
     row.setAttribute("role", "button");
-    row.setAttribute("aria-label",
-      `${away.city} ${away.name} at ${home.city} ${home.name}, final ${game.awayScore} to ${game.homeScore}`);
+    row.setAttribute("aria-label", played
+      ? `${away.city} ${away.name} at ${home.city} ${home.name}, final ${game.awayScore} to ${game.homeScore}`
+      : `${away.city} ${away.name} at ${home.city} ${home.name}, not yet played`);
 
-    for (const [team, score, won] of [[away, game.awayScore, !homeWon], [home, game.homeScore, homeWon]]) {
+    const sides = played
+      ? [[away, game.awayScore, !homeWon], [home, game.homeScore, homeWon]]
+      : [[away, "", false], [home, "", false]];
+    for (const [team, score, won] of sides) {
       const side = el("span", `fixture-side${won ? " is-winner" : ""}`);
       side.appendChild(el("span", "fixture-abbr", team.abbr));
       side.appendChild(el("span", "fixture-team", team.name));
@@ -314,7 +353,9 @@ function renderSchedule() {
       row.appendChild(side);
     }
 
-    if (!game.detailed) row.classList.add("is-result-only");
+    if (game.status === "live") row.classList.add("is-live-fixture");
+    else if (!played) row.classList.add("is-upcoming");
+    else if (!game.detailed) row.classList.add("is-result-only");
 
     const open = () => selectGame(game.id);
     row.addEventListener("click", open);
@@ -329,12 +370,28 @@ function renderSchedule() {
  * Tracker
  * ------------------------------------------------------------------ */
 
-function selectGame(gameId) {
-  const game = state.data.games.find((g) => g.id === gameId);
+async function selectGame(gameId) {
+  let game = state.data.games.find((g) => g.id === gameId);
   if (!game) return;
 
   stopPlayback();
+  stopLivePolling();
   state.gameId = gameId;
+
+  // On the static page the events are already here. Live they are fetched per
+  // game -- 870 fixtures' worth would be tens of megabytes, and a game
+  // restored from a save has a box score but no play-by-play at all.
+  if (!game.events && game.homeScore !== undefined) {
+    const detail = await state.source.gameDetail(gameId);
+    // A slower fetch must not overwrite a game the user has since clicked past.
+    if (state.gameId !== gameId) return;
+    if (detail) {
+      game = Object.assign(game, detail);
+      const index = state.data.games.findIndex((g) => g.id === gameId);
+      if (index >= 0) state.data.games[index] = game;
+    }
+  }
+
   state.game = game;
   state.playhead = 0;
   state.cursor = 0;
@@ -359,25 +416,39 @@ function selectGame(gameId) {
 
   setView("games");
 
-  const detailed = Boolean(game.detailed);
+  const detailed = Boolean(game.detailed && game.events && game.events.length);
   $("#tracker-body").hidden = !detailed;
   $("#no-detail").hidden = detailed;
   if (!detailed) {
-    const home = state.teams.get(game.home);
-    const away = state.teams.get(game.away);
-    $("#away-score").textContent = String(game.awayScore);
-    $("#home-score").textContent = String(game.homeScore);
-    $("#period").textContent = "FT";
-    $("#clock").textContent = "00.0";
-    $("#game-state").textContent = "Final";
-    $("#game-state").classList.remove("is-live");
-    $("#away-abbr").parentElement.classList.toggle("is-leading", game.awayScore > game.homeScore);
-    $("#home-abbr").parentElement.classList.toggle("is-leading", game.homeScore > game.awayScore);
+    showResultOnly(game);
     return;
   }
 
   renderTracker();
   startPlayback();
+  // A game in progress keeps arriving. Poll for the rest of it.
+  if (game.live) startLivePolling(gameId);
+}
+
+/* No play-by-play to show: a fixture that has not tipped off, or a finished
+ * game restored from a save, which keeps its box score but not its commentary. */
+function showResultOnly(game) {
+  const played = game.homeScore !== undefined;
+  $("#away-score").textContent = played ? String(game.awayScore) : "–";
+  $("#home-score").textContent = played ? String(game.homeScore) : "–";
+  $("#period").textContent = played ? "FT" : "—";
+  $("#clock").textContent = played ? "00.0" : "12:00";
+  $("#game-state").textContent = played ? "Final" : "Scheduled";
+  $("#game-state").classList.remove("is-live");
+  $("#away-abbr").parentElement.classList.toggle("is-leading", played && game.awayScore > game.homeScore);
+  $("#home-abbr").parentElement.classList.toggle("is-leading", played && game.homeScore > game.awayScore);
+
+  const note = $("#no-detail-text");
+  if (note) {
+    note.textContent = played
+      ? "This game finished before the app was last restarted. Box scores are saved; the play-by-play is not — a full season of it is about 90MB."
+      : "This game has not tipped off yet. Advance the league clock to play it.";
+  }
 }
 
 function revealedEvents() {
@@ -926,8 +997,9 @@ function renderTeams() {
   renderTeamDetail();
 }
 
-function renderTeamDetail() {
-  const team = state.teams.get(state.teamId);
+async function renderTeamDetail() {
+  const team = await squadFor(state.teamId);
+  if (!team || state.teamId !== team.id) return;
 
   // --- tactics ---------------------------------------------------------
   const tactics = $("#tactics");
@@ -1296,4 +1368,128 @@ function bindControls() {
 // box-score rebuild without a DOM.
 if (typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", boot);
+}
+
+/* ------------------------------------------------------------------ *
+ * Live app only: the league clock, and games that are still arriving.
+ *
+ * None of this exists on the published page -- there is no server to ask, and
+ * the season there is already over. `state.data.live` gates all of it.
+ * ------------------------------------------------------------------ */
+
+function stopLivePolling() {
+  if (state.livePoll) {
+    clearInterval(state.livePoll);
+    state.livePoll = null;
+  }
+}
+
+function startLivePolling(gameId) {
+  stopLivePolling();
+  state.livePoll = setInterval(async () => {
+    if (state.gameId !== gameId) { stopLivePolling(); return; }
+    const detail = await state.source.gameDetail(gameId);
+    if (!detail || state.gameId !== gameId) return;
+
+    const known = (state.game.events || []).length;
+    const arrived = (detail.events || []).length;
+    if (arrived > known) {
+      // Appending rather than replacing keeps the playhead and the rebuilt box
+      // score intact -- restarting the game every three seconds would be
+      // unwatchable.
+      state.game.events = detail.events;
+      state.game.duration = detail.duration;
+      state.game.homeScore = detail.homeScore;
+      state.game.awayScore = detail.awayScore;
+      if (!state.playing) advanceTo(state.playhead);
+    }
+    if (!detail.live) {
+      stopLivePolling();
+      state.game.live = false;
+      refreshLeague({ quiet: true });
+    }
+  }, 3000);
+}
+
+/* Pull the league back down after the clock moves: new results, new standings,
+ * new stats. The schedule rail is rebuilt, the open game is left alone. */
+async function refreshLeague({ quiet = false } = {}) {
+  const data = await state.source.load();
+  const openId = state.gameId;
+  // Carry across any play-by-play already fetched, so switching back to a game
+  // does not re-download it.
+  const cached = new Map(state.data.games.filter((g) => g.events).map((g) => [g.id, g]));
+  state.data = data;
+  state.data.games = data.games.map((g) => {
+    const previous = cached.get(g.id);
+    return previous && !previous.live ? Object.assign(previous, g) : g;
+  });
+
+  indexTeams(data.teams);
+  renderSeasonLabel();
+  renderSchedule();
+  renderStandings();
+  renderStats();
+  updateClockLabel();
+  if (openId && !quiet) selectGame(openId);
+  else if (openId) markSelectedFixture(openId);
+}
+
+function markSelectedFixture(gameId) {
+  $$(".fixture").forEach((row) => {
+    row.classList.toggle("is-selected", row.dataset.gameId === gameId);
+  });
+}
+
+function updateClockLabel() {
+  const label = $("#sim-date");
+  if (!label || !state.data.league.now) return;
+  label.textContent = new Date(state.data.league.now).toLocaleDateString(undefined, {
+    weekday: "short", year: "numeric", month: "short", day: "numeric",
+  });
+}
+
+function bindLeagueControls() {
+  const bar = $("#league-controls");
+  if (bar) bar.hidden = false;
+  updateClockLabel();
+
+  const run = async (button, action) => {
+    button.disabled = true;
+    try {
+      await action();
+      await refreshLeague({ quiet: true });
+    } catch (error) {
+      console.warn("clock command failed", error);
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  const advance = (selector, body) => {
+    const button = $(selector);
+    if (!button) return;
+    button.addEventListener("click", () => run(button, () =>
+      state.source.command("clock/advance", body)));
+  };
+
+  advance("#adv-15", { minutes: 15 });
+  advance("#adv-day", { days: 1 });
+  advance("#adv-week", { days: 7 });
+
+  const skip = $("#skip-next");
+  if (skip) {
+    skip.addEventListener("click", () => run(skip, async () => {
+      const result = await state.source.command("clock/skip-to-next", {});
+      if (result && result.game_id) state.pendingGameId = result.game_id;
+    }));
+  }
+
+  const speed = $("#league-speed");
+  if (speed) {
+    speed.value = String(state.data.league.trackerSpeed || 20);
+    speed.addEventListener("change", async () => {
+      await state.source.command("clock/speed", { speed: Number(speed.value) });
+    });
+  }
 }
