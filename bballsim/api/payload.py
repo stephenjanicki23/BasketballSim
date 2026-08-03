@@ -24,7 +24,7 @@ from .. import composites as C
 from ..ability import CA_MAX, CA_TIERS, scout, stars_from_rating
 from ..chemistry import evaluate as evaluate_chemistry
 from ..coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
-from ..league.calendar import GameStatus
+from ..league.calendar import PACIFIC, GameStatus
 from ..league.stats import STAT_COLUMNS
 from ..models import Lineup
 from ..ratings import (
@@ -271,6 +271,94 @@ def game_summary(game, league=None) -> dict:
     return data
 
 
+LEADER_STATS = (("points", "PTS"), ("assists", "AST"), ("rebounds", "REB"))
+
+
+def team_leaders(league, team_id: str) -> dict:
+    """A team's record and its per-game leaders in points, assists, rebounds.
+
+    Early in a season nobody has a stat line, and a preview of three blanks
+    tells a manager nothing. So a team that has not played yet falls back to
+    its best-rated player, *labelled as such* -- `basis` is "played" or
+    "rated". Dressing a rating up as a scoring average would be worse than
+    showing nothing.
+    """
+    row = league.standings.get(team_id)
+    record = {
+        "wins": row.wins if row else 0,
+        "losses": row.losses if row else 0,
+        "games": row.games_played if row else 0,
+    }
+
+    lines = [line for line in league.stats.players.values()
+             if line.team_id == team_id and line.games > 0]
+    if not lines:
+        team = league.teams.get(team_id)
+        best = max(team.players, key=lambda p: p.current_ability) if team and team.players else None
+        return {
+            **record,
+            "basis": "rated",
+            "leaders": [] if best is None else [{
+                "stat": "TOP", "label": "Top rated",
+                "name": best.short_name, "value": best.stars, "unit": "stars",
+            }],
+        }
+
+    leaders = []
+    for key, label in LEADER_STATS:
+        best = max(lines, key=lambda line: line.per_game(key))
+        leaders.append({
+            "stat": label,
+            "label": label,
+            "name": best.name,
+            "value": round(best.per_game(key), 1),
+            "unit": "pg",
+        })
+    return {**record, "basis": "played", "leaders": leaders}
+
+
+def game_preview(game, league) -> dict:
+    """A fixture with both sides' records and stat leaders attached."""
+    data = game_summary(game, league)
+    data["preview"] = {
+        "home": team_leaders(league, game.home_team_id),
+        "away": team_leaders(league, game.away_team_id),
+    }
+    return data
+
+
+def focus_day(league):
+    """Which day the schedule shows: today, or the last day that has games.
+
+    The live app sits inside its season, so "today" is the sim clock's date.
+    A finished season -- the published demo, or a league played out to the end
+    -- has no games today, and an empty schedule would be a worse answer than
+    the last day that was actually played.
+    """
+    today = league.clock.now().astimezone(PACIFIC).date()
+    days = sorted({g.tipoff_at.astimezone(PACIFIC).date() for g in league.schedule})
+    if not days:
+        return today
+    if today in days:
+        return today
+    past = [d for d in days if d < today]
+    return past[-1] if past else days[0]
+
+
+def day_schedule(league, day=None) -> dict:
+    """One day's fixtures, each with a preview. This is the schedule rail."""
+    day = day or focus_day(league)
+    games = [
+        g for g in league.schedule
+        if g.tipoff_at.astimezone(PACIFIC).date() == day
+    ]
+    return {
+        "date": day.isoformat(),
+        "label": day.strftime("%A %-d %B %Y"),
+        "games": [game_preview(g, league) for g in games],
+    }
+
+
 def game_detail(game, league, revealed_only: bool = True) -> dict:
     """One game with everything the tracker needs.
 
@@ -321,7 +409,13 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
         },
         "live": True,
         "teams": [team_summary(t) for t in league.teams.values()],
-        "games": [game_summary(g, league) for g in league.schedule],
+        # The schedule shows one day. Sending all 1,230 fixtures to render 45
+        # of them was most of the bootstrap's weight.
+        "day": day_schedule(league),
+        "season_totals": {
+            "fixtures": len(league.schedule),
+            "played": sum(1 for g in league.schedule if g.status == GameStatus.FINAL),
+        },
         "standings": league.standings_table(),
         "playerStats": [
             {k: v for k, v in row.items() if k != "totals"}

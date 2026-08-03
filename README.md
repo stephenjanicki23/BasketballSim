@@ -18,10 +18,10 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 233 tests
+python3 -m unittest discover -s tests    # 243 tests
 ```
 
-In the browser: four tabs — **Games** (schedule and the live tracker),
+In the browser: four tabs — **Games** (today's slate and the live tracker),
 **Stats**, **Standings** and **Teams** (squads, player profiles, head coaches).
 The bar under the masthead drives the league clock: **+15 min / +1 day /
 +1 week**, **Skip to next tip-off**, and **Tracker speed** for how fast the
@@ -38,11 +38,31 @@ embedded payload — and both implement the same three calls. `bballsim/api/
 payload.py` builds the shapes for both, so the demo and the app cannot drift
 apart and a fix to one always reaches the other.
 
-Weight is split by how the app is used. The bootstrap is the schedule,
-standings and stats (330 KB, 41 KB gzipped); a squad — 12 players with 81
-attributes each — is fetched per team, and a game's play-by-play per game.
-Sending everything at once is about four megabytes of data most visits never
-open.
+Weight is split by how the app is used. The bootstrap is **one day's**
+fixtures, the standings and the stats (248 KB, ~35 KB gzipped); a squad — 12
+players with 81 attributes each — is fetched per team, and a game's
+play-by-play per game. Sending everything at once is about four megabytes of
+data most visits never open.
+
+### The schedule is today
+
+The Games rail lists **today's fixtures only** — 45 of them, grouped by the
+8am, 1pm and 7pm Pacific slates — and each one carries a preview: both teams'
+records, and who leads each side in points, assists and rebounds per game.
+Tip-off times are rendered in **Pacific**, not the viewer's zone: the slates are
+*defined* as 8/1/7 Pacific, and showing "3:00 PM, 8:00 PM, 2:00 AM" to someone
+on UTC describes the same moments and communicates nothing.
+
+Two cases the preview has to handle:
+
+- **Nothing played yet.** On opening day there are no averages, and three
+  zeroes would be a lie. A team without games falls back to its best-rated
+  player, labelled *Top rated* with a star rating — the payload marks it
+  `basis: "rated"` so the front end never mistakes one for the other.
+- **A finished season.** The published demo's clock sits past the end of its
+  schedule, so "today" has no games. `focus_day` falls back to the last day
+  that was played rather than showing an empty rail — which is also why the
+  demo ships play-by-play for exactly the fixtures on the day it displays.
 
 One thing the split had to get right: the engine simulates a game in full at
 tip-off, so a live game's final score exists from the first second. Reporting

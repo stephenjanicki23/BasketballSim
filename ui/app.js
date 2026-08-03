@@ -275,7 +275,7 @@ async function boot() {
 
   // Open the most interesting game: one in progress, else the last one played,
   // else the next one up.
-  const games = state.data.games;
+  const games = dayGames();
   const live = games.find((g) => g.status === "live");
   const played = [...games].reverse().find((g) => g.homeScore !== undefined);
   const target = live || played || games[games.length - 1];
@@ -285,6 +285,10 @@ async function boot() {
 /* Teams arrive with squads baked in on the static page and without them from
  * the API, where a squad is fetched per team. Either way they are indexed the
  * same, and `squadFor` is what the squad screen goes through. */
+function dayGames() {
+  return (state.data.day && state.data.day.games) || [];
+}
+
 function indexTeams(teams) {
   for (const team of teams) {
     const existing = state.teams.get(team.id);
@@ -302,11 +306,12 @@ async function squadFor(teamId) {
 }
 
 function renderSeasonLabel() {
-  const games = state.data.games;
-  const played = games.filter((g) => g.homeScore !== undefined).length;
+  // Season-wide counts, not the day's -- the schedule shows one day, but the
+  // masthead is about the season.
+  const totals = state.data.season_totals || { fixtures: dayGames().length, played: 0 };
   const label = state.data.live
-    ? `${state.data.league.season} · ${played} of ${games.length} played`
-    : `${state.data.league.season} · ${games.length} games`;
+    ? `${state.data.league.season} · ${totals.played} of ${totals.fixtures} played`
+    : `${state.data.league.season} · ${totals.fixtures} games`;
   $("#season-label").textContent = label;
 }
 
@@ -320,15 +325,67 @@ function gameDate(game) {
   });
 }
 
+/* Tip-offs are shown in Pacific, not the viewer's zone. The league's slates
+ * are *defined* as 8am, 1pm and 7pm Pacific; rendering them locally turns that
+ * into "3:00 PM, 8:00 PM, 2:00 AM" for anyone on UTC, which describes the same
+ * moment and communicates nothing. */
+const LEAGUE_TIME_ZONE = "America/Los_Angeles";
+
+function tipoffTime(game) {
+  const time = new Date(game.tipoff).toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", timeZone: LEAGUE_TIME_ZONE,
+  });
+  return `${time} PT`;
+}
+
+/* One team's line in a preview: record, then who leads it in points, assists
+ * and rebounds this season. */
+function previewSide(team, side) {
+  const wrap = el("div", "preview-side");
+
+  const head = el("div", "preview-team");
+  head.appendChild(el("span", "fixture-abbr", team.abbr));
+  head.appendChild(el("span", "preview-record", `${side.wins}-${side.losses}`));
+  wrap.appendChild(head);
+
+  if (!side.leaders.length) {
+    wrap.appendChild(el("div", "preview-empty", "No squad data"));
+    return wrap;
+  }
+
+  for (const leader of side.leaders) {
+    const row = el("div", "preview-stat");
+    row.appendChild(el("span", "preview-label", leader.label));
+    row.appendChild(el("span", "preview-name", leader.name));
+    row.appendChild(el("span", "preview-value",
+      leader.unit === "stars" ? `${leader.value}★` : leader.value.toFixed(1)));
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+/* The schedule is one day's slate. Every fixture carries a preview: both
+ * records, and each side's scoring, assist and rebounding leader. Before a
+ * team has played, there are no averages to show, so the preview falls back to
+ * its best-rated player and says so rather than printing three zeroes. */
 function renderSchedule() {
   const rail = $("#schedule");
   rail.textContent = "";
-  let currentDate = null;
+  const games = dayGames();
 
-  for (const game of state.data.games) {
-    const label = gameDate(game);
-    if (label !== currentDate) {
-      currentDate = label;
+  const heading = $("#schedule-day");
+  if (heading) heading.textContent = state.data.day ? state.data.day.label : "";
+
+  if (!games.length) {
+    rail.appendChild(el("li", "rail-empty", "No games scheduled today."));
+    return;
+  }
+
+  let currentSlot = null;
+  for (const game of games) {
+    const label = tipoffTime(game);
+    if (label !== currentSlot) {
+      currentSlot = label;
       rail.appendChild(el("li", "rail-date", label));
     }
 
@@ -356,6 +413,13 @@ function renderSchedule() {
       row.appendChild(side);
     }
 
+    if (game.preview) {
+      const preview = el("div", "fixture-preview");
+      preview.appendChild(previewSide(away, game.preview.away));
+      preview.appendChild(previewSide(home, game.preview.home));
+      row.appendChild(preview);
+    }
+
     if (game.status === "live") row.classList.add("is-live-fixture");
     else if (!played) row.classList.add("is-upcoming");
     else if (!game.detailed) row.classList.add("is-result-only");
@@ -374,7 +438,7 @@ function renderSchedule() {
  * ------------------------------------------------------------------ */
 
 async function selectGame(gameId) {
-  let game = state.data.games.find((g) => g.id === gameId);
+  let game = dayGames().find((g) => g.id === gameId);
   if (!game) return;
 
   stopPlayback();
@@ -390,8 +454,8 @@ async function selectGame(gameId) {
     if (state.gameId !== gameId) return;
     if (detail) {
       game = Object.assign(game, detail);
-      const index = state.data.games.findIndex((g) => g.id === gameId);
-      if (index >= 0) state.data.games[index] = game;
+      const index = dayGames().findIndex((g) => g.id === gameId);
+      if (index >= 0) state.data.day.games[index] = game;
     }
   }
 
@@ -1444,9 +1508,9 @@ async function refreshLeague({ quiet = false } = {}) {
   const openId = state.gameId;
   // Carry across any play-by-play already fetched, so switching back to a game
   // does not re-download it.
-  const cached = new Map(state.data.games.filter((g) => g.events).map((g) => [g.id, g]));
+  const cached = new Map(dayGames().filter((g) => g.events).map((g) => [g.id, g]));
   state.data = data;
-  state.data.games = data.games.map((g) => {
+  state.data.day.games = (data.day.games || []).map((g) => {
     const previous = cached.get(g.id);
     return previous && !previous.live ? Object.assign(previous, g) : g;
   });

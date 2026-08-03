@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bballsim.api import payload as views
 from bballsim.api.server import serve
 from bballsim.league import League, build_round_robin
-from bballsim.league.calendar import GameStatus
+from bballsim.league.calendar import PACIFIC, GameStatus
 from bballsim.roster import load_teams
 from bballsim.save import BUNDLED_DATA_DIR, schedule_fingerprint, seed_data_dir
 
@@ -336,15 +336,15 @@ class TestPayloadShapes(unittest.TestCase):
 
     def test_bootstrap_carries_every_screen_but_no_rosters(self):
         data = views.bootstrap(self.league)
-        for key in ("league", "teams", "games", "standings", "playerStats",
-                    "teamStats", "statColumns", "attributeGroups", "scale",
-                    "coachScale", "eventTypes"):
+        for key in ("league", "teams", "day", "season_totals", "standings",
+                    "playerStats", "teamStats", "statColumns", "attributeGroups",
+                    "scale", "coachScale", "eventTypes"):
             self.assertIn(key, data, key)
         # Rosters and play-by-play are fetched as they are opened; carrying
         # them here is about four megabytes nobody asked for.
         for team in data["teams"]:
             self.assertNotIn("players", team)
-        for game in data["games"]:
+        for game in data["day"]["games"]:
             self.assertNotIn("events", game)
         self.assertTrue(data["live"])
 
@@ -429,3 +429,109 @@ class TestTheAppServesTheWholeSite(unittest.TestCase):
             with urllib.request.urlopen(url, timeout=10) as response:
                 plain = len(response.read())
             self.assertLess(packed, plain / 2, "compression is not earning its keep")
+
+
+class TestTheDaySchedule(unittest.TestCase):
+    """The schedule shows one day, and every fixture on it carries a preview:
+    both records, and each side's leader in points, assists and rebounds."""
+
+    def setUp(self):
+        self.league = a_league()
+
+    def play(self, days: int) -> None:
+        self.league.clock.advance(timedelta(days=days))
+        self.league.tick()
+
+    def test_only_todays_fixtures_are_listed(self):
+        day = views.day_schedule(self.league)
+        listed = {g["id"] for g in day["games"]}
+        self.assertTrue(listed, "no games today")
+        self.assertLess(len(listed), len(self.league.schedule),
+                        "the whole season was returned, not a day")
+        for game in self.league.schedule:
+            on_day = game.tipoff_at.astimezone(PACIFIC).date().isoformat() == day["date"]
+            self.assertEqual(game.id in listed, on_day, game.id)
+
+    def test_the_day_is_the_sim_clock_s_day(self):
+        expected = self.league.clock.now().astimezone(PACIFIC).date()
+        self.assertEqual(views.day_schedule(self.league)["date"], expected.isoformat())
+
+    def test_a_finished_season_falls_back_to_the_last_day_played(self):
+        """The published demo's clock sits past the end of its season. An empty
+        schedule would be a worse answer than the final day."""
+        self.play(400)
+        day = views.day_schedule(self.league)
+        self.assertTrue(day["games"], "a finished season showed an empty schedule")
+        last = max(g.tipoff_at.astimezone(PACIFIC).date() for g in self.league.schedule)
+        self.assertEqual(day["date"], last.isoformat())
+
+    def test_every_fixture_carries_both_records_and_three_leaders(self):
+        self.play(3)
+        for game in views.day_schedule(self.league)["games"]:
+            for side in ("home", "away"):
+                preview = game["preview"][side]
+                self.assertIn("wins", preview)
+                self.assertIn("losses", preview)
+                if preview["basis"] == "played":
+                    self.assertEqual(
+                        [l["label"] for l in preview["leaders"]],
+                        ["PTS", "AST", "REB"],
+                    )
+
+    def test_the_record_matches_the_standings(self):
+        self.play(3)
+        for game in views.day_schedule(self.league)["games"]:
+            for side, key in (("home", "home"), ("away", "away")):
+                team_id = game[key]
+                row = self.league.standings[team_id]
+                self.assertEqual(game["preview"][side]["wins"], row.wins, team_id)
+                self.assertEqual(game["preview"][side]["losses"], row.losses, team_id)
+
+    def test_the_leader_is_actually_the_leader(self):
+        self.play(3)
+        checked = 0
+        for team_id in self.league.teams:
+            preview = views.team_leaders(self.league, team_id)
+            if preview["basis"] != "played":
+                continue
+            lines = [l for l in self.league.stats.players.values()
+                     if l.team_id == team_id and l.games > 0]
+            for leader, key in zip(preview["leaders"], ("points", "assists", "rebounds")):
+                best = max(line.per_game(key) for line in lines)
+                self.assertAlmostEqual(leader["value"], round(best, 1), places=1,
+                                       msg=f"{team_id} {key}")
+                checked += 1
+        self.assertGreater(checked, 0, "nothing was played -- the test proved nothing")
+
+    def test_an_unplayed_team_falls_back_to_its_best_rated_player(self):
+        """Three blank stat lines tell a manager nothing, and printing zeroes
+        would be a lie. The fallback says what it is."""
+        preview = views.team_leaders(self.league, next(iter(self.league.teams)))
+        self.assertEqual(preview["basis"], "rated")
+        self.assertEqual(preview["wins"], 0)
+        self.assertEqual(len(preview["leaders"]), 1)
+        leader = preview["leaders"][0]
+        self.assertEqual(leader["unit"], "stars")
+        self.assertLessEqual(leader["value"], 5.0)
+
+    def test_a_rated_fallback_names_the_best_player_on_the_roster(self):
+        team_id = next(iter(self.league.teams))
+        team = self.league.teams[team_id]
+        best = max(team.players, key=lambda p: p.current_ability)
+        leader = views.team_leaders(self.league, team_id)["leaders"][0]
+        self.assertEqual(leader["name"], best.short_name)
+
+    def test_the_bootstrap_ships_a_day_not_a_season(self):
+        payload = views.bootstrap(self.league)
+        self.assertIn("day", payload)
+        self.assertNotIn("games", payload)
+        self.assertEqual(payload["season_totals"]["fixtures"], len(self.league.schedule))
+        self.assertGreater(len(self.league.schedule), len(payload["day"]["games"]))
+
+    def test_season_totals_count_the_whole_season(self):
+        self.play(3)
+        payload = views.bootstrap(self.league)
+        played = sum(1 for g in self.league.schedule if g.status == GameStatus.FINAL)
+        self.assertEqual(payload["season_totals"]["played"], played)
+        self.assertGreater(played, len(payload["day"]["games"]),
+                           "the day is not a proxy for the season")

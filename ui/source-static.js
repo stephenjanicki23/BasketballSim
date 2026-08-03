@@ -26,9 +26,11 @@ window.BBALL_SOURCE = {
     return data;
   },
 
-  // Already in the payload, events and all.
+  // Already in the payload, events and all -- the published page ships the
+  // whole day, since it cannot fetch a game later.
   async gameDetail(gameId) {
-    return this._data.games.find((g) => g.id === gameId) || null;
+    const games = (this._data.day && this._data.day.games) || [];
+    return games.find((g) => g.id === gameId) || null;
   },
 
   async squad(teamId) {

@@ -25,7 +25,7 @@ from bballsim.api.payload import (
     EVENT_CODES,
     bootstrap,
     game_detail,
-    game_summary,
+    game_preview,
     team_squad,
 )
 from bballsim.league import League, build_round_robin
@@ -34,11 +34,9 @@ from bballsim.roster import load_teams
 from bballsim.save import apply_season, read_season, season_exists
 
 
-# A 30-team round robin is 435 games. Shipping full play-by-play for all of
-# them would be tens of megabytes, so only the most recent slate carries
-# events and box scores; the rest ship as results so the schedule and
-# standings stay complete.
-DETAILED_GAMES = 30
+# The page shows one day, so that day is what carries play-by-play -- every
+# fixture on the schedule opens into a full tracker. A whole season of events
+# is ~90MB; a day is 30 games.
 
 
 def build_season(team_count: int = 30) -> League:
@@ -70,24 +68,20 @@ def build_season(team_count: int = 30) -> League:
     return league
 
 
-def export_game(game, league, include_events: bool) -> dict:
-    """One fixture for the payload.
+def export_game(game, league) -> dict:
+    """One fixture, with its preview and its full play-by-play.
 
-    Without events this is just the result -- enough for the schedule rail and
-    the standings, without the play-by-play weight.
+    `revealed_only=False`: every game in the export has already finished, so
+    there is no ending left to spoil.
     """
-    if not include_events:
-        return game_summary(game)
-    # `revealed_only=False`: every game in the export has already finished, so
-    # there is no ending left to spoil.
-    return game_detail(game, league, revealed_only=False)
+    data = game_detail(game, league, revealed_only=False)
+    data["preview"] = game_preview(game, league)["preview"]
+    return data
 
 
 def main() -> None:
     league = build_season()
     finals = [g for g in league.schedule if g.status == GameStatus.FINAL]
-    # Newest games get the full treatment; everything older is results only.
-    detailed_ids = {g.id for g in finals[-DETAILED_GAMES:]}
 
     # The same shapes the live API serves, from the same module -- so the
     # published page and the app cannot drift apart.
@@ -95,7 +89,13 @@ def main() -> None:
     payload["live"] = False
     payload["league"]["trackerSpeed"] = league.tracker_speed
     payload["teams"] = [team_squad(t) for t in league.teams.values()]
-    payload["games"] = [export_game(g, league, g.id in detailed_ids) for g in finals]
+    # `bootstrap` already picked the day; give every fixture on it the full
+    # play-by-play, since a published page cannot fetch one later.
+    day_ids = {g["id"] for g in payload["day"]["games"]}
+    payload["day"]["games"] = [
+        export_game(g, league) for g in finals if g.id in day_ids
+    ]
+    detailed_ids = day_ids
 
     raw = json.dumps(payload, separators=(",", ":")).encode()
     packed = base64.b64encode(gzip.compress(raw, 9)).decode()
