@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 321 tests
+python3 -m unittest discover -s tests    # 324 tests
 ```
 
 In the browser: five tabs — **Home** (the news wire), **Games** (today's slate
@@ -31,6 +31,15 @@ speed, so the fourth quarter happens when the fourth quarter happens. Nothing
 is skippable, so the page refreshes itself once a minute to notice games
 starting and finishing, and a live game polls its own play-by-play every three
 seconds.
+
+**Tracker speed is configuration, not season data.** A save records results,
+not how fast somebody was watching them, so `apply_season` does not restore it.
+That distinction is not academic: `save.py` kept defaulting the speed to the
+old fast-forward 20x long after the league default became real time, and every
+boot restored it off the disk — a live game revealed its 2,880 seconds in two
+and a half minutes instead of forty-eight, and redeploying never fixed it
+because the speed was coming from the save. `run.py --speed` and the clock API
+still override it for a session.
 
 Two things follow from real time, both of which needed handling:
 

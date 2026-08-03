@@ -32,6 +32,8 @@ from bballsim.biography import DraftInfo
 from bballsim.coach import CoachRatings
 from bballsim.engine.game import GameSimulator
 from bballsim.league import League, build_round_robin
+from bballsim.league.calendar import build_daily_schedule
+from bballsim.league.league import DEFAULT_TRACKER_SPEED
 from bballsim.league.calendar import GameStatus
 from bballsim.models import Position
 from bballsim.placeholder import make_teams
@@ -39,6 +41,7 @@ from bballsim.ratings import HiddenAttributes, Ratings, Tendencies
 from bballsim.roster import load_teams
 from bballsim.save import (
     LEAGUE_PATH,
+    SavedSeason,
     SAVE_VERSION,
     SEASON_PATH,
     apply_season,
@@ -315,6 +318,68 @@ class TestTheCommittedLeague(unittest.TestCase):
             [t.id for t in self.saved.teams[:4]],
         )
 
+
+
+class TestTrackerSpeedIsNotSeasonData(unittest.TestCase):
+    """A live game must take its own length in real seconds to reveal.
+
+    This is the regression that shipped: `save.py` defaulted tracker speed to
+    20x long after the league default became real time, and `apply_season`
+    restored whatever the file said. A season written under the old design
+    revealed a 2,880-second game in 144 seconds -- two and a half minutes for
+    a game that should take forty-eight -- and redeploying never fixed it,
+    because the speed was coming off the disk every boot.
+    """
+
+    def league_with(self, saved_speed):
+        league = League(name="T", season="2026-27")
+        for team in make_teams(4):
+            league.add_team(team)
+        games = build_daily_schedule(
+            list(league.teams), start_date=date(2026, 10, 20), games_per_team=2)
+        data = dump_season(games, name="T", season="2026-27",
+                           tracker_speed=saved_speed)
+        restored = load_season(data)
+        apply_season(league, restored)
+        return league
+
+    def test_the_two_defaults_agree(self):
+        """They drifted apart once already, which is the whole bug."""
+        self.assertEqual(SavedSeason("n", "s", []).tracker_speed,
+                         DEFAULT_TRACKER_SPEED)
+        self.assertEqual(load_season({}).tracker_speed, DEFAULT_TRACKER_SPEED)
+        self.assertEqual(DEFAULT_TRACKER_SPEED, 1.0)
+
+    def test_a_fast_forward_save_does_not_override_real_time(self):
+        self.assertEqual(self.league_with(20.0).tracker_speed,
+                         DEFAULT_TRACKER_SPEED)
+        self.assertEqual(self.league_with(30.0).tracker_speed,
+                         DEFAULT_TRACKER_SPEED)
+
+    def test_a_live_game_reveals_in_real_time(self):
+        """The property that actually matters, stated in wall-clock seconds."""
+        league = self.league_with(20.0)
+        game = league.schedule[0]
+        league.clock.jump_to(game.tipoff_at)
+        league.tick()
+        self.assertIsNotNone(game.result)
+        duration = game.result.duration_game_seconds
+
+        # Half an hour after tip-off, roughly half an hour of basketball has
+        # been shown -- not the whole game and the post-game show.
+        half = game.revealed_seconds(game.tipoff_at + timedelta(minutes=30), 
+                                     league.tracker_speed)
+        self.assertAlmostEqual(half, 1800.0, delta=1.0)
+        self.assertLess(half, duration, "the game is already over after 30 min")
+
+        # And it is still live at the point the old 20x save had it finished.
+        early = game.tipoff_at + timedelta(seconds=duration / 20.0 + 60)
+        self.assertFalse(league._is_over(game, early),
+                         "a 20x save is still ending the game in 2-3 minutes")
+
+        # It ends when it should: its own length in real seconds.
+        done = game.tipoff_at + timedelta(seconds=duration + 60)
+        self.assertTrue(league._is_over(game, done))
 
 if __name__ == "__main__":
     unittest.main()

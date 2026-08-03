@@ -52,6 +52,7 @@ from .coach import Coach, CoachRatings
 from .engine.boxscore import PlayerLine, TeamBox
 from .engine.game import GameResult
 from .league.calendar import GameStatus, ScheduledGame
+from .league.league import DEFAULT_TRACKER_SPEED
 from .models import Player, Position, Team
 from .ratings import HiddenAttributes, Ratings, Tendencies
 from .tactics import Tactics
@@ -545,7 +546,7 @@ class SavedSeason:
     season: str
     games: list[ScheduledGame]
     clock_offset_seconds: float = 0.0
-    tracker_speed: float = 20.0
+    tracker_speed: float = DEFAULT_TRACKER_SPEED
 
     @property
     def played(self) -> int:
@@ -558,7 +559,7 @@ def dump_season(
     name: str,
     season: str,
     clock_offset_seconds: float = 0.0,
-    tracker_speed: float = 20.0,
+    tracker_speed: float = DEFAULT_TRACKER_SPEED,
 ) -> dict:
     return {
         "version": SAVE_VERSION,
@@ -587,7 +588,7 @@ def load_season(data: dict) -> SavedSeason:
         season=data.get("season", "2026-27"),
         games=[load_game(g) for g in data.get("games", [])],
         clock_offset_seconds=data.get("clock_offset_seconds", 0.0),
-        tracker_speed=data.get("tracker_speed", 20.0),
+        tracker_speed=data.get("tracker_speed", DEFAULT_TRACKER_SPEED),
     )
 
 
@@ -620,9 +621,20 @@ def season_exists(path: Path = SEASON_PATH) -> bool:
 
 
 def apply_season(league, saved: SavedSeason) -> None:
-    """Put a loaded season onto a league: fixtures, clock, and derived tables."""
+    """Put a loaded season onto a league: fixtures, clock, and derived tables.
+
+    Tracker speed is deliberately *not* restored. It is configuration, not
+    something that happened -- the season records results, not how fast
+    somebody was watching them. Restoring it means a file written under the
+    old fast-forward design silently overrides real time on every boot, which
+    is exactly what it did: a live game revealing its 2,880 seconds at the
+    saved 20x finished in two and a half minutes instead of forty-eight, and
+    redeploying did not fix it because the speed was coming off the disk.
+
+    The league keeps its own default. `run.py --speed` and the clock API still
+    override it for a session.
+    """
     league.name = saved.name
     league.season = saved.season
-    league.tracker_speed = saved.tracker_speed
     league.clock.offset = timedelta(seconds=saved.clock_offset_seconds)
     league.restore_schedule(saved.games)

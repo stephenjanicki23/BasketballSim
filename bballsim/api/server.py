@@ -30,7 +30,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from ..league.calendar import GameStatus
-from ..league.league import League
+from ..league.league import DEFAULT_TRACKER_SPEED, League
 from ..league.stats import STAT_COLUMNS
 from . import payload as views
 
@@ -250,7 +250,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             })
 
         elif parts == ["clock", "speed"]:
-            league.tracker_speed = max(0.25, float(body.get("speed", 20.0)))
+            league.tracker_speed = max(0.25, float(body.get("speed", DEFAULT_TRACKER_SPEED)))
             self._send_json({"tracker_speed": league.tracker_speed})
 
         elif parts == ["clock", "skip-to-next"]:
