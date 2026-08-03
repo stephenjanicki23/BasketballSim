@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 243 tests
+python3 -m unittest discover -s tests    # 257 tests
 ```
 
 In the browser: four tabs — **Games** (today's slate and the live tracker),
@@ -68,11 +68,6 @@ rebounds per game. Opening a fixture swaps the tracker in over the list;
 **All games** swaps back. One at a time — a day is 45 fixtures and a tracker is
 a whole screen, so side by side neither fits.
 
-Clubs get a **coloured monogram disc** where a crest would go, with the hue
-derived from the abbreviation so a team always looks the same. These teams are
-invented and have no logos; a monogram reads as a crest without pretending to
-be one.
-
 Tip-off times are rendered in **Pacific**, not the viewer's zone: the slates are
 *defined* as 8/1/7 Pacific, and showing "3:00 PM, 8:00 PM, 2:00 AM" to someone
 on UTC describes the same moments and communicates nothing.
@@ -93,6 +88,28 @@ tip-off, so a live game's final score exists from the first second. Reporting
 it would put the result in the schedule rail while the tracker was still in the
 first quarter, so `game_summary` reports the score *as of the tracker clock*
 for a live game. Three tests hold that line.
+
+### Crests
+
+Every club wears a **mark drawn from its nickname** — an I-beam for the
+Ironworks, an anchor for the Anchors, antlers for the Stags, a paw for the
+Coyotes. Thirty distinct glyphs, each on a two-colour disc.
+
+They are geometric rather than illustrative on purpose: a crest is 34 pixels
+across in a schedule row, where a detailed animal turns to mud and a bold
+silhouette still reads. That is why real league marks simplify too.
+
+The split is deliberate. `bballsim/logos.py` says which club wears which glyph
+and in what colours; the SVG path data lives in `ui/app.js` next to the thing
+that renders it. `tests/test_logos.py` reads both, so a club pointing at a
+glyph that was renamed would fail a test rather than render a blank disc — and
+it checks every mark clears **3:1 contrast** against its own disc, which is the
+WCAG floor for a non-text graphic and the difference between a crest you can
+identify at a glance and a smudge. That test was checked against a deliberately
+bad pairing to make sure it bites.
+
+Nothing here is saved with the roster: a crest is presentation, keyed by
+abbreviation, and the save format stores no derived values.
 
 ## Hosting it
 

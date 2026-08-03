@@ -335,14 +335,179 @@ function tipoffTime(game) {
   return `${time} PT`;
 }
 
-/* A stand-in for a team crest: a coloured disc with the abbreviation on it.
- * These clubs are invented, so there is no logo to load -- and a monogram in
- * the crest's place reads as one without pretending to be anything it is not.
- * The hue is derived from the abbreviation, so a team always looks the same. */
+
+/* ------------------------------------------------------------------ *
+ * Club crests
+ *
+ * One mark per nickname, drawn on a 64x64 box. Geometric rather than
+ * illustrative on purpose: a crest here is 34px across in a schedule row,
+ * where a detailed animal turns to mud and a bold silhouette still reads.
+ *
+ * `{{P}}` is the disc colour and `{{S}}` the mark colour, substituted when a
+ * crest is built. `{{P}}` is what knocks a hole *out* of a shape -- an eye, a
+ * slot in a shield -- by painting the disc colour back over it.
+ *
+ * `bballsim/logos.py` says which club wears which of these, and in what
+ * colours. The strings below are our own constants, never user input, which
+ * is what makes assembling them into markup safe.
+ * ------------------------------------------------------------------ */
+
+const GLYPHS = {
+  // Ironworks — a steel I-beam.
+  beam: '<path d="M13 16h38v9H37v14h14v9H13v-9h14V25H13z"/>',
+
+  // Mariners — ship's wheel.
+  wheel: '<path d="M32 10a22 22 0 1 0 0 44 22 22 0 0 0 0-44zm0 8a14 14 0 1 1 0 28 14 14 0 0 1 0-28z"/>'
+       + '<path d="M29 8h6v48h-6zM8 29h48v6H8z"/>'
+       + '<g transform="rotate(45 32 32)"><path d="M29 8h6v48h-6zM8 29h48v6H8z"/></g>'
+       + '<circle cx="32" cy="32" r="7"/>',
+
+  // Miners — crossed picks under a curved head.
+  picks: '<g transform="rotate(45 32 32)"><rect x="29" y="12" width="6" height="40" rx="3"/></g>'
+       + '<g transform="rotate(-45 32 32)"><rect x="29" y="12" width="6" height="40" rx="3"/></g>'
+       + '<path d="M12 22a30 30 0 0 1 40 0l-4 6a23 23 0 0 0-32 0z"/>',
+
+  // Rovers — compass star.
+  compass: '<path d="M32 6l6 20 20 6-20 6-6 20-6-20-20-6 20-6z"/>'
+         + '<circle cx="32" cy="32" r="26" fill="none" stroke-width="3"/>',
+
+  // Current — a river running.
+  current: '<g fill="none" stroke-width="5" stroke-linecap="round">'
+         + '<path d="M11 23q7.5-9 15 0t15 0"/><path d="M11 34q7.5-9 15 0t15 0"/>'
+         + '<path d="M11 45q7.5-9 15 0t15 0"/></g>',
+
+  // Stags — antlers over a brow.
+  antlers: '<g fill="none" stroke-width="4" stroke-linecap="round">'
+         + '<path d="M32 54V32"/><path d="M32 34 21 23M21 23l-9 3M21 23l-1-10"/>'
+         + '<path d="M32 34l11-11M43 23l9 3M43 23l1-10"/></g>',
+
+  // Foundry — a ladle, and what comes out of it.
+  ladle: '<path d="M11 15h29v7a14.5 14.5 0 0 1-29 0z"/><path d="M40 17h12v5H40z"/>'
+       + '<path d="M25 41c0 0 8 8 8 12a8 8 0 0 1-16 0c0-4 8-12 8-12z"/>',
+
+  // Skyline — three towers.
+  towers: '<path d="M10 54V28h11v26zM25 54V12h14v42zM43 54V34h11v20z"/>',
+
+  // Forge — an anvil.
+  anvil: '<path d="M10 22h44v6c0 6-8 8-13 9v5h10v10H13V42h10v-5c-5-1-13-3-13-9z"/>',
+
+  // Gulls — two wings, mid-flight.
+  gull: '<g fill="none" stroke-width="6" stroke-linecap="round">'
+      + '<path d="M8 36q12-16 24 0"/><path d="M32 36q12-16 24 0"/></g>',
+
+  // Peaks — a ridge line with snow.
+  peaks: '<path d="M4 50l16-26 9 14 10-18 21 30z"/>'
+       + '<path d="M20 24l6 10-6 3-5-4zM39 20l6 10-7 3-5-5z" fill="{{P}}"/>',
+
+  // Timber — a pine.
+  pine: '<path d="M32 8l13 17h-7l11 14h-7l10 13H20l10-13h-7l11-14h-7z"/>'
+      + '<path d="M28 52h8v6h-8z"/>',
+
+  // Anchors.
+  anchor: '<circle cx="32" cy="13" r="6" fill="none" stroke-width="4"/>'
+        + '<path d="M29 19h6v33h-6z"/><path d="M19 25h26v6H19z"/>'
+        + '<g fill="none" stroke-width="5" stroke-linecap="round">'
+        + '<path d="M12 36c0 11 9 18 20 18s20-7 20-18"/></g>',
+
+  // Comets — head and tail.
+  comet: '<circle cx="42" cy="22" r="10"/>'
+       + '<path d="M35 29 8 56l5-16 6 3 2-11z"/>',
+
+  // Sentinels — a shield with a slot.
+  shield: '<path d="M32 6l24 9v17c0 15-11 24-24 28C19 56 8 47 8 32V15z"/>'
+        + '<path d="M32 18l12 12-5 5-7-7-7 7-5-5z" fill="{{P}}"/>',
+
+  // Foxes — head, ears, eyes knocked out.
+  fox: '<path d="M32 54 10 30l4-18 12 9h12l12-9 4 18z"/>'
+     + '<path d="M22 31l6 5-5 4-5-5zM42 31l-6 5 5 4 5-5z" fill="{{P}}"/>',
+
+  // Royals — a crown.
+  crown: '<path d="M8 44h48l4-27-15 11-13-18-13 18-15-11z"/><path d="M10 47h44v8H10z"/>',
+
+  // Monarchs — a monarch butterfly.
+  butterfly: '<path d="M31 22c-6-11-23-13-25-2s7 21 15 23c-8 4-10 15-2 17s12-8 12-15z"/>'
+           + '<path d="M33 22c6-11 23-13 25-2s-7 21-15 23c8 4 10 15 2 17s-12-8-12-15z"/>'
+           + '<path d="M30 16h4v40h-4z"/>',
+
+  // Coyotes — a paw print.
+  paw: '<ellipse cx="17" cy="26" rx="6" ry="8"/><ellipse cx="29" cy="19" rx="6" ry="9"/>'
+     + '<ellipse cx="42" cy="20" rx="6" ry="9"/><ellipse cx="52" cy="30" rx="6" ry="8"/>'
+     + '<path d="M31 32c10 0 18 8 18 15 0 6-6 10-12 8-4-2-8-2-12 0-6 2-12-2-12-8 0-7 8-15 18-15z"/>',
+
+  // Hawks — in flight.
+  hawk: '<path d="M32 12a5 5 0 0 1 5 5c0 2-1 3-2 4 9-1 17-5 23-11-2 11-9 19-18 23l-8 19-8-19C15 29 8 21 6 10c6 6 14 10 23 11-1-1-2-2-2-4a5 5 0 0 1 5-5z"/>',
+
+  // Storm — a bolt.
+  bolt: '<path d="M36 4 12 36h14l-6 24 24-34H30z"/>',
+
+  // Rangers — a five-point star in a ring.
+  star: '<path d="M32 8l7 15 16 2-12 11 3 16-14-8-14 8 3-16L9 25l16-2z"/>'
+      + '<circle cx="32" cy="32" r="27" fill="none" stroke-width="3"/>',
+
+  // Tides — a breaking wave.
+  wave: '<path d="M6 40c10-22 26-28 40-20-10-2-16 2-20 8 8-3 15-1 20 4-12-2-20 4-24 12z"/>'
+      + '<g fill="none" stroke-width="4" stroke-linecap="round"><path d="M10 52q11-8 22 0t22 0"/></g>',
+
+  // Bruins — claw marks.
+  claw: '<g transform="rotate(-8 32 32)">'
+      + '<path d="M13 7c7 12 9 29 6 45l-9-8C8 31 8 19 13 7z"/>'
+      + '<path d="M30 4c7 13 9 31 6 48l-9-8c-3-16-2-29 3-40z"/>'
+      + '<path d="M47 7c7 12 9 29 6 45l-9-8c-3-15-2-27 3-37z"/></g>',
+
+  // Guardians — a gate tower.
+  helm: '<path d="M8 24h9v-8h9v8h12v-8h9v8h9v34H8z"/>'
+      + '<path d="M32 32a11 11 0 0 1 11 11v15H21V43a11 11 0 0 1 11-11z" fill="{{P}}"/>',
+
+  // Cyclones — a three-blade swirl.
+  spiral: '<g><path d="M32 30c-2-12 4-22 16-26-7 9-8 18-5 25z"/>'
+        + '<g transform="rotate(120 32 32)"><path d="M32 30c-2-12 4-22 16-26-7 9-8 18-5 25z"/></g>'
+        + '<g transform="rotate(240 32 32)"><path d="M32 30c-2-12 4-22 16-26-7 9-8 18-5 25z"/></g></g>'
+        + '<circle cx="32" cy="32" r="6"/>',
+
+  // Owls — two eyes and a beak.
+  owl: '<path d="M32 8c14 0 24 10 24 24S46 58 32 58 8 48 8 32 18 8 32 8z"/>'
+     + '<circle cx="22" cy="27" r="9" fill="{{P}}"/><circle cx="42" cy="27" r="9" fill="{{P}}"/>'
+     + '<circle cx="22" cy="27" r="4"/><circle cx="42" cy="27" r="4"/>'
+     + '<path d="M32 34l6 10h-12z" fill="{{P}}"/>',
+
+  // Surge — a pulse.
+  pulse: '<g fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">'
+       + '<path d="M6 34h10l7-18 10 34 7-16h18"/></g>',
+
+  // Falcons — stooping, wings back.
+  falcon: '<path d="M32 58 8 22l14 5 10-21 10 21 14-5z"/>'
+        + '<path d="M32 20l5 12h-10z" fill="{{P}}"/>',
+
+  // Pioneers — a covered wagon.
+  wagon: '<path d="M10 38V26c0-8 10-13 22-13s22 5 22 13v12z"/>'
+       + '<path d="M10 40h44v6H10z"/>'
+       + '<circle cx="20" cy="52" r="6"/><circle cx="44" cy="52" r="6"/>'
+       + '<circle cx="20" cy="52" r="2" fill="{{P}}"/><circle cx="44" cy="52" r="2" fill="{{P}}"/>',
+};
+
+/* Build a club's crest. The glyph strings are our own constants above, so
+ * assembling them into markup introduces nothing a user supplied. */
+function crestSVG(logo, title) {
+  const glyph = (GLYPHS[logo.glyph] || GLYPHS.shield)
+    .replaceAll("{{P}}", logo.primary)
+    .replaceAll("{{S}}", logo.secondary);
+  return `<svg viewBox="0 0 64 64" role="img" aria-label="${title}" focusable="false">`
+    + `<circle cx="32" cy="32" r="32" fill="${logo.primary}"/>`
+    + `<g fill="${logo.secondary}" stroke="${logo.secondary}" stroke-width="0">${glyph}</g>`
+    + `</svg>`;
+}
+
+/* A club's crest, or its abbreviation on a disc if it has none. */
 function teamMark(team) {
+  const mark = el("span", "team-mark");
+  if (team.logo) {
+    mark.classList.add("has-crest");
+    mark.innerHTML = crestSVG(team.logo, `${team.city} ${team.name}`);
+    return mark;
+  }
   let hash = 0;
   for (const ch of team.abbr) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-  const mark = el("span", "team-mark", team.abbr);
+  mark.textContent = team.abbr;
   mark.style.setProperty("--mark-hue", String(hash));
   return mark;
 }

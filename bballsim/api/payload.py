@@ -25,6 +25,7 @@ from ..ability import CA_MAX, CA_TIERS, scout, stars_from_rating
 from ..chemistry import evaluate as evaluate_chemistry
 from ..coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
 from ..league.calendar import PACIFIC, GameStatus
+from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
 from ..models import Lineup
 from ..ratings import (
@@ -121,6 +122,7 @@ def team_summary(team) -> dict:
         "city": team.city,
         "name": team.name,
         "conference": team.conference,
+        "logo": logo_for(team.abbreviation),
         "coach": team.coach.to_dict() if team.coach else None,
         "chemistry": round(team.team_chemistry, 1),
         "tactics": team.tactics.to_dict(),

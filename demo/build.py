@@ -50,8 +50,12 @@ def main() -> None:
         f"<script>{app_js}</script>\n"
         f"<script>{source_js}</script>",
     )
-    if "{{" in html or "/app.js" in html:
-        raise SystemExit("build did not fully inline the page")
+    # Name the placeholders rather than rejecting every "{{": the crest glyphs
+    # in app.js carry their own {{P}} tokens, substituted at render time in the
+    # browser, and they are supposed to survive the build untouched.
+    leftovers = [token for token in ("{{PAYLOAD}}", "{{APP_JS}}", "{{STYLES}}") if token in html]
+    if leftovers or "/app.js" in html or "/styles.css" in html:
+        raise SystemExit(f"build did not fully inline the page: {leftovers or 'asset link left'}")
 
     out = HERE / "index.html"
     out.write_text(html)
