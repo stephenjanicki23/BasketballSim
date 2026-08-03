@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 291 tests
+python3 -m unittest discover -s tests    # 321 tests
 ```
 
 In the browser: five tabs — **Home** (the news wire), **Games** (today's slate
@@ -510,6 +510,37 @@ Stories are deterministic, like everything else here: the same league state
 writes the same feed, and which of several phrasings a story uses is drawn from
 its own id, so an article does not rewrite itself between refreshes and two
 similar games do not read alike.
+
+## Player progression
+
+`bballsim/progression.py` runs a career one offseason at a time; the full
+design is in **[docs/PROGRESSION.md](docs/PROGRESSION.md)**, and
+`python3 tools/careers.py --attributes` prints three careers from 18 to
+retirement.
+
+The decision everything else follows from: **attributes move, and CA follows.**
+The engine never writes CA — it computes a delta for each of 81 attributes,
+applies them, and reprices CA from the result. So the hard rule is enforced
+against the attribute set rather than a number kept beside it, a veteran's flat
+CA becomes a real event (a point of speed lost, a point of decision-making
+gained, priced the same), and a centre and a guard losing the same vertical leap
+lose different amounts of CA for free.
+
+No age is hardcoded. Every threshold sits in years either side of two
+per-player numbers — an athletic peak and a prime age — both generated from
+what the player's game is built on, so an explosive guard peaks early and a
+high-IQ shooter peaks late and lasts. Eight career arcs, nine injuries with
+permanent effects, and a personality term that decides how much of a ceiling
+gets collected: two 18-year-olds at CA 95 with PA 185 finish at 181 and 158.
+
+Two bugs worth recording, both found by tests rather than by eye. Athletic
+decline was a flat subtraction, which walked a 40-year-old's speed to 1 out of
+20 — losses are now a share of what is left, so the curve flattens as it falls.
+And the personality ceiling was `PA × realisation`, which reaches backwards: an
+established player at CA 158 was handed a ceiling of 146, his growth pinned at
+zero, and *a poor coach started producing better players than an elite one*
+because neither was producing any development to compare. Character now closes
+a share of the remaining gap instead.
 
 ## Current and Potential Ability
 
