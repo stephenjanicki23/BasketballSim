@@ -30,15 +30,16 @@
 
   <!-- Games ------------------------------------------------------- -->
   <section class="view games-layout" data-view="games" role="tabpanel" aria-label="Games">
-    <div class="card">
-      <div class="card-head">
-        <h2>Today</h2>
-        <span class="label" id="schedule-day"></span>
+    <div class="card schedule-card" id="schedule-card">
+      <div class="schedule-head">
+        <h2 id="schedule-day">Today</h2>
+        <span class="label" id="schedule-count"></span>
       </div>
       <ul id="schedule"></ul>
     </div>
 
-    <div class="card">
+    <div class="card tracker-card" id="tracker-card" hidden>
+      <button class="back-to-schedule" id="back-to-schedule">← All games</button>
       <div class="scoreboard">
         <div class="board-side away">
           <span class="board-abbr" id="away-abbr">—</span>

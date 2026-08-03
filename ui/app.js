@@ -274,13 +274,9 @@ async function boot() {
   bindControls();
   if (state.data.live) startLeagueRefresh();
 
-  // Open the most interesting game: one in progress, else the last one played,
-  // else the next one up.
-  const games = dayGames();
-  const live = games.find((g) => g.status === "live");
-  const played = [...games].reverse().find((g) => g.homeScore !== undefined);
-  const target = live || played || games[games.length - 1];
-  if (target) selectGame(target.id);
+  // The Games tab opens on the day's schedule. Nothing is auto-selected: the
+  // list is the screen, and a fixture is something you choose to open.
+  showTracker(false);
 }
 
 /* Teams arrive with squads baked in on the static page and without them from
@@ -339,43 +335,87 @@ function tipoffTime(game) {
   return `${time} PT`;
 }
 
-/* One team's line in a preview: record, then who leads it in points, assists
- * and rebounds this season. */
-function previewSide(team, side) {
-  const wrap = el("div", "preview-side");
+/* A stand-in for a team crest: a coloured disc with the abbreviation on it.
+ * These clubs are invented, so there is no logo to load -- and a monogram in
+ * the crest's place reads as one without pretending to be anything it is not.
+ * The hue is derived from the abbreviation, so a team always looks the same. */
+function teamMark(team) {
+  let hash = 0;
+  for (const ch of team.abbr) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
+  const mark = el("span", "team-mark", team.abbr);
+  mark.style.setProperty("--mark-hue", String(hash));
+  return mark;
+}
 
-  const head = el("div", "preview-team");
-  head.appendChild(el("span", "fixture-abbr", team.abbr));
-  head.appendChild(el("span", "preview-record", `${side.wins}-${side.losses}`));
-  wrap.appendChild(head);
+/* One side of a fixture: crest, nickname, record. */
+function scheduleTeam(team, side, score, winner) {
+  const row = el("div", "sched-team" + (winner ? " is-winner" : ""));
+  row.appendChild(teamMark(team));
+  row.appendChild(el("span", "sched-name", team.name));
+  if (side) row.appendChild(el("span", "sched-record", `${side.wins}-${side.losses}`));
+  if (score !== undefined) row.appendChild(el("span", "sched-score", String(score)));
+  return row;
+}
 
-  if (!side.leaders.length) {
-    wrap.appendChild(el("div", "preview-empty", "No squad data"));
-    return wrap;
-  }
+/* The line under the pair: who leads each side in points, assists and
+ * rebounds. Subordinate to the fixture itself, the way the reference layout
+ * treats its own meta line. */
+function schedulePreview(preview, awayTeam, homeTeam) {
+  const wrap = el("div", "sched-preview");
+  const away = preview.away.leaders;
+  const home = preview.home.leaders;
+  const rows = Math.max(away.length, home.length);
 
-  for (const leader of side.leaders) {
-    const row = el("div", "preview-stat");
-    row.appendChild(el("span", "preview-label", leader.label));
-    row.appendChild(el("span", "preview-name", leader.name));
-    row.appendChild(el("span", "preview-value",
-      leader.unit === "stars" ? `${leader.value}★` : leader.value.toFixed(1)));
-    wrap.appendChild(row);
+  for (let i = 0; i < rows; i += 1) {
+    const line = el("div", "sched-preview-row");
+    const label = (away[i] || home[i]).label;
+    line.appendChild(el("span", "sched-preview-label", label));
+    for (const [leader, team] of [[away[i], awayTeam], [home[i], homeTeam]]) {
+      const cell = el("span", "sched-preview-cell");
+      if (leader) {
+        cell.appendChild(el("span", "sched-preview-abbr", team.abbr));
+        cell.appendChild(el("span", "sched-preview-name", leader.name));
+        cell.appendChild(el("span", "sched-preview-value",
+          leader.unit === "stars" ? `${leader.value}★` : leader.value.toFixed(1)));
+      }
+      line.appendChild(cell);
+    }
+    wrap.appendChild(line);
   }
   return wrap;
 }
 
-/* The schedule is one day's slate. Every fixture carries a preview: both
- * records, and each side's scoring, assist and rebounding leader. Before a
- * team has played, there are no averages to show, so the preview falls back to
- * its best-rated player and says so rather than printing three zeroes. */
+/* What goes on the right of a fixture. The scores sit beside the clubs on the
+ * left, so this says what *state* the game is in -- repeating the score here
+ * would print it twice on the same row. */
+function scheduleStatus(game) {
+  const wrap = el("div", "sched-status");
+  if (game.status === "live") {
+    wrap.appendChild(el("span", "sched-live", "LIVE"));
+  } else if (game.homeScore !== undefined) {
+    wrap.appendChild(el("span", "sched-final", "FINAL"));
+    wrap.appendChild(el("span", "sched-sub", tipoffTime(game)));
+  } else {
+    wrap.appendChild(el("span", "sched-time", tipoffTime(game)));
+  }
+  return wrap;
+}
+
+/* The schedule is one day's slate, laid out as a full-width list: each fixture
+ * is the two clubs stacked, the tip-off time on the right, and the preview
+ * underneath. Clicking one opens the tracker. */
 function renderSchedule() {
   const rail = $("#schedule");
   rail.textContent = "";
   const games = dayGames();
 
   const heading = $("#schedule-day");
-  if (heading) heading.textContent = state.data.day ? state.data.day.label : "";
+  if (heading) heading.textContent = state.data.day ? state.data.day.label : "Today";
+  const count = $("#schedule-count");
+  if (count) {
+    const played = games.filter((g) => g.homeScore !== undefined).length;
+    count.textContent = `${games.length} games · ${played} played`;
+  }
 
   if (!games.length) {
     rail.appendChild(el("li", "rail-empty", "No games scheduled today."));
@@ -401,29 +441,22 @@ function renderSchedule() {
     row.setAttribute("role", "button");
     row.setAttribute("aria-label", played
       ? `${away.city} ${away.name} at ${home.city} ${home.name}, final ${game.awayScore} to ${game.homeScore}`
-      : `${away.city} ${away.name} at ${home.city} ${home.name}, not yet played`);
+      : `${away.city} ${away.name} at ${home.city} ${home.name}, ${label}`);
 
-    const sides = played
-      ? [[away, game.awayScore, !homeWon], [home, game.homeScore, homeWon]]
-      : [[away, "", false], [home, "", false]];
-    for (const [team, score, won] of sides) {
-      const side = el("span", `fixture-side${won ? " is-winner" : ""}`);
-      side.appendChild(el("span", "fixture-abbr", team.abbr));
-      side.appendChild(el("span", "fixture-team", team.name));
-      side.appendChild(el("span", "fixture-score", String(score)));
-      row.appendChild(side);
-    }
+    const main = el("div", "sched-main");
+    const teams = el("div", "sched-teams");
+    teams.appendChild(scheduleTeam(away, game.preview && game.preview.away,
+                                   played ? game.awayScore : undefined, played && !homeWon));
+    teams.appendChild(scheduleTeam(home, game.preview && game.preview.home,
+                                   played ? game.homeScore : undefined, homeWon));
+    main.appendChild(teams);
+    main.appendChild(scheduleStatus(game));
+    row.appendChild(main);
 
-    if (game.preview) {
-      const preview = el("div", "fixture-preview");
-      preview.appendChild(previewSide(away, game.preview.away));
-      preview.appendChild(previewSide(home, game.preview.home));
-      row.appendChild(preview);
-    }
+    if (game.preview) row.appendChild(schedulePreview(game.preview, away, home));
 
     if (game.status === "live") row.classList.add("is-live-fixture");
     else if (!played) row.classList.add("is-upcoming");
-    else if (!game.detailed) row.classList.add("is-result-only");
 
     const open = () => selectGame(game.id);
     row.addEventListener("click", open);
@@ -465,11 +498,8 @@ async function selectGame(gameId) {
   state.cursor = 0;
   state.box = newBoxState(game);
 
-  $$(".fixture").forEach((row) => {
-    const selected = row.dataset.gameId === gameId;
-    row.classList.toggle("is-selected", selected);
-    if (selected) row.scrollIntoView({ block: "nearest" });
-  });
+  markSelectedFixture(gameId);
+  showTracker(true);
 
   const home = state.teams.get(game.home);
   const away = state.teams.get(game.away);
@@ -1436,8 +1466,16 @@ function setView(view) {
 
 function bindControls() {
   $$(".nav-tab").forEach((tab) => {
-    tab.addEventListener("click", () => setView(tab.dataset.view));
+    tab.addEventListener("click", () => {
+      // Coming back to Games lands on the schedule rather than whichever
+      // fixture happened to be open when you left.
+      if (tab.dataset.view === "games") showTracker(false);
+      setView(tab.dataset.view);
+    });
   });
+
+  const back = $("#back-to-schedule");
+  if (back) back.addEventListener("click", () => showTracker(false));
 
   $$(".tracker-tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -1561,6 +1599,22 @@ function markSelectedFixture(gameId) {
   $$(".fixture").forEach((row) => {
     row.classList.toggle("is-selected", row.dataset.gameId === gameId);
   });
+}
+
+/* The Games tab is a full-width schedule; opening a fixture swaps the tracker
+ * in over it, and "All games" swaps back. One at a time, because a day is 45
+ * fixtures and a tracker is a whole screen -- side by side, neither fits. */
+function showTracker(on) {
+  const schedule = $("#schedule-card");
+  const tracker = $("#tracker-card");
+  if (!schedule || !tracker) return;
+  schedule.hidden = on;
+  tracker.hidden = !on;
+  if (!on) {
+    stopPlayback();
+    stopLivePolling();
+  }
+  window.scrollTo({ top: 0, behavior: REDUCED_MOTION ? "auto" : "smooth" });
 }
 
 /* The league runs on real time: games tip off at their real 8am, 1pm and 7pm

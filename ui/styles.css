@@ -177,11 +177,12 @@ select {
 .view[hidden] { display: none; }
 .games-layout {
   display: grid;
-  grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--gap);
   padding: var(--gap);
   align-items: start;
 }
+.games-layout > .card[hidden] { display: none; }
 .card {
   background: var(--panel);
   border: 1px solid var(--hairline);
@@ -199,13 +200,7 @@ select {
 }
 
 /* ---------------- schedule rail ---------------- */
-#schedule {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: calc(100vh - 118px);
-  overflow-y: auto;
-}
+#schedule { list-style: none; margin: 0; padding: 0; }
 .rail-date {
   position: sticky;
   top: 0;
@@ -219,32 +214,6 @@ select {
   text-transform: uppercase;
   color: var(--muted);
 }
-.fixture {
-  display: grid;
-  gap: 2px;
-  padding: 9px 14px;
-  border-bottom: 1px solid var(--hairline-soft);
-  cursor: pointer;
-}
-.fixture:hover { background: var(--raised); }
-.fixture.is-result-only .fixture-team { opacity: .72; }
-.fixture.is-selected {
-  background: var(--raised);
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-.fixture-side {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 8px;
-  color: var(--muted);
-}
-.fixture-side.is-winner { color: var(--ink); }
-.fixture-abbr { font: 600 10px/1.4 var(--mono); letter-spacing: .1em; }
-.fixture-team { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fixture-score { font: 600 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
-.fixture-side.is-winner .fixture-score { color: var(--ink); }
-
 /* ---------------- scoreboard ---------------- */
 .scoreboard {
   display: grid;
@@ -779,8 +748,6 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 }
 
 @media (max-width: 900px) {
-  .games-layout { grid-template-columns: minmax(0, 1fr); }
-  #schedule { max-height: 260px; }
   .board-score { font-size: 32px; }
   .play { grid-template-columns: 66px 56px minmax(0, 1fr); gap: 8px; }
 }
@@ -794,10 +761,10 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 }
 
 /* Fixtures that have not been played, and ones in progress. */
-.fixture.is-upcoming .fixture-team,
-.fixture.is-upcoming .fixture-abbr { opacity: .55; }
-.fixture.is-live-fixture { box-shadow: inset 3px 0 0 var(--live); }
-.fixture.is-live-fixture .fixture-score { color: var(--live); }
+
+
+/* Fixtures that have not been played, and ones in progress. */
+
 
 /* ---------------- fixture previews ---------------- */
 /* The schedule shows one day, so each fixture can afford to say something:
@@ -856,4 +823,195 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 
 @media (max-width: 900px) {
   .fixture-preview { grid-template-columns: 1fr; }
+}
+
+/* ---------------- schedule ----------------
+   A full-width list of the day's fixtures: two clubs stacked on the left with
+   the tip-off time on the right, a hairline between them, and the preview
+   underneath. Dotted rules separate fixtures. */
+.schedule-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px 24px 16px;
+}
+.schedule-head h2 { font-size: 24px; letter-spacing: -0.02em; }
+
+.rail-empty { padding: 26px 24px; color: var(--muted); font-size: 14px; }
+
+/* Slate heading: 8:00 AM PT, and the fixtures that tip off then. */
+.rail-date {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--raised);
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  padding: 7px 24px;
+  font: 600 10px/1.6 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fixture {
+  padding: 16px 24px 14px;
+  border-bottom: 1px dotted var(--hairline);
+  cursor: pointer;
+}
+.fixture:hover { background: var(--raised); }
+.fixture.is-selected { background: var(--raised); }
+.fixture:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.sched-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 20px;
+}
+.sched-teams { display: grid; gap: 10px; min-width: 0; }
+.sched-team { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+/* Standing in for a crest: a disc with the abbreviation on it. */
+.team-mark {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 9px/1 var(--mono);
+  letter-spacing: .04em;
+  color: #fff;
+  background: hsl(var(--mark-hue, 30) 58% 38%);
+  box-shadow: inset 0 0 0 1px hsl(var(--mark-hue, 30) 58% 28%);
+}
+
+.sched-name {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sched-team.is-winner .sched-name { color: var(--ink); }
+.sched-record {
+  font: 500 12px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.sched-score {
+  margin-left: auto;
+  font: 700 22px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.sched-team.is-winner .sched-score { color: var(--ink); }
+
+/* The vertical rule and the time, as in the reference. */
+.sched-status {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding-left: 20px;
+  border-left: 1px solid var(--hairline);
+  align-self: stretch;
+  align-content: center;
+}
+.sched-time {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sched-final, .sched-live {
+  font: 700 12px/1 var(--mono);
+  letter-spacing: .16em;
+  color: var(--ink-2);
+}
+.sched-live {
+  color: var(--live);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sched-live::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sched-sub {
+  font: 500 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.fixture.is-upcoming .sched-name { color: var(--muted); }
+
+/* Preview: three stat lines under the pair, subordinate to it. */
+.sched-preview {
+  display: grid;
+  gap: 2px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--hairline-soft);
+  max-width: 760px;
+}
+.sched-preview-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+.sched-preview-label {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  color: var(--muted);
+}
+.sched-preview-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+}
+.sched-preview-abbr {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .08em;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.sched-preview-name {
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sched-preview-value {
+  margin-left: auto;
+  font: 600 11px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+
+.back-to-schedule {
+  margin: 12px 0 0 14px;
+  align-self: flex-start;
+}
+
+@media (max-width: 720px) {
+  .schedule-head { padding: 16px; }
+  .fixture { padding: 14px 16px 12px; }
+  .rail-date { padding: 7px 16px; }
+  .sched-main { grid-template-columns: minmax(0, 1fr) 96px; gap: 12px; }
+  .sched-name { font-size: 18px; }
+  .sched-preview-row { grid-template-columns: 30px minmax(0, 1fr); }
+  .sched-preview-row .sched-preview-cell:last-child { grid-column: 2; }
 }

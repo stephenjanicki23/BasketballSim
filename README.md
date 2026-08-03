@@ -59,9 +59,20 @@ data most visits never open.
 
 ### The schedule is today
 
-The Games rail lists **today's fixtures only** — 45 of them, grouped by the
-8am, 1pm and 7pm Pacific slates — and each one carries a preview: both teams'
-records, and who leads each side in points, assists and rebounds per game.
+The Games tab is **today's slate**, full width: a date heading, then one row
+per fixture — the two clubs stacked with their records, a hairline, and the
+tip-off time on the right, in the shape a sports schedule normally takes.
+A row reads `FINAL`, `LIVE` or its tip-off time depending on where the game is,
+and underneath sits the preview: who leads each side in points, assists and
+rebounds per game. Opening a fixture swaps the tracker in over the list;
+**All games** swaps back. One at a time — a day is 45 fixtures and a tracker is
+a whole screen, so side by side neither fits.
+
+Clubs get a **coloured monogram disc** where a crest would go, with the hue
+derived from the abbreviation so a team always looks the same. These teams are
+invented and have no logos; a monogram reads as a crest without pretending to
+be one.
+
 Tip-off times are rendered in **Pacific**, not the viewer's zone: the slates are
 *defined* as 8/1/7 Pacific, and showing "3:00 PM, 8:00 PM, 2:00 AM" to someone
 on UTC describes the same moments and communicates nothing.
