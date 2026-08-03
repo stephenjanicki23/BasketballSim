@@ -269,6 +269,7 @@ async function boot() {
   document.body.classList.toggle("is-live", Boolean(state.data.live));
   renderSeasonLabel();
 
+  renderWire();
   renderSchedule();
   renderStandings();
   renderTeams();
@@ -1197,6 +1198,114 @@ function buildStatTabs() {
 }
 
 /* ------------------------------------------------------------------ *
+ * Home: the wire
+ *
+ * The feed arrives already ranked and de-duplicated by `bballsim/news.py`.
+ * All this does is lay it out: the lead story gets the top of the page, the
+ * rest go into cards, and every card can be opened to read the article. Nothing
+ * here composes a sentence -- if a number is on this page, Python put it there.
+ * ------------------------------------------------------------------ */
+
+/* Importance is 1-100. It drives the accent on a card, so a triple-double and
+ * a routine recap do not look alike at a glance. */
+function importanceClass(score) {
+  if (score >= 85) return "is-major";
+  if (score >= 70) return "is-notable";
+  return "is-routine";
+}
+
+function storyDay(story) {
+  if (!story.day) return "";
+  // A bare ISO date is midnight UTC; parsed locally it can slip a day.
+  const [y, m, d] = story.day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    weekday: "short", month: "short", day: "numeric",
+  });
+}
+
+function storyBody(story) {
+  const body = el("div", "story-body");
+  story.article.split("\n\n").forEach((block) => {
+    body.appendChild(el("p", null, block));
+  });
+  return body;
+}
+
+/* A story card. The headline and standfirst are always visible; the article
+ * opens in place, because a home page that navigates away to read 180 words is
+ * a home page nobody reads twice. */
+function storyCard(story, lead) {
+  const card = el("article", `story ${importanceClass(story.importance)}`);
+  if (lead) card.classList.add("is-lead");
+
+  const meta = el("div", "story-meta");
+  meta.appendChild(el("span", "story-tag", story.category));
+  const day = storyDay(story);
+  if (day) meta.appendChild(el("span", "story-day", day));
+  card.appendChild(meta);
+
+  card.appendChild(el("h3", "story-headline", story.headline));
+  card.appendChild(el("p", "story-standfirst", story.subheadline));
+
+  // Crests for the clubs involved, so a fixture is recognisable before reading.
+  const clubs = (story.teamIds || []).map((id) => state.teams.get(id)).filter(Boolean);
+  if (clubs.length) {
+    const marks = el("div", "story-clubs");
+    clubs.forEach((team) => {
+      const club = el("span", "story-club");
+      club.appendChild(teamMark(team));
+      club.appendChild(el("span", "story-club-abbr", team.abbr));
+      marks.appendChild(club);
+    });
+    card.appendChild(marks);
+  }
+
+  const details = el("details", "story-full");
+  const toggle = el("summary", null, "Read the full story");
+  details.appendChild(toggle);
+  details.appendChild(storyBody(story));
+  if (lead) details.open = true;
+  card.appendChild(details);
+
+  if (story.gameId) {
+    const link = el("button", "story-link", "Open the game");
+    link.addEventListener("click", () => {
+      setView("games");
+      selectGame(story.gameId);
+    });
+    card.appendChild(link);
+  }
+  return card;
+}
+
+function renderWire() {
+  const stories = state.data.news || [];
+  const grid = $("#wire-grid");
+  const lead = $("#wire-lead");
+  const empty = $("#wire-empty");
+  grid.textContent = "";
+  lead.textContent = "";
+
+  if (!stories.length) {
+    lead.hidden = true;
+    empty.hidden = false;
+    $("#wire-day").textContent = "";
+    return;
+  }
+  empty.hidden = true;
+  lead.hidden = false;
+
+  const [top, ...rest] = stories;
+  lead.appendChild(storyCard(top, true));
+  rest.forEach((story) => grid.appendChild(storyCard(story, false)));
+
+  const day = storyDay(top);
+  $("#wire-day").textContent = day
+    ? `${stories.length} stories · latest ${day}`
+    : `${stories.length} stories`;
+}
+
+/* ------------------------------------------------------------------ *
  * Standings & teams
  * ------------------------------------------------------------------ */
 
@@ -1756,6 +1865,9 @@ async function refreshLeague({ quiet = false } = {}) {
 
   indexTeams(data.teams);
   renderSeasonLabel();
+  // Games finishing is exactly what makes new news, so the wire refreshes with
+  // the standings rather than waiting for a reload.
+  renderWire();
   renderSchedule();
   renderStandings();
   renderStats();

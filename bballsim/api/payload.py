@@ -27,6 +27,7 @@ from ..coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
 from ..league.calendar import PACIFIC, GameStatus
 from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
+from ..news import write_stories
 from ..models import Lineup
 from ..ratings import (
     ATTRIBUTE_GROUPS,
@@ -418,6 +419,9 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
             "fixtures": len(league.schedule),
             "played": sum(1 for g in league.schedule if g.status == GameStatus.FINAL),
         },
+        # The home page. Written from finished games, so an unplayed season
+        # ships an empty feed rather than an invented one.
+        "news": [story.to_dict() for story in write_stories(league)],
         "standings": league.standings_table(),
         "playerStats": [
             {k: v for k, v in row.items() if k != "totals"}

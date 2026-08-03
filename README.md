@@ -18,11 +18,12 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 262 tests
+python3 -m unittest discover -s tests    # 291 tests
 ```
 
-In the browser: four tabs — **Games** (today's slate and the live tracker),
-**Stats**, **Standings** and **Teams** (squads, player profiles, head coaches).
+In the browser: five tabs — **Home** (the news wire), **Games** (today's slate
+and the live tracker), **Stats**, **Standings** and **Teams** (squads, player
+profiles, head coaches).
 
 **There are no clock controls.** The league runs on real time: a game tips off
 at its real 8am, 1pm or 7pm Pacific slot and reveals its play-by-play at real
@@ -450,6 +451,66 @@ pick a stat tab to sort by it, or click any column header; click again to
 reverse. Percentages are true rates (makes over attempts), not averages of
 per-game percentages.
 
+## The newsroom
+
+The Home tab is a news wire: a triple-double, a streak, a milestone, the
+night's headline game. A season is 1,230 fixtures, so none of it can be written
+by hand, which raises the only question worth asking about generated sports
+writing — **where did that number come from?**
+
+Every figure in every sentence is read off a box score, a standings row or a
+season line. Nothing is estimated, rounded up for effect, or filled in because
+the sentence wanted a number. That is enforced rather than promised: prose is
+assembled through a `Copy` object that records each number as it formats it,
+and `tests/test_news.py` pulls every numeral back out of the finished article
+and fails on any figure that was never recorded. A story cannot carry a
+statistic the data did not supply.
+
+The same rule decides what is *missing*. A manager game's feed wants injury
+reports, trades, firings and a playoff race, and this league has none of those
+— nothing in the simulation injures a player, moves one between clubs, or plays
+a postseason. Those categories are absent rather than invented. Ten that are
+real:
+
+| | anchor | reads |
+|---|---|---|
+| Triple Double | 90 | box scores |
+| Season High | 85 | every prior game by that player |
+| Hot Streak | 80 | results in order |
+| Milestone | 75 | season totals crossing a round number, on the night they cross |
+| MVP Race | 72 | scoring leaders against the standings |
+| Big Individual Game | 70 | box scores |
+| Rookie Watch | 65 | draft class, which the biography layer already tracks |
+| Game Recap | 60 | the scoreboard, quarter by quarter |
+| Coaching | 55 | the best record, and who is on that bench |
+| League News | 45 | the whole slate in aggregate |
+
+It is called Season High, not career high, because one season is all the data
+there is; a career high would be a claim about games that do not exist.
+
+**Ranking alone makes a log, not a front page.** Individual performances score
+highest by construction, and a 45-game slate produces enough of them to fill
+twelve slots six times over — the first version of this page was six
+triple-doubles and nothing else. Three filters fix it: one angle per player
+(the detectors overlap deliberately, so the best framing wins and the other two
+are dropped), one story per game, and a ceiling per category. Four slots are
+then held back for the stories that say where the *season* is rather than what
+happened last night — the recap, the scoring race, the table and the slate —
+which otherwise never reach the page at all.
+
+Two bugs worth recording, because they are the two failure modes of this kind
+of writing. A recap once read *"the winners took the glass 51-56"* on a night
+the winners were out-rebounded: every number in it was real and the sentence
+was still false, which no figures audit can see — there is now a test that
+parses the claim back out and checks it against the count. And coach ratings
+are stored as floats, so one story reported a coach *"rates 47.2168 for
+offence"*. Both have tests.
+
+Stories are deterministic, like everything else here: the same league state
+writes the same feed, and which of several phrasings a story uses is drawn from
+its own id, so an article does not rewrite itself between refreshes and two
+similar games do not read alike.
+
 ## Current and Potential Ability
 
 Underneath the visible attributes sit two hidden numbers on a **0–200 scale**:
@@ -718,6 +779,7 @@ render.yaml        hosting blueprint — see DEPLOY.md
 | `GET /api/teams`, `/api/teams/<id>` | teams, roster with ratings |
 | `GET /api/schedule?date=&team=` | fixtures |
 | `GET /api/standings` | standings table |
+| `GET /api/bootstrap` | everything a first paint needs, news feed included |
 | `GET /api/stats/players?min_games=n` | season per-game player stats |
 | `GET /api/stats/teams` | season per-game team stats |
 | `GET /api/games/<id>` | fixture + box score when final |

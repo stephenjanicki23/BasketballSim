@@ -1019,3 +1019,128 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
   .sched-preview-row { grid-template-columns: 30px minmax(0, 1fr); }
   .sched-preview-row .sched-preview-cell:last-child { grid-column: 2; }
 }
+
+/* ------------------------------------------------------------------ *
+ * Home: the wire
+ *
+ * A news page has one job the rest of the app does not: it has to be
+ * scannable. The lead story is given real width and opens by default; the
+ * rest sit in cards that stay closed until asked. Importance is carried by a
+ * left rule rather than by size, so a triple-double and a routine recap are
+ * distinguishable without either shouting.
+ * ------------------------------------------------------------------ */
+
+.wire {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.wire-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.wire-head h2 { font-size: 20px; font-weight: 600; }
+.wire-head p { font: 500 11px/1.4 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+
+.wire-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.story {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The accent is the whole visual hierarchy: no size changes, no colour
+ * washes, just how loudly the left edge announces the story. */
+.story.is-major   { border-left-color: var(--accent); }
+.story.is-notable { border-left-color: var(--home); }
+.story.is-routine { border-left-color: var(--hairline); }
+
+.story.is-lead { padding: 20px 22px 22px; }
+.story.is-lead .story-headline { font-size: 27px; line-height: 1.15; }
+.story.is-lead .story-standfirst { font-size: 16px; }
+
+.story-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.story-tag {
+  font: 700 10px/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.story-day {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.story-headline { font-size: 19px; font-weight: 600; line-height: 1.25; color: var(--ink); }
+.story-standfirst { font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+
+.story-clubs { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.story-club { display: inline-flex; align-items: center; gap: 7px; }
+.story-club .team-mark { width: 26px; height: 26px; }
+.story-club-abbr {
+  font: 700 11px/1 var(--mono);
+  letter-spacing: .06em;
+  color: var(--ink-2);
+}
+
+.story-full > summary {
+  cursor: pointer;
+  font: 600 12px/1 var(--sans);
+  color: var(--accent);
+  list-style: none;
+  padding: 4px 0;
+}
+.story-full > summary::-webkit-details-marker { display: none; }
+.story-full > summary::before { content: "▸ "; }
+.story-full[open] > summary::before { content: "▾ "; }
+.story-full[open] > summary { margin-bottom: 4px; }
+
+.story-body p {
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--ink-2);
+  margin-bottom: 10px;
+}
+.story-body p:last-child { margin-bottom: 0; }
+.story.is-lead .story-body p { font-size: 15.5px; }
+
+.story-link {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 5px 11px;
+  font: 600 12px/1 var(--sans);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.story-link:hover { border-color: var(--accent); color: var(--accent); }
+
+.wire .empty, .wire .note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.wire .note { border-top: 1px solid var(--hairline-soft); padding-top: 12px; }
+
+@media (max-width: 720px) {
+  .wire { padding: 12px; }
+  .wire-grid { grid-template-columns: 1fr; }
+  .story.is-lead .story-headline { font-size: 22px; }
+}

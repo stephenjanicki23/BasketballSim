@@ -21,15 +21,37 @@
       <span class="label" id="season-label"></span>
     </div>
     <nav class="nav" role="tablist" aria-label="Views">
-      <button class="nav-tab is-active" role="tab" aria-selected="true" data-view="games">Games</button>
+      <button class="nav-tab is-active" role="tab" aria-selected="true" data-view="home">Home</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="games">Games</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="stats">Stats</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
     </nav>
   </header>
 
+  <!-- Home -------------------------------------------------------- -->
+  <section class="view" data-view="home" role="tabpanel" aria-label="Home">
+    <div class="wire">
+      <div class="wire-head">
+        <h2>Around the league</h2>
+        <p class="muted" id="wire-day"></p>
+      </div>
+      <article class="lead" id="wire-lead" hidden></article>
+      <div class="wire-grid" id="wire-grid"></div>
+      <p class="empty" id="wire-empty" hidden>
+        No games have been played yet. The wire fills up once the season tips off.
+      </p>
+      <p class="note">
+        Every figure in these stories is read off a box score, a standings row or a
+        season line — nothing here is estimated or filled in to finish a sentence.
+        There are no injury, trade or playoff stories because the simulation has
+        none of those to report.
+      </p>
+    </div>
+  </section>
+
   <!-- Games ------------------------------------------------------- -->
-  <section class="view games-layout" data-view="games" role="tabpanel" aria-label="Games">
+  <section class="view games-layout" data-view="games" role="tabpanel" aria-label="Games" hidden>
     <div class="card schedule-card" id="schedule-card">
       <div class="schedule-head">
         <h2 id="schedule-day">Today</h2>
