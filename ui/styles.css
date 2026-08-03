@@ -1243,3 +1243,98 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   .bracket-wrap { padding: 12px; }
   #bracket { grid-template-columns: 1fr; }
 }
+
+/* ------------------------------------------------------------------ *
+ * Squad page
+ *
+ * A stats-site shape: pick a player on the left, read his numbers on the
+ * right. No ratings, no tactics, no coach panel -- all still in the payload
+ * and still read by the engine, just not what this screen is for.
+ * ------------------------------------------------------------------ */
+
+.squad-page {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: var(--gap);
+  padding: var(--gap);
+  max-width: 1280px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+.switcher {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: sticky;
+  top: var(--gap);
+}
+.switcher h2 { font-size: 15px; font-weight: 600; }
+.switcher select { width: 100%; }
+
+.switcher .roster-list { max-height: 60vh; overflow-y: auto; margin: 0; }
+
+.squad-main { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+
+.player-head {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 18px;
+  align-items: center;
+}
+.player-head-mark .team-mark { width: 54px; height: 54px; }
+.player-head-id h3 { font-size: 24px; font-weight: 600; line-height: 1.15; }
+.player-head-club { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+.player-head-facts {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 12px;
+  font-size: 12px;
+  align-content: center;
+}
+.player-head-facts dt {
+  font: 600 10px/1.5 var(--mono);
+  letter-spacing: .06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.player-head-facts dd { color: var(--ink-2); }
+
+.player-head-season { text-align: right; }
+.head-stat-row { display: flex; gap: 14px; margin-top: 6px; }
+.head-stat { display: flex; flex-direction: column; align-items: center; min-width: 46px; }
+.head-stat-label {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+.head-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+#squad-table tbody tr, #profile-games tbody tr { cursor: pointer; }
+#squad-table tbody tr.is-selected { background: var(--raised); }
+#squad-table tbody tr.is-selected .player-name { font-weight: 600; color: var(--ink); }
+
+@media (max-width: 900px) {
+  .squad-page { grid-template-columns: 1fr; }
+  .switcher { position: static; }
+  .switcher .roster-list { max-height: 240px; }
+  .player-head { grid-template-columns: auto minmax(0, 1fr); }
+  .player-head-facts, .player-head-season { grid-column: 1 / -1; text-align: left; }
+  .head-stat-row { justify-content: flex-start; }
+}

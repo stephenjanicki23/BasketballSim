@@ -223,86 +223,58 @@
 
   <!-- Teams ------------------------------------------------------- -->
   <section class="view" data-view="teams" role="tabpanel" aria-label="Teams" hidden>
-    <div class="team-layout">
-      <div class="card">
-        <div class="card-head">
-          <h2>Tactics</h2>
-          <select id="team-picker" aria-label="Choose a team"></select>
-        </div>
-        <div class="tactics-grid" id="tactics"></div>
-        <p class="note">
-          These are the inputs the engine reads on every possession. Schemes carry
-          explicit effect tables — <strong>pace and space</strong> lifts three-point rate and
-          pushes tempo while thinning the offensive glass; <strong>drop coverage</strong> trades
-          three-point defense for rim protection. The sliders layer on top.
-        </p>
-      </div>
+    <div class="squad-page">
+      <!-- Left rail: pick a club, then a player. -->
+      <aside class="switcher">
+        <h2>Switch Player</h2>
+        <select id="team-picker" aria-label="Choose a team"></select>
+        <select id="pos-filter" aria-label="Filter by position">
+          <option value="">All positions</option>
+          <option value="PG">Point Guard</option>
+          <option value="SG">Shooting Guard</option>
+          <option value="SF">Small Forward</option>
+          <option value="PF">Power Forward</option>
+          <option value="C">Center</option>
+        </select>
+        <ul id="roster-list" class="roster-list"></ul>
+      </aside>
 
-      <div class="card">
-        <div class="card-head">
-          <h2>Head Coach</h2>
-          <span class="muted-line" id="coach-tag"></span>
-        </div>
-        <div class="coach-grid" id="coach-panel"></div>
-        <p class="note">
-          Every rating here is read somewhere in the simulation: offense and defense move
-          what each side shoots, tactics drives turnovers and how fully a scheme's effects
-          land, development sets how fast a player closes on his ceiling, leadership how
-          quickly a locker room gels, and the scouting eye how accurate the club's read on
-          potential is. <strong>Reputation is standing, not skill</strong> — it is drawn from the
-          visible ratings with noise, so a coach can be over- or underrated.
-        </p>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <h2>Squad</h2>
-          <div class="squad-controls">
-            <label class="scout-switch" for="scale-toggle">
-              <span>Scale</span>
-              <select id="scale-toggle" aria-label="Rating display scale">
-                <option value="20" selected>1–20</option>
-                <option value="100">0–100</option>
-              </select>
-            </label>
-            <label class="scout-switch">
-              <input type="checkbox" id="scout-toggle" />
-              <span>Show scouted attributes</span>
-            </label>
+      <div class="squad-main">
+        <!-- Player header, in the shape a stats site uses. -->
+        <div class="player-head">
+          <div class="player-head-mark" id="profile-mark"></div>
+          <div class="player-head-id">
+            <h3 id="profile-name">—</h3>
+            <p class="player-head-club" id="profile-club"></p>
+          </div>
+          <dl class="player-head-facts" id="profile-facts"></dl>
+          <div class="player-head-season">
+            <span class="label" id="profile-season-label">Season averages</span>
+            <div class="head-stat-row" id="profile-headline"></div>
           </div>
         </div>
-        <div class="squad-layout">
-          <ul id="roster-list" class="roster-list"></ul>
-          <div class="profile">
-            <div class="profile-head">
-              <div>
-                <h3 id="profile-name">—</h3>
-                <p class="muted-line" id="profile-meta"></p>
-                <p class="bio-line" id="profile-bio"></p>
-              </div>
-              <div class="profile-badges">
-                <span class="chip"><span class="chip-label">Personality</span><span class="chip-value" id="profile-personality">—</span></span>
-                <span class="chip"><span class="chip-label">Rating</span><span class="chip-value" id="profile-stars">—</span></span>
-                <span class="chip"><span class="chip-label">Tier</span><span class="chip-value" id="profile-tier">—</span></span>
-                <span class="chip"><span class="chip-label">Archetype</span><span class="chip-value" id="profile-archetype">—</span></span>
-              </div>
-            </div>
-            <div id="attribute-groups" class="attr-grid"></div>
-            <div id="scouting" class="attr-grid scouting" hidden></div>
+
+        <div class="card">
+          <div class="card-head"><h2>Stats</h2></div>
+          <div class="sheet table-scroll">
+            <table id="profile-stats"></table>
           </div>
         </div>
-        <p class="note">
-          81 visible attributes on a <strong>1–20 scale</strong>, Football Manager style:
-          20 is generational, 16–17 an All-Star, 12–13 an average starter, 10–11 a
-          rotation player, 4–5 G League. Twenty steps rather than a hundred so one
-          point means something — 14 → 15 is a real upgrade, and players come out
-          spiky rather than clustered. Hover any value for its tier. The
-          engine never reads one directly — <strong>composites</strong> blend them into the
-          ~25 numbers a possession turns on, so no single attribute dominates and
-          balance lives in one file. Tick <em>scouted attributes</em> to reveal his hidden Current and
-          Potential Ability (0–200) with a scout's estimate of each, the 14 hidden
-          attributes, and the composites his ratings add up to.
-        </p>
+
+        <div class="card">
+          <div class="card-head"><h2>Recent Games</h2></div>
+          <div class="sheet table-scroll">
+            <table id="profile-games"></table>
+          </div>
+          <p class="note" id="profile-games-note"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Roster</h2></div>
+          <div class="sheet table-scroll">
+            <table id="squad-table"></table>
+          </div>
+        </div>
       </div>
     </div>
   </section>

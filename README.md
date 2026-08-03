@@ -520,6 +520,19 @@ writes the same feed, and which of several phrasings a story uses is drawn from
 its own id, so an article does not rewrite itself between refreshes and two
 similar games do not read alike.
 
+### The squad page
+
+The Teams tab is a **stats page**, not a ratings page: pick a club and a player
+on the left, and read a per-game line on the right — headline averages, a
+season split, and the whole roster as one table of GP/MIN/FG%/3P%/FT%/REB/AST/
+BLK/STL/PF/TOV/PTS.
+
+Tactics, the head coach's ratings and the 81-attribute grid are **not on this
+screen**. All three are still in the payload and still read by the engine on
+every possession; they are just not what a squad page is for. The question it
+answers is who is on the roster and what they are doing, and that question has
+a stats table for an answer.
+
 ## Conferences and the postseason
 
 Thirty clubs, fifteen a side. The split follows the nicknames, which fall along

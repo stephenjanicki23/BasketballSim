@@ -212,6 +212,8 @@ const state = {
   tab: "pbp",
   teamId: null,
   playerId: null,
+  posFilter: "",
+  statIndex: null,
   showHidden: false,
   displayScale: 20,
   statsScope: "players",
@@ -1469,6 +1471,41 @@ function titleCase(key) {
 }
 
 
+/* ------------------------------------------------------------------ *
+ * Teams: a squad page, in the shape a stats site uses
+ *
+ * Tactics, the coach's ratings and the 81-attribute grid are all still in the
+ * payload and still read by the engine -- they are just not on this screen.
+ * What a squad page is for is who is on the roster and what they are doing,
+ * and that is a stats table: name, position, and the per-game line.
+ * ------------------------------------------------------------------ */
+
+/* Season lines, keyed by player, so a roster row can find its own numbers. */
+function statsByPlayer() {
+  if (state.statIndex) return state.statIndex;
+  const index = new Map();
+  for (const row of state.data.playerStats || []) index.set(row.player_id, row);
+  state.statIndex = index;
+  return index;
+}
+
+const SQUAD_COLUMNS = [
+  ["games", "GP", 0], ["minutes", "MIN", 1], ["fg_pct", "FG%", 1],
+  ["tp_pct", "3P%", 1], ["ft_pct", "FT%", 1], ["rebounds", "REB", 1],
+  ["assists", "AST", 1], ["blocks", "BLK", 1], ["steals", "STL", 1],
+  ["fouls", "PF", 1], ["turnovers", "TOV", 1], ["points", "PTS", 1],
+];
+
+/* Percentages are stored 0-1 and read as percentages everywhere else on the
+ * site, so they are scaled here rather than at the source. */
+function statValue(row, key, places) {
+  if (!row) return "—";
+  let value = row[key];
+  if (value === undefined || value === null) return "—";
+  if (key.endsWith("_pct")) value *= 100;
+  return value.toFixed(places);
+}
+
 function renderTeams() {
   const picker = $("#team-picker");
   picker.textContent = "";
@@ -1484,70 +1521,50 @@ function renderTeams() {
     renderTeamDetail();
   });
 
-  $("#scout-toggle").addEventListener("change", (e) => {
-    state.showHidden = e.target.checked;
-    renderPlayer();
-  });
-
-  $("#scale-toggle").addEventListener("change", (e) => {
-    state.displayScale = Number(e.target.value);
-    renderTeamDetail();
-  });
-
+  const positions = $("#pos-filter");
+  if (positions) {
+    positions.addEventListener("change", (e) => {
+      state.posFilter = e.target.value;
+      state.playerId = null;
+      renderTeamDetail();
+    });
+  }
   renderTeamDetail();
+}
+
+function squadFilter(players) {
+  return state.posFilter
+    ? players.filter((p) => p.pos === state.posFilter)
+    : players;
 }
 
 async function renderTeamDetail() {
   const team = await squadFor(state.teamId);
   if (!team || state.teamId !== team.id) return;
 
-  // --- tactics ---------------------------------------------------------
-  const tactics = $("#tactics");
-  tactics.textContent = "";
-  const schemeLabel = (key) => SCHEME_LABELS[key] || titleCase(key);
-  const schemes = el("div", "scheme-row");
-  schemes.appendChild(schemeChip("Offense", schemeLabel(team.tactics.offensive_scheme)));
-  schemes.appendChild(schemeChip("Defense", schemeLabel(team.tactics.defensive_scheme)));
-  schemes.appendChild(schemeChip("Chemistry", String(team.chemistry)));
-  tactics.appendChild(schemes);
-
-  const sliders = el("div", "sliders");
-  for (const [key, label] of TACTIC_SLIDERS) {
-    const value = team.tactics[key];
-    const wrap = el("div", "slider");
-    wrap.appendChild(el("span", "slider-label", label));
-    const track = el("span", "slider-track");
-    const fill = el("span", "slider-fill");
-    fill.style.width = `${value}%`;
-    track.appendChild(fill);
-    wrap.appendChild(track);
-    wrap.appendChild(el("span", "slider-value", String(Math.round(value))));
-    sliders.appendChild(wrap);
+  const shown = squadFilter(team.players);
+  if (!shown.length) {
+    $("#roster-list").textContent = "";
+    $("#squad-table").textContent = "";
+    return;
   }
-  tactics.appendChild(sliders);
-
-  renderCoach(team);
-
-  // --- roster list -----------------------------------------------------
-  if (!state.playerId || !team.players.some((p) => p.id === state.playerId)) {
-    state.playerId = team.players[0].id;
+  if (!state.playerId || !shown.some((p) => p.id === state.playerId)) {
+    state.playerId = shown[0].id;
   }
+
+  // --- left rail -------------------------------------------------------
   const list = $("#roster-list");
   list.textContent = "";
-  team.players.forEach((player, index) => {
+  shown.forEach((player) => {
     const row = el("li", "roster-row" + (player.id === state.playerId ? " is-selected" : ""));
-    if (index < 5) row.classList.add("is-starter");
     row.tabIndex = 0;
     row.setAttribute("role", "button");
-    row.appendChild(el("span", "player-pos", player.pos));
+    row.appendChild(teamMark(team));
     const nameWrap = el("span", "roster-name");
     nameWrap.appendChild(el("span", "player-name", player.name));
-    nameWrap.appendChild(el("span", "roster-meta", `${player.age} · ${player.personality}`));
+    nameWrap.appendChild(el("span", "roster-meta",
+      `#${player.jersey} · ${player.pos}`));
     row.appendChild(nameWrap);
-    const ovrCell = starRow(player.stars, "is-compact");
-    ovrCell.title = `${player.stars} stars — ${player.tier}`;
-    row.appendChild(ovrCell);
-
     const open = () => { state.playerId = player.id; renderTeamDetail(); };
     row.addEventListener("click", open);
     row.addEventListener("keydown", (e) => {
@@ -1556,174 +1573,171 @@ async function renderTeamDetail() {
     list.appendChild(row);
   });
 
-  renderPlayer();
+  renderSquadTable(team, shown);
+  renderPlayer(team);
 }
 
-/* The head coach: a name, what he is known for, and the seven ratings the
- * engine reads. Bars rather than a table -- there are only seven of them, and
- * what matters when you look at a coach is the shape, not the digits. */
-function renderCoach(team) {
-  const panel = $("#coach-panel");
-  const tag = $("#coach-tag");
-  panel.textContent = "";
-  tag.textContent = "";
+/* The whole roster as one per-game table -- the view that answers "who is on
+ * this team and what are they doing" without opening anyone. */
+function renderSquadTable(team, players) {
+  const table = $("#squad-table");
+  table.textContent = "";
+  const stats = statsByPlayer();
 
-  const coach = team.coach;
-  if (!coach) {
-    panel.appendChild(el("p", "muted-line", "No head coach appointed."));
-    return;
+  const head = el("thead");
+  const headRow = el("tr");
+  headRow.appendChild(el("th", "col-name", "Player"));
+  for (const [, label] of SQUAD_COLUMNS) headRow.appendChild(el("th", null, label));
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const body = el("tbody");
+  for (const player of players) {
+    const row = el("tr", player.id === state.playerId ? "is-selected" : null);
+    const nameCell = el("td", "col-name");
+    nameCell.appendChild(el("span", "player-pos", player.pos));
+    nameCell.appendChild(el("span", "player-name", player.name));
+    row.appendChild(nameCell);
+    const line = stats.get(player.id);
+    for (const [key, , places] of SQUAD_COLUMNS) {
+      row.appendChild(el("td", null, statValue(line, key, places)));
+    }
+    row.addEventListener("click", () => {
+      state.playerId = player.id;
+      renderTeamDetail();
+    });
+    body.appendChild(row);
   }
-
-  const scale = state.data.coachScale || {};
-  const max = scale.max || 100;
-  const labels = scale.labels || [];
-
-  tag.textContent = `${coach.tier} · ${coach.specialism}`;
-
-  const head = el("div", "coach-head");
-  head.appendChild(el("span", "coach-name", coach.name));
-  const tenure = coach.seasons_coached === 1 ? "1 season" : `${coach.seasons_coached} seasons`;
-  head.appendChild(el("span", "coach-sub",
-    `${coach.age} years · ${coach.nationality} · ${tenure} as a head coach`));
-  panel.appendChild(head);
-
-  const bars = el("div", "coach-ratings");
-  for (const [key, label] of labels) {
-    const value = coach.ratings[key];
-    if (value === undefined) continue;
-    const wrap = el("div", "slider" + (key === "reputation" ? " is-reputation" : ""));
-    wrap.appendChild(el("span", "slider-label", label));
-    const track = el("span", "slider-track");
-    const fill = el("span", "slider-fill");
-    fill.style.width = `${Math.max(0, Math.min(100, (value / max) * 100))}%`;
-    track.appendChild(fill);
-    wrap.appendChild(track);
-    wrap.appendChild(el("span", "slider-value", String(Math.round(value))));
-    bars.appendChild(wrap);
-  }
-  panel.appendChild(bars);
+  table.appendChild(body);
 }
 
-/* An 81-attribute roster will not fit in a table, so the profile follows the
- * Football Manager pattern: grouped columns of name + value for one player. */
-function renderPlayer() {
-  const team = state.teams.get(state.teamId);
-  const player = team.players.find((p) => p.id === state.playerId);
+function fact(list, term, value) {
+  if (!value) return;
+  list.appendChild(el("dt", null, term));
+  list.appendChild(el("dd", null, value));
+}
+
+function renderPlayer(team) {
+  const player = (team.players || []).find((p) => p.id === state.playerId);
   if (!player) return;
+  const line = statsByPlayer().get(player.id);
+
+  const mark = $("#profile-mark");
+  mark.textContent = "";
+  mark.appendChild(teamMark(team));
 
   $("#profile-name").textContent = player.name;
+  $("#profile-club").textContent =
+    `${team.city} ${team.name} · #${player.jersey} · ${player.pos}`;
+
+  // Biography, in the order a stats site leads with.
+  const facts = $("#profile-facts");
+  facts.textContent = "";
+  fact(facts, "HT/WT", `${player.height}, ${player.weight} lbs`);
+  fact(facts, "AGE", String(player.age));
   const bio = player.bio || {};
-  $("#profile-meta").textContent =
-    `${player.pos} · ${player.age} years · ${player.height} · ${player.weight} lb · #${player.jersey}`;
+  if (bio.draft && bio.draft.year) {
+    fact(facts, "DRAFT INFO",
+      `${bio.draft.year}: Rd ${bio.draft.round}, Pk ${bio.draft.pick}`);
+  } else {
+    fact(facts, "DRAFT INFO", "Undrafted");
+  }
+  fact(facts, "FROM", bio.background || bio.nationality);
+  fact(facts, "EXPERIENCE", line && line.games ? `${line.games} games` : "—");
 
-  const bioLine = $("#profile-bio");
-  bioLine.textContent = "";
-  const facts = [
-    ["Nationality", bio.nationality],
-    [bio.background_type || "Background", bio.background],
-    ["Draft", bio.draft ? bio.draft.label : null],
-  ];
-  for (const [label, value] of facts) {
-    if (!value) continue;
-    const item = el("span", "bio-fact");
-    item.appendChild(el("span", "bio-label", label));
-    item.appendChild(el("span", "bio-value", value));
-    bioLine.appendChild(item);
+  // The four headline averages.
+  const headline = $("#profile-headline");
+  headline.textContent = "";
+  for (const [key, label, places] of [
+    ["points", "PTS", 1], ["rebounds", "REB", 1],
+    ["assists", "AST", 1], ["fg_pct", "FG%", 1],
+  ]) {
+    const cell = el("div", "head-stat");
+    cell.appendChild(el("span", "head-stat-label", label));
+    cell.appendChild(el("span", "head-stat-value", statValue(line, key, places)));
+    headline.appendChild(cell);
+  }
+  const seasonLabel = $("#profile-season-label");
+  if (seasonLabel) {
+    seasonLabel.textContent = line && line.games
+      ? `${state.data.league.season} season averages`
+      : "No games played yet";
   }
 
-  const starBox = $("#profile-stars");
-  starBox.textContent = "";
-  starBox.appendChild(starRow(player.stars));
-  $("#profile-tier").textContent = player.tier;
-  $("#profile-archetype").textContent = player.archetype || "—";
-  $("#profile-personality").textContent = player.personality;
-
-  const groups = $("#attribute-groups");
-  groups.textContent = "";
-  const summaries = player.groupStars || {};
-  for (const [group, keys] of Object.entries(state.data.attributeGroups)) {
-    groups.appendChild(attributeColumn(
-      group, keys, player.ratings, state.data.attributeNames, null, summaries[group],
-    ));
+  // Season line as its own table, the way a profile page carries it.
+  const table = $("#profile-stats");
+  table.textContent = "";
+  const head = el("thead");
+  const headRow = el("tr");
+  headRow.appendChild(el("th", "col-name", "SPLIT"));
+  for (const [, label] of SQUAD_COLUMNS) headRow.appendChild(el("th", null, label));
+  head.appendChild(headRow);
+  table.appendChild(head);
+  const body = el("tbody");
+  const row = el("tr");
+  row.appendChild(el("td", "col-name", "Regular Season"));
+  for (const [key, , places] of SQUAD_COLUMNS) {
+    row.appendChild(el("td", null, statValue(line, key, places)));
   }
+  body.appendChild(row);
+  table.appendChild(body);
 
-  const scouting = $("#scouting");
-  scouting.hidden = !state.showHidden;
-  if (state.showHidden) {
-    scouting.textContent = "";
-    const keys = Object.keys(state.data.hiddenNames);
-    scouting.appendChild(
-      attributeColumn("Scouted", keys, player.hidden, state.data.hiddenNames, "scouted")
-    );
-    scouting.appendChild(abilityPanel(player));
-
-    scouting.appendChild(attributeColumn(
-      "Engine composites", state.data.compositeOrder, player.composites,
-      Object.fromEntries(state.data.compositeOrder.map((k) => [k, k])),
-      "composite-group",
-    ));
-  }
+  renderPlayerGames(player, team);
 }
 
-/* CA/PA: the two hidden numbers everything else is generated from. Shown as a
- * bar so headroom -- the gap a scout is actually trying to estimate -- reads at
- * a glance, with the scout's own (deliberately imprecise) range beneath it. */
-function abilityPanel(player) {
-  const { current, potential, headroom, tier, potential_tier } = player.ability;
-  const max = state.data.abilityScale.max;
-  const report = player.scouting;
+/* The player's last few box scores, pulled out of the games already loaded
+ * for the day. Only the fixtures that ship play-by-play can supply one, so
+ * the note says so rather than leaving an empty table unexplained. */
+function renderPlayerGames(player, team) {
+  const table = $("#profile-games");
+  const note = $("#profile-games-note");
+  table.textContent = "";
 
-  const wrap = el("div", "attr-group ability-group");
-  wrap.appendChild(el("h4", "attr-heading", "Ability (0\u2013200)"));
-
-  const potentialRow = el("div", "potential-stars");
-  potentialRow.appendChild(el("span", "bio-label", "Potential"));
-  potentialRow.appendChild(starRow(player.potentialStars));
-  wrap.appendChild(potentialRow);
-
-  const bar = el("div", "ability-bar");
-  const fill = el("span", "ability-current");
-  fill.style.width = `${(current / max) * 100}%`;
-  const ceiling = el("span", "ability-potential");
-  ceiling.style.width = `${(potential / max) * 100}%`;
-  bar.appendChild(ceiling);
-  bar.appendChild(fill);
-  wrap.appendChild(bar);
-
-  const rows = el("ul", "attr-list");
-  const add = (label, value, extra) => {
-    const row = el("li", "attr-row");
-    row.appendChild(el("span", "attr-name", label));
-    const chip = el("span", "attr-value ability-value", String(Math.round(value)));
-    row.appendChild(chip);
-    if (extra) row.title = extra;
-    rows.appendChild(row);
-  };
-  add("Current (CA)", current, tier);
-  add("Potential (PA)", potential, potential_tier);
-  add("Headroom", headroom);
-  wrap.appendChild(rows);
-
-  wrap.appendChild(el("p", "scout-note",
-    `Scout: CA ${report.current_range[0]}–${report.current_range[1]}, ` +
-    `PA ${report.potential_range[0]}–${report.potential_range[1]} — ${report.verdict}`));
-  return wrap;
-}
-
-/* Half-star glyphs. The ten CA tiers are exactly ten half-star steps, so a
- * star rating is the tier table rendered rather than a second scale. */
-function starRow(value, className) {
-  const wrap = el("span", `stars ${className || ""}`.trim());
-  wrap.setAttribute("role", "img");
-  wrap.setAttribute("aria-label", `${value} out of 5 stars`);
-  for (let i = 1; i <= 5; i += 1) {
-    let glyph = "\u2606";
-    let state = "empty";
-    if (value >= i) { glyph = "\u2605"; state = "full"; }
-    else if (value >= i - 0.5) { glyph = "\u2605"; state = "half"; }
-    wrap.appendChild(el("span", `star is-${state}`, glyph));
+  const rows = [];
+  for (const game of dayGames()) {
+    if (game.home !== team.id && game.away !== team.id) continue;
+    const box = game.home === team.id ? game.homeBox : game.awayBox;
+    if (!box || !box.players) continue;
+    const found = box.players.find((l) => l.player_id === player.id);
+    if (found) rows.push({ game, line: found });
   }
-  return wrap;
+
+  // An empty card with an apology in it is worse than no card. Only the
+  // fixtures that ship play-by-play can supply a box score, which on a page
+  // showing the Finals is most of the league.
+  const card = table.closest(".card");
+  if (!rows.length) {
+    if (card) card.hidden = true;
+    return;
+  }
+  if (card) card.hidden = false;
+  note.textContent = "";
+  const head = el("thead");
+  const headRow = el("tr");
+  for (const label of ["DATE", "OPP", "RESULT", "MIN", "PTS", "REB", "AST", "STL", "BLK", "TO"]) {
+    headRow.appendChild(el("th", label === "DATE" ? "col-name" : null, label));
+  }
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const body = el("tbody");
+  for (const { game, line } of rows) {
+    const opponentId = game.home === team.id ? game.away : game.home;
+    const opponent = state.teams.get(opponentId);
+    const us = game.home === team.id ? game.homeScore : game.awayScore;
+    const them = game.home === team.id ? game.awayScore : game.homeScore;
+    const tr = el("tr");
+    tr.appendChild(el("td", "col-name", gameDate(game)));
+    tr.appendChild(el("td", null,
+      `${game.home === team.id ? "vs" : "@"} ${opponent ? opponent.abbr : ""}`));
+    tr.appendChild(el("td", null, `${us > them ? "W" : "L"} ${us}-${them}`));
+    tr.appendChild(el("td", null, line.minutes || "—"));
+    for (const key of ["points", "rebounds", "assists", "steals", "blocks", "turnovers"]) {
+      tr.appendChild(el("td", null, String(line[key] ?? "—")));
+    }
+    body.appendChild(tr);
+  }
+  table.appendChild(body);
 }
 
 /* A collapsible section: heading and star rating always visible, the
@@ -1732,34 +1746,6 @@ function starRow(value, className) {
  *
  * `summary` is optional -- the scouted and composite panels have no star
  * rating, and open with just their heading. */
-function attributeColumn(title, keys, values, names, extraClass, summary) {
-  const wrap = el("details", "attr-group" + (extraClass ? ` ${extraClass}` : ""));
-  wrap.open = state.openGroups.has(title);
-  wrap.addEventListener("toggle", () => {
-    // Remembered per section, so opening Shooting on one player leaves it open
-    // as you click down the roster.
-    if (wrap.open) state.openGroups.add(title);
-    else state.openGroups.delete(title);
-  });
-
-  const head = el("summary", "attr-heading");
-  head.appendChild(el("span", "attr-heading-name", title));
-  if (summary) {
-    const stars = starRow(summary.stars, "is-compact");
-    stars.title = `${summary.stars} stars — ${summary.tier}`;
-    head.appendChild(stars);
-    head.appendChild(el("span", "attr-heading-value", String(displayValue(summary.average))));
-  }
-  wrap.appendChild(head);
-
-  const listEl = el("ul", "attr-list");
-  for (const key of keys) {
-    listEl.appendChild(attributeRow(names[key] || titleCase(key), values[key], key));
-  }
-  wrap.appendChild(listEl);
-  return wrap;
-}
-
 /* Storage is always 1-20. `displayScale` only changes presentation. */
 function displayValue(value) {
   const { max } = state.data.scale;
