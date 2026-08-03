@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 257 tests
+python3 -m unittest discover -s tests    # 262 tests
 ```
 
 In the browser: four tabs — **Games** (today's slate and the live tracker),
@@ -561,6 +561,11 @@ ordered list of `GameEvent`s, each stamped with the game clock and with
 7. **Rebound** — offensive rebound chance from the two lineups' glass
    composites (which fold in boxing out, positioning and timing) and crash
    tactics; an offensive board triggers a short-clock second-chance possession.
+   About one carom in seven is a **team rebound** and goes on nobody's line —
+   the ball out of bounds off a defender's fingertips, the deadball after the
+   first of two free throws, the tip nobody controls at the buzzer. It still
+   decides who gets the ball; it just does not decide who gets the credit, and
+   an offensive one is a sideline inbound rather than a tip-in.
 
 Two hidden attributes reach into the simulation directly. **Consistency** sets
 how far a player's ratings drift on any given night — rolled once per game in
@@ -586,24 +591,41 @@ an ordered tuple, and `tests/test_engine.py` shells out with three different
 
 ### Calibration
 
-Across the full 30-team season (435 games), per team-game:
+Across the full 30-team season (1,230 games), per team-game:
 
 | | sim | NBA (recent) |
 |---|---|---|
-| Points | 108.5 | 114 |
-| Possessions | 98.4 (92–109) | 99 (96–104) |
-| FG% / 3P% / FT% | .443 / .359 / .769 | .472 / .366 / .783 |
-| AST / TOV / REB | 26.1 / 15.0 / 51.1 | 26.5 / 13.5 / 53 |
-| STL / BLK / PF | 9.5 / 5.1 / 19.5 | 7.5 / 5.0 / 19 |
-| OREB% | .269 | .235 |
-| Score SD / mean margin | 15.0 / 15.7 | ~13 / ~11.5 |
+| Points | 107.9 | 114 |
+| Possessions | 98.1 (92–107) | 99 (96–104) |
+| FG% / 3P% / FT% | .441 / .363 / .772 | .472 / .366 / .783 |
+| AST / TOV / REB | 25.8 / 15.2 / 44.0 | 26.5 / 13.5 / 43.5 |
+| STL / BLK / PF | 9.6 / 4.9 / 19.3 | 7.5 / 5.0 / 19 |
+| OREB% | .268 | .235 |
+| Score SD / mean margin | 14.5 / 15.6 | ~13 / ~11.5 |
+
+Rebounds are the one line that moved for a reason other than tuning. The sim
+had been at 51 a side, and the number it was being checked against — 53 — was
+the wrong one: 53 is roughly how many loose balls a game produces, but only
+about 43.5 of them go on a player's line. The rest are team rebounds. Crediting
+every carom to somebody inflated individual totals by around an eighth, which
+does not sound like much until you count the consequence: **33 players were
+averaging ten rebounds a game**, against fourteen or so in a real season. Team
+rebounds brought that to 18. OREB% did not move at all — the same share of
+loose balls still goes to the offence, they just do not all land on a name.
+Scoring gave up half a point, which is the honest cost of an offensive team
+rebound being a sideline inbound instead of a tip-in from under the rim.
 
 Positions separate the way they should. Among rotation players (24+ minutes a
-game), rebounds run PG 3.8, SG 6.0, SF 6.5, PF 10.1, C 10.1 and blocks PG 0.30
-through C 1.14 — the guard/big split is right, though wings rebound more than
-real ones do. The stats page is what surfaced the assist bug: assists were
-spread too evenly, so the assister weighting is now steep on playmaking and the
-leaders are lead guards at 7–8 rather than a five-way split.
+game), rebounds run PG 3.3, SG 5.4, SF 5.6, PF 8.8, C 8.6 and blocks PG 0.24
+through C 1.14. The guard/big split is right; what is still missing is any gap
+between the two bigs, where a real league has centres a couple of rebounds
+clear of power forwards. That one is not the engine's to fix — on the shipped
+roster a power forward's rebounding attributes are already a shade better than
+a centre's, and the engine reads attributes, not floor position.
+
+The stats page is what surfaced the assist bug: assists were spread too evenly,
+so the assister weighting is now steep on playmaking and the leaders are lead
+guards at 7–8 rather than a five-way split.
 
 The scale change from 0–99 to 1–20 moved almost none of these, because the
 engine works in normalized units — `(rating − average) / average` — rather than

@@ -90,6 +90,16 @@ INTERIOR_ZONES = (ShotZone.RIM, ShotZone.PAINT)
 
 BASE_ASSIST_RATE = 0.672         # share of made field goals that are assisted
 BASE_OFF_REBOUND_RATE = 0.268
+
+# Not every loose ball belongs to somebody. A miss that goes out of bounds off
+# a defender's fingertips, a carom tipped around and dead at the buzzer, the
+# ball nobody controls before an inbound -- all of those change hands without a
+# player being credited. A real box score calls them team rebounds and keeps
+# them out of the player column, which is why NBA sides average about 44
+# rebounds a night on well over fifty loose balls. Credit every carom to
+# somebody instead and roughly an extra fifteen players a season "average a
+# double-double" who never touched one.
+BASE_TEAM_REBOUND_RATE = 0.135
 BASE_BLOCK_RATE = 0.058          # of two-point attempts
 BASE_SHOOTING_FOUL_RATE = 0.105
 BASE_NON_SHOOTING_FOUL_RATE = 0.108
@@ -662,6 +672,10 @@ class PossessionEngine:
         offensive = self.rng.chance(self._bounded(rate, 0.05, 0.55))
 
         side = off if offensive else deff
+        if self.rng.chance(BASE_TEAM_REBOUND_RATE):
+            self._team_rebound(game, off, deff, side, offensive)
+            return
+
         composite = C.offensive_rebounding if offensive else C.defensive_rebounding
         rebounder = self.rng.weighted_choice(
             side.lineup.players,
@@ -687,6 +701,34 @@ class PossessionEngine:
             self._burn_clock(game, min(game.clock, self.rng.uniform(2.0, 7.0)))
             putback = self.rng.chance(0.55)
             self._resolve_shot_attempt(game, off, deff, putback=putback)
+
+    def _team_rebound(
+        self,
+        game: GameState,
+        off: SideContext,
+        deff: SideContext,
+        side: SideContext,
+        offensive: bool,
+    ) -> None:
+        """A carom that changes hands with nobody credited.
+
+        The possession resolves exactly as it would have -- the side that won
+        the ball keeps it -- but no line in the box score moves. An offensive
+        team rebound is a dead ball and a sideline inbound rather than a
+        put-back, so the shot that follows is a fresh look off a reset, not a
+        tip in traffic.
+        """
+        self._emit(
+            game,
+            EventType.REBOUND,
+            side.state,
+            None,
+            f"{side.state.team.abbreviation} team rebound",
+            detail={"offensive": offensive, "team": True},
+        )
+        if offensive and game.clock > 1.0:
+            self._burn_clock(game, min(game.clock, self.rng.uniform(4.0, 10.0)))
+            self._resolve_shot_attempt(game, off, deff, putback=False)
 
     # ------------------------------------------------------------------
     # Helpers

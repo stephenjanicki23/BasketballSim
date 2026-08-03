@@ -146,6 +146,97 @@ class TestTacticsDriveOutcomes(unittest.TestCase):
         self.assertGreater(fast_poss, slow_poss)
 
 
+class TestRebounding(unittest.TestCase):
+    """Not every loose ball belongs to somebody.
+
+    A real box score keeps deadball caroms and balls knocked out of bounds off
+    the player column and calls them team rebounds, which is why NBA sides
+    average about 44 rebounds a night on well over fifty loose balls. Credit
+    all of them and the league fills up with players "averaging a
+    double-double" who are really just standing near a lot of misses.
+    """
+
+    GAMES = 40
+
+    @classmethod
+    def setUpClass(cls):
+        teams = make_teams(8)
+        cls.results = [
+            sim(teams[i % 8], teams[(i + 3) % 8], seed=f"reb-{i}")
+            for i in range(cls.GAMES)
+        ]
+
+    def caroms(self, result):
+        return [e for e in result.events if e.type == EventType.REBOUND]
+
+    def test_some_rebounds_belong_to_nobody(self):
+        team_rebounds = [
+            e for r in self.results for e in self.caroms(r) if e.player_id is None
+        ]
+        self.assertGreater(len(team_rebounds), 0, "no team rebounds at all")
+        for event in team_rebounds:
+            self.assertIsNotNone(event.team_id, "a team rebound still changes hands")
+            self.assertTrue(event.detail.get("team"))
+
+    def test_a_team_rebound_credits_no_line_in_the_box_score(self):
+        """The check that matters: player rebounds must be short of the caroms
+        by exactly the team rebounds, or the two are being double-counted."""
+        for result in self.results:
+            credited = sum(
+                line.rebounds
+                for box in (result.home_box, result.away_box)
+                for line in box.players.values()
+            )
+            caroms = self.caroms(result)
+            uncredited = sum(1 for e in caroms if e.player_id is None)
+            self.assertEqual(credited, len(caroms) - uncredited)
+
+    def test_uncredited_caroms_are_a_small_minority(self):
+        caroms = [e for r in self.results for e in self.caroms(r)]
+        share = sum(1 for e in caroms if e.player_id is None) / len(caroms)
+        self.assertGreater(share, 0.08, "team rebounds have gone missing")
+        self.assertLess(share, 0.20, "too many rebounds belong to nobody")
+
+    def test_a_team_rebound_never_becomes_a_put_back(self):
+        """An offensive team rebound is a dead ball and a sideline inbound.
+        A tip-in off one would be a shot nobody rebounded."""
+        shots = (EventType.SHOT_MADE, EventType.SHOT_MISSED)
+        after_team, after_player = [], []
+        for result in self.results:
+            events = result.events
+            for event, following in zip(events, events[1:]):
+                if event.type != EventType.REBOUND:
+                    continue
+                if not event.detail.get("offensive") or following.type not in shots:
+                    continue
+                bucket = after_team if event.player_id is None else after_player
+                bucket.append(bool(following.detail.get("putback")))
+
+        # Both halves are needed: without the second, "no put-backs" would pass
+        # just as well on a build that had stopped generating them at all.
+        self.assertTrue(after_team, "no shot ever followed an offensive team rebound")
+        self.assertFalse(any(after_team), "a team rebound turned into a tip-in")
+        self.assertTrue(any(after_player), "player offensive rebounds stopped tipping in")
+
+    def test_credited_rebounds_land_where_a_real_box_score_does(self):
+        """Around 44 a side over the shipped league, which is the number that
+        decides how many players finish a season averaging ten.
+
+        The band is wider than that because rebounds are misses: an ad-hoc pool
+        of eight generated teams shoots worse than the calibrated thirty and so
+        leaves more to collect. What this pins is the order of magnitude -- a
+        credited total drifting toward the fifties means team rebounds have
+        stopped working."""
+        per_team_game = sum(
+            line.rebounds
+            for result in self.results
+            for box in (result.home_box, result.away_box)
+            for line in box.players.values()
+        ) / (2 * self.GAMES)
+        self.assertGreater(per_team_game, 40.0)
+        self.assertLess(per_team_game, 50.0)
+
+
 class TestChemistry(unittest.TestCase):
     def test_chemistry_profile_responds_to_pair_ratings(self):
         team = make_teams(1)[0]

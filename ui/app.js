@@ -132,7 +132,10 @@ function applyEvent(state, event) {
       break;
     }
     case EV.REBOUND: {
+      // A team rebound carries no player: the ball changed hands but nobody
+      // is credited, exactly as in a real box score.
       const rebounder = line(state, teamId, playerId);
+      if (!rebounder) break;
       if (flags & FLAG_OREB) rebounder.oreb += 1;
       else rebounder.dreb += 1;
       break;
