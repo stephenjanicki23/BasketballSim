@@ -1144,3 +1144,102 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
   .wire-grid { grid-template-columns: 1fr; }
   .story.is-lead .story-headline { font-size: 22px; }
 }
+
+/* ------------------------------------------------------------------ *
+ * Conferences and the bracket
+ * ------------------------------------------------------------------ */
+
+.standings-group th {
+  text-align: left;
+  padding: 14px 12px 6px;
+  font: 700 10px/1 var(--mono);
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: none;
+  border-bottom: 1px solid var(--hairline);
+}
+/* Eight of fifteen go through, so the table says where the line falls. */
+tr.is-seeded .col-rank { color: var(--ink); font-weight: 700; }
+tr:not(.is-seeded) .col-rank { color: var(--muted); }
+tr.is-cutline td { border-bottom: 2px solid var(--accent); }
+
+.bracket-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+#bracket {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.bracket-round {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bracket-round-name {
+  font: 700 10px/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.bracket-conf {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.series {
+  border: 1px solid var(--hairline-soft);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--raised);
+}
+.series.is-done { border-color: var(--hairline); }
+.series-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  color: var(--muted);
+}
+.series-side.is-winner { color: var(--ink); font-weight: 600; }
+.series-side .team-mark { width: 22px; height: 22px; }
+.series-seed {
+  width: 14px;
+  font: 600 10px/1 var(--mono);
+  color: var(--muted);
+  text-align: right;
+}
+.series-abbr { font: 700 11px/1 var(--mono); letter-spacing: .05em; flex: 1; }
+.series-wins {
+  font: 700 13px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.series-meta {
+  margin-top: 4px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .bracket-wrap { padding: 12px; }
+  #bracket { grid-template-columns: 1fr; }
+}

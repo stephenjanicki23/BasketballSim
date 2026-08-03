@@ -18,12 +18,12 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 324 tests
+python3 -m unittest discover -s tests    # 350 tests
 ```
 
-In the browser: five tabs — **Home** (the news wire), **Games** (today's slate
-and the live tracker), **Stats**, **Standings** and **Teams** (squads, player
-profiles, head coaches).
+In the browser: six tabs — **Home** (the news wire), **Games** (today's slate
+and the live tracker), **Stats**, **Standings** (by conference), **Playoffs**
+(the bracket) and **Teams** (squads, player profiles, head coaches).
 
 **There are no clock controls.** The league runs on real time: a game tips off
 at its real 8am, 1pm or 7pm Pacific slot and reveals its play-by-play at real
@@ -519,6 +519,66 @@ Stories are deterministic, like everything else here: the same league state
 writes the same feed, and which of several phrasings a story uses is drawn from
 its own id, so an article does not rewrite itself between refreshes and two
 similar games do not read alike.
+
+## Conferences and the postseason
+
+Thirty clubs, fifteen a side. The split follows the nicknames, which fall along
+a clean line: forges, foundries, mines, ridges, timber and the animals that
+live in it on one side; harbours, tides, gales, anchors and everything that
+navigates by them on the other.
+
+| | |
+|---|---|
+| **Ironridge** | inland, industrial, mountain, forest |
+| **Tidewater** | coastal, maritime, weather, sky |
+
+They meet in the **Keystone Finals** — the keystone being the stone at the top
+of an arch that carries both halves and without which neither stands. The
+winner lifts the **Keystone Trophy**.
+
+Membership is *derived, not saved*: keyed by abbreviation in
+`bballsim/conferences.py`, exactly the way crests are, so the frozen roster
+never changes and a save written before conferences existed still loads. The
+shipped `data/league.json` had a `conference` field already and it was a coin
+flip — 17/13, with the Eastport Mariners in the West.
+
+Eight from each conference, seeded on record: 1v8, 2v7, 3v6, 4v5, best of
+seven, home court 2-2-1-1-1 to the higher seed, four rounds to a champion.
+
+**The bracket is derived too.** `bballsim/league/playoffs.py` stores nothing —
+every series is rebuilt from the fixtures on the schedule, the way standings
+are rebuilt from results. A postseason therefore survives a save and reload
+with **no change to the save format at all** (playoff games are `ScheduledGame`s
+and `dump_game` already knew how to write one), and there is no second source
+of truth to drift out of step.
+
+Fixtures are created as they are earned. A best-of-seven does not know it needs
+a game six until game five is played, and round two has no opponents until
+round one ends, so `advance` runs on every tick and adds only what is now
+knowable. Nothing is scheduled and then cancelled — the fixture list never
+contains a game that will not be played.
+
+Two things the postseason forced out into the open:
+
+- **Playoff results were landing in the regular-season standings.** Seeding is
+  read off those standings, so the bracket moved under its own feet: a club
+  that won two rounds climbed the table, its seed changed, and a semi-final it
+  had already played got relabelled. An 82-game season was producing records
+  like 56-53. Standings and season stats are now the regular season only.
+- **The engine had no home-court advantage at all.** That is a hole anywhere
+  and a fatal one in a bracket: 2-2-1-1-1 hands the higher seed the extra home
+  game as its entire reward for a better record, and if home is worth nothing
+  then a 1 seed is a coin flip against an 8. Home sides now win **56.5%** at
+  **+2.8** points a game, measured paired — same matchup played both ways —
+  against the real +2.5 and 58%.
+
+**Known gap, measured rather than guessed.** Over four simulated postseasons
+(60 series) the higher seed wins **53%**, against roughly 72% in the real
+league, and **33%** of series go seven against about 20%. That is not the
+bracket — it traces to the single-game variance already documented in
+Calibration (mean margin 15.6 against a real 11.5). Closing it means a broad
+recalibration of scoring variance that would move every other number on this
+page, so it is recorded here rather than papered over.
 
 ## Player progression
 

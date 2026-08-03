@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from .conferences import stamp
 from .save import LEAGUE_PATH, SavedLeague, league_exists, read_league
 
 FALLBACK_NAME = "Placeholder Basketball League"
@@ -40,6 +41,7 @@ def load_teams(count: int | None = None, path: Path = LEAGUE_PATH) -> SavedLeagu
         )
     if count is not None:
         saved.teams = saved.teams[:count]
+    stamp(saved.teams)
     return saved
 
 

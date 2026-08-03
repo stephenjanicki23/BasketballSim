@@ -88,6 +88,16 @@ SHOOTING_SENSITIVITY: dict[ShotZone, float] = {
 # Which defensive composite guards which zone.
 INTERIOR_ZONES = (ShotZone.RIM, ShotZone.PAINT)
 
+# Home court. The engine had none, which is a hole anywhere and a fatal one in
+# a playoff bracket: 2-2-1-1-1 hands the higher seed the extra home game as its
+# entire reward for a better record, and if playing at home is worth nothing
+# then a 1 seed is a coin flip against an 8. Real home sides win about 58% of
+# games, worth roughly two and a half points. Split between a small shooting
+# edge and slightly steadier hands, so it shows up in the box score rather than
+# as a thumb on the final margin.
+HOME_SHOOTING_EDGE = 0.0052
+HOME_TURNOVER_EDGE = 0.0033
+
 BASE_ASSIST_RATE = 0.672         # share of made field goals that are assisted
 BASE_OFF_REBOUND_RATE = 0.268
 
@@ -173,6 +183,17 @@ class PossessionEngine:
         for player in players:
             spread = MAX_FORM_SWING * (1.0 - normalize(player.hidden.consistency) * 0.7)
             self.form[player.id] = self.rng.gauss(0.0, max(0.2, spread))
+
+    @staticmethod
+    def _home_side(game: GameState, side: SideContext) -> float:
+        """+1 for the home team, -1 for the visitors.
+
+        Signed rather than a flag so one constant covers both halves of the
+        edge: the home side shoots a little better and the road side a little
+        worse, which is closer to what home court actually is than a bonus
+        handed to one team.
+        """
+        return 1.0 if side.state is game.home else -1.0
 
     def _skill(self, player: Player, composite) -> float:
         """A composite, adjusted for tonight's form."""
@@ -300,6 +321,7 @@ class PossessionEngine:
         rate -= off.chemistry.execution * CHEMISTRY_TURNOVER_SENSITIVITY
         rate += self._fatigue(off.lineup) * FATIGUE_TURNOVER_PENALTY
         rate -= tactical_edge(off.coach) * COACH_TURNOVER_SWING
+        rate -= HOME_TURNOVER_EDGE * self._home_side(game, off)
 
         if self._is_clutch(game):
             handler = max(off.lineup, key=lambda p: p.tendencies.usage)
@@ -526,6 +548,7 @@ class PossessionEngine:
         # Coaching: better looks on one end, harder ones on the other.
         pct += offensive_edge(off.coach) * COACH_SHOOTING_SWING
         pct -= defensive_edge(deff.coach) * COACH_SHOOTING_SWING
+        pct += HOME_SHOOTING_EDGE * self._home_side(game, off)
 
         if zone.is_three:
             pct += defensive_effect(deff.tactics, "three_pct")

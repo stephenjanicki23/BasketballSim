@@ -12,7 +12,9 @@ from datetime import date, datetime, timedelta, timezone
 
 from ..chemistry import drift_after_game
 from ..engine.game import GameRules, GameSimulator
+from ..conferences import conference_for
 from ..models import Team
+from . import playoffs
 from .calendar import GameStatus, ScheduledGame
 from .stats import SeasonStats
 
@@ -22,6 +24,11 @@ from .stats import SeasonStats
 # would mean a game scheduled for 8:00 was over by 8:03, which is not what
 # "three slates a day" describes.
 DEFAULT_TRACKER_SPEED = 1.0
+
+# How many times `tick` will re-check after the postseason adds fixtures. A
+# whole playoff run is four rounds of at most seven games, so this is far more
+# headroom than a single tick can ever need; it exists to bound the loop.
+MAX_TICK_PASSES = 64
 
 # Padding after the final buzzer before a game flips to FINAL.
 POSTGAME_TAIL_SECONDS = 15.0
@@ -119,18 +126,33 @@ class League:
         """Advance the league to the current clock time.
 
         Returns the games whose status changed on this tick.
+
+        Loops because the postseason schedules itself as it is earned: a
+        best-of-seven does not know it needs a game six until game five is
+        played, so finishing a game can create the next one, which may already
+        be due. One pass would leave a bracket a game behind on every tick and
+        a clock jumped forward a month stuck in the first round.
         """
-        now = self.clock.now()
         changed: list[ScheduledGame] = []
+        for _ in range(MAX_TICK_PASSES):
+            now = self.clock.now()
+            moved = False
 
-        for game in self.schedule:
-            if game.status == GameStatus.SCHEDULED and game.tipoff_at <= now:
-                self._start(game)
-                changed.append(game)
+            for game in self.schedule:
+                if game.status == GameStatus.SCHEDULED and game.tipoff_at <= now:
+                    self._start(game)
+                    changed.append(game)
+                    moved = True
 
-            if game.status == GameStatus.LIVE and self._is_over(game, now):
-                self._finalize(game, now)
-                changed.append(game)
+                if game.status == GameStatus.LIVE and self._is_over(game, now):
+                    self._finalize(game, now)
+                    changed.append(game)
+                    moved = True
+
+            if playoffs.advance(self):
+                moved = True
+            if not moved:
+                break
 
         return changed
 
@@ -186,7 +208,16 @@ class League:
         results, both when a game finalises live and when a season is loaded
         from disk. Deriving them twice from the same place is what stops a
         restored table from disagreeing with the games behind it.
+
+        Playoff games are excluded, and not only for tidiness. Seeding is read
+        off the standings, so folding postseason results back into them makes
+        the bracket move under its own feet: a club that has won two rounds
+        climbs the table, its seed changes, and the semi-final it already
+        played is relabelled. Left in, an 82-game season also produced records
+        like 56-53.
         """
+        if playoffs.is_playoff(game):
+            return
         result = game.result
         if result is None:
             return
@@ -304,11 +335,20 @@ class League:
             key=lambda r: (-r.win_pct, -r.point_differential, r.team_id),
         )
         out = []
+        # Seeds are per conference, so the rank a club carries in this table is
+        # its rank among its own fifteen -- which is the number that decides
+        # whether it is playing in the postseason at all.
+        seen: dict[str, int] = {}
         for row in rows:
             data = row.to_dict()
             team = self.teams.get(row.team_id)
             data["team_name"] = team.full_name if team else row.team_id
             data["abbreviation"] = team.abbreviation if team else ""
+            conference = conference_for(team.abbreviation) if team else ""
+            data["conference"] = conference
+            seen[conference] = seen.get(conference, 0) + 1
+            data["conference_rank"] = seen[conference]
+            data["in_playoff_places"] = seen[conference] <= playoffs.SEEDS
             out.append(data)
         return out
 

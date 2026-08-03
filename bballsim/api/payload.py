@@ -27,6 +27,8 @@ from ..coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
 from ..league.calendar import PACIFIC, GameStatus
 from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
+from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
+from ..league import playoffs
 from ..news import write_stories
 from ..models import Lineup
 from ..ratings import (
@@ -423,6 +425,8 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
         # ships an empty feed rather than an invented one.
         "news": [story.to_dict() for story in write_stories(league)],
         "standings": league.standings_table(),
+        "playoffs": playoffs.bracket(league),
+        "conferences": list(CONFERENCES),
         "playerStats": [
             {k: v for k, v in row.items() if k != "totals"}
             for row in league.stats.player_table(minimum_games=minimum_games)

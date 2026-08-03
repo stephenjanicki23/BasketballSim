@@ -270,6 +270,7 @@ async function boot() {
   renderSeasonLabel();
 
   renderWire();
+  renderBracket();
   renderSchedule();
   renderStandings();
   renderTeams();
@@ -1309,29 +1310,133 @@ function renderWire() {
  * Standings & teams
  * ------------------------------------------------------------------ */
 
+
+/* ------------------------------------------------------------------ *
+ * Playoffs
+ *
+ * The bracket arrives already assembled from `bballsim/league/playoffs.py`,
+ * which derives it from the fixtures rather than storing it. All this does is
+ * lay the rounds out left to right.
+ * ------------------------------------------------------------------ */
+
+function seriesRow(series) {
+  const box = el("div", "series" + (series.complete ? " is-done" : ""));
+  for (const side of ["high", "low"]) {
+    const id = series[side + "Seed"];
+    const team = state.teams.get(id);
+    const wins = series[side + "Wins"];
+    const won = series.winner === id;
+    const line = el("div", "series-side" + (won ? " is-winner" : ""));
+    line.appendChild(el("span", "series-seed", String(series[side + "Rank"] || "")));
+    if (team) line.appendChild(teamMark(team));
+    line.appendChild(el("span", "series-abbr", team ? team.abbr : id));
+    line.appendChild(el("span", "series-wins", String(wins)));
+    box.appendChild(line);
+  }
+  const played = series.games.filter((g) => g.status === "final").length;
+  box.appendChild(el("div", "series-meta",
+    series.complete ? `${played} games` : (played ? `${played} played` : "to come")));
+  return box;
+}
+
+function renderBracket() {
+  const holder = $("#bracket");
+  const empty = $("#bracket-empty");
+  const note = $("#bracket-note");
+  const legend = $("#bracket-legend");
+  if (!holder) return;
+  holder.textContent = "";
+  const data = state.data.playoffs || { started: false, rounds: [] };
+
+  if (!data.started) {
+    empty.hidden = false;
+    if (note) note.textContent = "";
+    if (legend) legend.textContent = "";
+    return;
+  }
+  empty.hidden = true;
+
+  for (const round of data.rounds) {
+    const column = el("div", "bracket-round");
+    column.appendChild(el("h3", "bracket-round-name", round.round));
+    // Conference-by-conference inside a round, so the two halves of the
+    // bracket read as two halves rather than one list of eight.
+    const byConference = new Map();
+    for (const series of round.series) {
+      const key = series.conference || "";
+      if (!byConference.has(key)) byConference.set(key, []);
+      byConference.get(key).push(series);
+    }
+    for (const [conference, list] of byConference) {
+      if (conference) column.appendChild(el("p", "bracket-conf", conference));
+      list.forEach((series) => column.appendChild(seriesRow(series)));
+    }
+    holder.appendChild(column);
+  }
+
+  const champion = data.champion ? state.teams.get(data.champion) : null;
+  if (note) {
+    note.textContent = champion
+      ? `${champion.city} ${champion.name} — Keystone Champions`
+      : `${data.rounds.length} of 4 rounds`;
+  }
+  if (legend) {
+    legend.textContent = "Eight clubs from each conference, seeded on regular-season "
+      + "record. 1v8, 2v7, 3v6, 4v5, best of seven, home court 2-2-1-1-1 to the "
+      + "higher seed. The two conference champions meet in the Keystone Finals.";
+  }
+}
+
 function renderStandings() {
   const tbody = $("#standings-body");
   tbody.textContent = "";
-  state.data.standings.forEach((row, index) => {
-    const tr = el("tr");
-    tr.appendChild(el("td", "col-rank", String(index + 1)));
-    const nameCell = el("td", "col-name");
-    nameCell.appendChild(el("span", "player-pos", row.abbreviation));
-    nameCell.appendChild(el("span", "player-name", row.team_name));
-    tr.appendChild(nameCell);
-    tr.appendChild(el("td", null, String(row.wins)));
-    tr.appendChild(el("td", null, String(row.losses)));
-    tr.appendChild(el("td", null, row.win_pct.toFixed(3).replace(/^0/, "")));
-    tr.appendChild(el("td", null, String(row.points_for)));
-    tr.appendChild(el("td", null, String(row.points_against)));
-    const diff = el("td", row.point_differential >= 0 ? "diff-positive" : "diff-negative",
-      `${row.point_differential > 0 ? "+" : ""}${row.point_differential}`);
-    tr.appendChild(diff);
-    tbody.appendChild(tr);
-  });
+  const rows = state.data.standings || [];
+  const conferences = state.data.conferences
+    || [...new Set(rows.map((r) => r.conference).filter(Boolean))];
+
+  /* Grouped by conference, because that is the unit that matters: seeding,
+   * the bracket and who is playing in May are all decided inside fifteen
+   * clubs, not thirty. A flat table of all thirty answers a question nobody
+   * asks. */
+  const groups = conferences.length
+    ? conferences.map((name) => [name, rows.filter((r) => r.conference === name)])
+    : [[null, rows]];
+
+  for (const [name, group] of groups) {
+    if (!group.length) continue;
+    if (name) {
+      const head = el("tr", "standings-group");
+      const cell = el("th", null, name);
+      cell.colSpan = 8;
+      head.appendChild(cell);
+      tbody.appendChild(head);
+    }
+    group.forEach((row, index) => {
+      const rank = row.conference_rank || index + 1;
+      const tr = el("tr");
+      // The playoff cut-line. Eight of fifteen go through, and a table that
+      // does not say where the line falls is missing the point of the table.
+      if (row.in_playoff_places) tr.classList.add("is-seeded");
+      if (rank === 8) tr.classList.add("is-cutline");
+      tr.appendChild(el("td", "col-rank", String(rank)));
+      const nameCell = el("td", "col-name");
+      nameCell.appendChild(el("span", "player-pos", row.abbreviation));
+      nameCell.appendChild(el("span", "player-name", row.team_name));
+      tr.appendChild(nameCell);
+      tr.appendChild(el("td", null, String(row.wins)));
+      tr.appendChild(el("td", null, String(row.losses)));
+      tr.appendChild(el("td", null, row.win_pct.toFixed(3).replace(/^0/, "")));
+      tr.appendChild(el("td", null, String(row.points_for)));
+      tr.appendChild(el("td", null, String(row.points_against)));
+      const diff = row.point_differential;
+      tr.appendChild(el("td", null, (diff > 0 ? "+" : "") + diff));
+      tbody.appendChild(tr);
+    });
+  }
+  const note = $("#standings-note");
+  if (note) note.textContent = conferences.length ? conferences.join(" · ") : "";
 }
 
-// Abbreviated the way a stat sheet would: full names live in the tooltip.
 const ATTRIBUTE_LABELS = {
   finishing: "FIN", mid_range: "MID", three_point: "3PT", post_game: "POST",
   free_throw: "FT", drawing_fouls: "DRAW",
@@ -1362,6 +1467,7 @@ const SCHEME_LABELS = {
 function titleCase(key) {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
 
 function renderTeams() {
   const picker = $("#team-picker");
@@ -1868,6 +1974,7 @@ async function refreshLeague({ quiet = false } = {}) {
   // Games finishing is exactly what makes new news, so the wire refreshes with
   // the standings rather than waiting for a reload.
   renderWire();
+  renderBracket();
   renderSchedule();
   renderStandings();
   renderStats();

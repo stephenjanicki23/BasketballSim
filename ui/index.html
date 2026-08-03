@@ -25,6 +25,7 @@
       <button class="nav-tab" role="tab" aria-selected="false" data-view="games">Games</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="stats">Stats</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="playoffs">Playoffs</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
     </nav>
   </header>
@@ -186,7 +187,7 @@
       <div class="card">
         <div class="card-head">
           <h2>Standings</h2>
-          <span class="label">One round robin</span>
+          <span class="label" id="standings-note">By conference</span>
         </div>
         <div class="sheet table-scroll">
           <table>
@@ -201,6 +202,22 @@
           </table>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Playoffs ---------------------------------------------------- -->
+  <section class="view" data-view="playoffs" role="tabpanel" aria-label="Playoffs" hidden>
+    <div class="bracket-wrap">
+      <div class="wire-head">
+        <h2 id="bracket-title">Postseason</h2>
+        <p class="muted" id="bracket-note"></p>
+      </div>
+      <div id="bracket"></div>
+      <p class="empty" id="bracket-empty" hidden>
+        The postseason starts when the regular season ends. Eight clubs from each
+        conference, seeded on record, in best-of-seven series.
+      </p>
+      <p class="note" id="bracket-legend"></p>
     </div>
   </section>
 
