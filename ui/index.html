@@ -26,22 +26,6 @@
       <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
     </nav>
-    <div class="league-bar" id="league-controls" hidden>
-      <span class="label">Sim date</span>
-      <span id="sim-date" class="sim-date">—</span>
-      <button id="adv-15" title="Advance the league clock 15 minutes">+15 min</button>
-      <button id="adv-day" title="Advance one day">+1 day</button>
-      <button id="adv-week" title="Advance one week">+1 week</button>
-      <button id="skip-next" title="Jump to the next tip-off">Skip to next tip-off</button>
-      <label class="label" for="league-speed">Tracker speed</label>
-      <select id="league-speed" aria-label="How fast a live game reveals">
-        <option value="1">Real time</option>
-        <option value="8">8×</option>
-        <option value="20" selected>20×</option>
-        <option value="60">60×</option>
-        <option value="240">240×</option>
-      </select>
-    </div>
   </header>
 
   <!-- Games ------------------------------------------------------- -->
@@ -87,9 +71,9 @@
         <button id="to-final">Jump to final</button>
         <label class="label" for="speed">Speed</label>
         <select id="speed" aria-label="Playback speed">
-          <option value="1">Real time</option>
+          <option value="1" selected>Real time</option>
           <option value="8">8×</option>
-          <option value="30" selected>30×</option>
+          <option value="30">30×</option>
           <option value="120">120×</option>
         </select>
         <span class="grow">

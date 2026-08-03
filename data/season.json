@@ -13535,6 +13535,6 @@
  "name": "Placeholder Basketball League",
  "schedule": "2b46454a730ffc51",
  "season": "2026-27",
- "tracker_speed": 20.0,
+ "tracker_speed": 1.0,
  "version": 1
 }

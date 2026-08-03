@@ -23,10 +23,23 @@ python3 -m unittest discover -s tests    # 243 tests
 
 In the browser: four tabs — **Games** (today's slate and the live tracker),
 **Stats**, **Standings** and **Teams** (squads, player profiles, head coaches).
-The bar under the masthead drives the league clock: **+15 min / +1 day /
-+1 week**, **Skip to next tip-off**, and **Tracker speed** for how fast the
-play-by-play reveals (1× is real time, 20× plays a game out in about two and a
-half minutes).
+
+**There are no clock controls.** The league runs on real time: a game tips off
+at its real 8am, 1pm or 7pm Pacific slot and reveals its play-by-play at real
+speed, so the fourth quarter happens when the fourth quarter happens. Nothing
+is skippable, so the page refreshes itself once a minute to notice games
+starting and finishing, and a live game polls its own play-by-play every three
+seconds.
+
+Two things follow from real time, both of which needed handling:
+
+- **Opening a live game joins it now**, not at tip-off. A playhead started from
+  zero would sit however far into the game you arrived behind the live edge and
+  never catch up.
+- **Playback speed depends on what you are watching.** Live is real time. A
+  *finished* game is a replay with nothing to stay in sync with, so it opens at
+  30× — watching a completed game at real time means 48 minutes of nothing. The
+  transport overrides either.
 
 ### One interface, two places to run it
 

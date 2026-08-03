@@ -793,22 +793,6 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
   }
 }
 
-/* ---------------- league clock bar (live app only) ---------------- */
-/* Hidden on the published page: there is no server to advance, and that
-   season is already over. source-live.js is what reveals it. */
-.league-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 9px 18px;
-  background: var(--raised);
-  border-bottom: 1px solid var(--hairline);
-}
-.league-bar[hidden] { display: none; }
-.sim-date { font: 600 12px/1 var(--mono); font-variant-numeric: tabular-nums; margin-right: 6px; }
-.league-bar button:disabled { opacity: .5; cursor: progress; }
-
 /* Fixtures that have not been played, and ones in progress. */
 .fixture.is-upcoming .fixture-team,
 .fixture.is-upcoming .fixture-abbr { opacity: .55; }
@@ -845,7 +829,9 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 }
 .preview-stat {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  /* `auto` rather than a fixed 24px: PTS/AST/REB fit, and so does the longer
+     "Top rated" label a team that has not played yet falls back to. */
+  grid-template-columns: minmax(24px, auto) minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 6px;
   font-size: 11px;

@@ -64,7 +64,8 @@ since that save are lost. Paying for Starter avoids both problems.
 
 4. **Open the URL.** Render gives you `basketball-manager-xxxx.onrender.com`.
    You get the whole app, not just the tracker: Games, Stats, Standings and
-   Teams, with the league-clock controls under the masthead.
+   Teams. There are no clock controls — the league runs on real time, so games
+   tip off and play out on their own.
 
 ## Adding your domain
 
@@ -100,10 +101,12 @@ configure beyond DNS.
   `/var/data/season.json` from a Render shell and restarting does the same
   thing.) The roster is never touched by either; to reset players and coaches,
   delete `/var/data/league.json`.
-- **The clock is real time.** Games tip off at their real 8am, 1pm and 7pm
-  Pacific slots, three a day per team. The service has to be *running* at those
-  times to play them — which is another reason the free tier's sleep-when-idle
-  does not suit this app.
+- **The clock is real time, and so is the tracker.** Games tip off at their
+  real 8am, 1pm and 7pm Pacific slots, three a day per team, and reveal their
+  play-by-play at real speed — a game runs about 48 minutes, so the three
+  slates never overlap. The service has to be *running* at those times to play
+  them, which is another reason the free tier's sleep-when-idle does not suit
+  this app.
 
 ## Known limits
 

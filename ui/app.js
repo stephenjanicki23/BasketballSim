@@ -204,7 +204,7 @@ const state = {
   playhead: 0,
   cursor: 0,
   playing: false,
-  speed: 30,
+  speed: 1,
   box: null,
   tab: "pbp",
   teamId: null,
@@ -220,6 +220,7 @@ const state = {
   // game that is still being played.
   source: null,
   livePoll: null,
+  leagueRefresh: null,
   // Which attribute sections are expanded. Kept on the app rather than the
   // DOM so it survives clicking down the roster.
   openGroups: new Set(),
@@ -271,7 +272,7 @@ async function boot() {
   buildStatTabs();
   renderStats();
   bindControls();
-  if (state.data.live) bindLeagueControls();
+  if (state.data.live) startLeagueRefresh();
 
   // Open the most interesting game: one in progress, else the last one played,
   // else the next one up.
@@ -491,6 +492,21 @@ async function selectGame(gameId) {
     return;
   }
 
+  /* Playback speed depends on what you are watching. A live game runs at real
+   * time -- it is happening now, and the point is to follow it. A finished one
+   * is a replay, and there is nothing to stay in sync with, so it opens fast
+   * enough to actually watch. Either way the transport can override it. */
+  state.speed = game.live ? 1 : 30;
+  const speedPicker = $("#speed");
+  if (speedPicker) speedPicker.value = String(state.speed);
+
+  // Opening a game already in progress joins it *now*, not at tip-off. At
+  // real-time speed a playhead started from zero would sit however long the
+  // game has been running behind the live edge and never catch up.
+  if (game.live && game.events.length) {
+    advanceTo(game.events[game.events.length - 1][E_SECONDS]);
+  }
+
   renderTracker();
   startPlayback();
   // A game in progress keeps arriving. Poll for the rest of it.
@@ -596,7 +612,11 @@ function renderTracker() {
   $("#period").textContent = last ? periodLabel(last[E_PERIOD]) : "Q1";
   $("#clock").textContent = last ? last[E_CLOCK] : "12:00";
 
-  const done = state.cursor >= game.events.length;
+  // Caught up with the events we *have* is not the same as the game being
+  // over: a live game is watched at the front of a stream that is still
+  // arriving, so reaching the last revealed play means you are up to date.
+  const caughtUp = state.cursor >= game.events.length;
+  const done = caughtUp && !game.live;
   const pill = $("#game-state");
   pill.textContent = done ? "Final" : "Live";
   pill.classList.toggle("is-live", !done);
@@ -1484,6 +1504,11 @@ function startLivePolling(gameId) {
     const known = (state.game.events || []).length;
     const arrived = (detail.events || []).length;
     if (arrived > known) {
+      // Whether the viewer was at the live edge before this batch landed. If
+      // he was, keep him there; if he had scrubbed back to look at something,
+      // leave him where he is.
+      const wasCaughtUp = state.cursor >= known;
+
       // Appending rather than replacing keeps the playhead and the rebuilt box
       // score intact -- restarting the game every three seconds would be
       // unwatchable.
@@ -1491,7 +1516,15 @@ function startLivePolling(gameId) {
       state.game.duration = detail.duration;
       state.game.homeScore = detail.homeScore;
       state.game.awayScore = detail.awayScore;
-      if (!state.playing) advanceTo(state.playhead);
+
+      if (wasCaughtUp) {
+        // Playback stops when it runs out of events, which at real-time speed
+        // is every few seconds. Following the stream forward is what keeps a
+        // live game live rather than frozen one possession behind.
+        advanceTo(detail.events[arrived - 1][E_SECONDS]);
+      } else if (!state.playing) {
+        advanceTo(state.playhead);
+      }
     }
     if (!detail.live) {
       stopLivePolling();
@@ -1520,7 +1553,6 @@ async function refreshLeague({ quiet = false } = {}) {
   renderSchedule();
   renderStandings();
   renderStats();
-  updateClockLabel();
   if (openId && !quiet) selectGame(openId);
   else if (openId) markSelectedFixture(openId);
 }
@@ -1531,55 +1563,23 @@ function markSelectedFixture(gameId) {
   });
 }
 
-function updateClockLabel() {
-  const label = $("#sim-date");
-  if (!label || !state.data.league.now) return;
-  label.textContent = new Date(state.data.league.now).toLocaleDateString(undefined, {
-    weekday: "short", year: "numeric", month: "short", day: "numeric",
-  });
-}
+/* The league runs on real time: games tip off at their real 8am, 1pm and 7pm
+ * Pacific slots and reveal at real speed. There are no clock controls, so
+ * nothing user-driven would ever pull fresh results down -- this does, on a
+ * quiet timer. A minute is far below the gap between slates and costs one
+ * bootstrap.
+ *
+ * Deliberately not faster: a live game already polls its own play-by-play
+ * every three seconds, which is what makes a game in progress feel live. This
+ * is only here to notice that a *new* game has started or finished. */
+const LEAGUE_REFRESH_MS = 60000;
 
-function bindLeagueControls() {
-  const bar = $("#league-controls");
-  if (bar) bar.hidden = false;
-  updateClockLabel();
-
-  const run = async (button, action) => {
-    button.disabled = true;
-    try {
-      await action();
-      await refreshLeague({ quiet: true });
-    } catch (error) {
-      console.warn("clock command failed", error);
-    } finally {
-      button.disabled = false;
-    }
-  };
-
-  const advance = (selector, body) => {
-    const button = $(selector);
-    if (!button) return;
-    button.addEventListener("click", () => run(button, () =>
-      state.source.command("clock/advance", body)));
-  };
-
-  advance("#adv-15", { minutes: 15 });
-  advance("#adv-day", { days: 1 });
-  advance("#adv-week", { days: 7 });
-
-  const skip = $("#skip-next");
-  if (skip) {
-    skip.addEventListener("click", () => run(skip, async () => {
-      const result = await state.source.command("clock/skip-to-next", {});
-      if (result && result.game_id) state.pendingGameId = result.game_id;
-    }));
-  }
-
-  const speed = $("#league-speed");
-  if (speed) {
-    speed.value = String(state.data.league.trackerSpeed || 20);
-    speed.addEventListener("change", async () => {
-      await state.source.command("clock/speed", { speed: Number(speed.value) });
-    });
-  }
+function startLeagueRefresh() {
+  if (state.leagueRefresh) clearInterval(state.leagueRefresh);
+  state.leagueRefresh = setInterval(() => {
+    // The open game owns the screen while it is being watched; refreshing
+    // around it keeps the schedule and standings current without interrupting.
+    refreshLeague({ quiet: true }).catch((error) =>
+      console.warn("league refresh failed", error));
+  }, LEAGUE_REFRESH_MS);
 }

@@ -16,9 +16,12 @@ from ..models import Team
 from .calendar import GameStatus, ScheduledGame
 from .stats import SeasonStats
 
-# Game seconds revealed per real-time second. 1.0 = watch in real time,
-# 20.0 = a 48-minute game plays out in roughly two and a half minutes.
-DEFAULT_TRACKER_SPEED = 20.0
+# Game seconds revealed per real-time second. The league runs on real days at
+# real times, so a game reveals at real speed too: it tips off at 8am Pacific
+# and the fourth quarter happens when the fourth quarter happens. Raising this
+# would mean a game scheduled for 8:00 was over by 8:03, which is not what
+# "three slates a day" describes.
+DEFAULT_TRACKER_SPEED = 1.0
 
 # Padding after the final buzzer before a game flips to FINAL.
 POSTGAME_TAIL_SECONDS = 15.0
