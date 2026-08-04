@@ -236,7 +236,66 @@ def dump_player(player: Player) -> dict:
     # regenerating the roster -- for a schema change that moved no player at all.
     if player.career is not None:
         data["career"] = dump_career(player.career)
+    # Fatigue, wear and any injury he is carrying. Omitted when he is carrying
+    # nothing, so a fresh league fingerprints exactly as it did before health
+    # existed -- see the note on `career` above.
+    health = dump_health(player.health)
+    if health:
+        data["health"] = health
     return data
+
+
+def dump_health(health) -> dict | None:
+    """A player's body, in full precision.
+
+    Stored rather than derived, unlike the standings and the season totals.
+    Tiredness is a fact about a man at a moment, not a summary of the fixture
+    list -- and deriving it would mean replaying every recovery day of a season
+    on every boot to answer whether he is fit tonight.
+    """
+    if health is None:
+        return None
+    if not (health.fatigue or health.wear or health.knock or health.injury
+            or health.games_missed or health.days_rested):
+        return None
+    data = {
+        "fatigue": health.fatigue,
+        "wear": health.wear,
+        "knock": health.knock,
+        "days_rested": health.days_rested,
+        "games_missed": health.games_missed,
+    }
+    if health.injury is not None:
+        data["injury"] = {
+            "name": health.injury.name,
+            "games_remaining": health.injury.games_remaining,
+            "games_total": health.injury.games_total,
+            "permanent": dict(health.injury.permanent),
+            "potential_cost": health.injury.potential_cost,
+        }
+    return data
+
+
+def load_health(data: dict | None):
+    from .health import Health, MajorInjury
+
+    if not data:
+        return Health()
+    injury = data.get("injury")
+    return Health(
+        fatigue=data.get("fatigue", 0.0),
+        wear=data.get("wear", 0.0),
+        knock=data.get("knock", 0.0),
+        days_rested=data.get("days_rested", 0),
+        games_missed=data.get("games_missed", 0),
+        injury=None if not injury else MajorInjury(
+            name=injury["name"],
+            games_remaining=injury["games_remaining"],
+            games_total=injury.get("games_total", injury["games_remaining"]),
+            permanent=injury.get("permanent") or {},
+            potential_cost=injury.get("potential_cost", 0.0),
+        ),
+    )
 
 
 def dump_career(career) -> dict | None:
@@ -303,6 +362,7 @@ def load_player(data: dict) -> Player:
         bio=load_biography(data.get("bio") or {}),
         injured=data.get("injured", False),
         career=load_career(data.get("career")),
+        health=load_health(data.get("health")),
     )
 
 

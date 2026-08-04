@@ -11,11 +11,12 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from ..chemistry import drift_after_game
+from .. import health
 from ..engine.game import GameRules, GameSimulator
 from ..conferences import conference_for
 from ..models import Team
 from . import offseason, playoffs
-from .calendar import GameStatus, ScheduledGame
+from .calendar import PACIFIC, GameStatus, ScheduledGame
 from .stats import SeasonStats
 
 # Game seconds revealed per real-time second. The league runs on real days at
@@ -142,6 +143,11 @@ class League:
             now = self.clock.now()
             moved = False
 
+            # Rest first, then play. A day off has to be banked before the
+            # night's fixtures spend it, or a back-to-back reads as two rested
+            # games and the schedule stops mattering.
+            health.advance_to(self, now.astimezone(PACIFIC).date())
+
             for game in self.schedule:
                 if game.status == GameStatus.SCHEDULED and game.tipoff_at <= now:
                     self._start(game)
@@ -203,6 +209,13 @@ class League:
             return
 
         self._record(game)
+
+        # What the game did to the players. Deliberately *not* in `_record`,
+        # for the same reason chemistry is not: a season restored from disk
+        # folds its saved results back into the standings, and re-applying a
+        # night's fatigue and re-rolling its injuries would age a squad by a
+        # whole season every time the app booted.
+        health.after_game(self, game)
 
         # Chemistry grows from shared floor time. Deliberately *not* part of
         # `_record`: a restored season folds its saved results back into the

@@ -21,6 +21,7 @@ from .ability import (
 from .biography import Biography
 from .coach import Coach
 from .lineup import DEFAULT_RULES, LineupRules, choose_lineup, describe
+from .health import Health
 from .ratings import HiddenAttributes, Ratings, Tendencies, personality_label
 from .tactics import Tactics
 
@@ -77,8 +78,19 @@ class Player:
     # with a resetting baseline nobody ever does.
     career: object | None = None
 
+    # Fatigue, wear and injuries. Season-level and career-level -- the
+    # counterpart to `condition` below, which is only ever about tonight.
+    health: Health = field(default_factory=Health)
+
     # Live, per-game state. Reset by the engine at tip-off.
+    #
+    # `condition` starts at 100 only for a player who is carrying nothing;
+    # `health.starting_condition` lowers it for one who is not, which is the
+    # single place season fatigue enters a game.
     condition: float = 100.0   # 0-100 fatigue-adjusted freshness
+    # Set from `health.injury`. It gates `available_players`, and therefore the
+    # rotation and the starting five, so a man with a major injury cannot be
+    # picked. Kept as a plain flag because that is what selection reads.
     injured: bool = False
 
     @property

@@ -2070,8 +2070,83 @@ function renderPlayer(team) {
   body.appendChild(row);
   table.appendChild(body);
 
+  renderHealth(player);
   renderPlayerGames(player, team);
   renderPlayerChart(player, team);
+}
+
+/* ------------------------------------------------------------------ *
+ * Condition
+ *
+ * Fatigue is the thing on this page a manager can actually act on, so it gets
+ * meters rather than numbers in a table: the question is "how close to the red
+ * is he", and a bar answers that at a glance where 68.4 does not.
+ * ------------------------------------------------------------------ */
+
+const HEALTH_METERS = [
+  ["fatigue", "Fatigue", "Rest clears it. It comes off his legs first."],
+  ["knock", "Knock", "Playing hurt. Heals in days, not weeks."],
+  ["wear", "Wear & tear", "A career's mileage. Sheds a little each summer."],
+];
+
+function meter(label, value, hint, tone) {
+  const row = el("div", "meter");
+  const head = el("div", "meter-head");
+  head.appendChild(el("span", "meter-label", label));
+  head.appendChild(el("span", "meter-value", value.toFixed(0)));
+  row.appendChild(head);
+  const track = el("div", "meter-track");
+  const fill = el("div", "meter-fill" + (tone ? " " + tone : ""));
+  fill.style.width = `${Math.max(0, Math.min(100, value))}%`;
+  track.appendChild(fill);
+  row.appendChild(track);
+  if (hint) row.appendChild(el("p", "meter-hint", hint));
+  return row;
+}
+
+/* Red once the penalty is worth more than a rating point, amber where it is
+ * starting to cost something. The thresholds are the brief's own bands, not a
+ * separate opinion about what "bad" means. */
+function fatigueTone(value) {
+  if (value >= 76) return "is-bad";
+  if (value >= 46) return "is-warn";
+  return "";
+}
+
+function renderHealth(player) {
+  const card = $("#health-card");
+  const body = $("#health-body");
+  const status = $("#health-status");
+  const note = $("#health-note");
+  if (!card || !body) return;
+  const health = player.health;
+  if (!health) { card.hidden = true; return; }
+  card.hidden = false;
+  body.textContent = "";
+  status.textContent = health.condition;
+  status.className = "card-note " + fatigueTone(health.fatigue);
+
+  if (health.injury) {
+    const out = el("div", "health-injury");
+    out.appendChild(el("span", "health-injury-name", health.injury.name));
+    out.appendChild(el("span", "health-injury-games",
+      `${health.injury.gamesRemaining} of ${health.injury.gamesTotal} games remaining`));
+    body.appendChild(out);
+  }
+
+  for (const [key, label, hint] of HEALTH_METERS) {
+    const value = health[key] || 0;
+    if (key === "knock" && !value) continue;
+    body.appendChild(meter(label, value, hint,
+      key === "wear" ? "" : fatigueTone(value)));
+  }
+
+  const bits = [`${health.fatigueLabel} · overall health ${health.health}`];
+  if (health.daysRested) {
+    bits.push(`${health.daysRested} day${health.daysRested === 1 ? "" : "s"} since he last played`);
+  }
+  if (health.gamesMissed) bits.push(`${health.gamesMissed} games missed`);
+  note.textContent = bits.join(" · ") + ".";
 }
 
 /* The player's last box scores.

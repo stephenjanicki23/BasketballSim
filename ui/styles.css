@@ -1513,3 +1513,42 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   letter-spacing: .04em;
   color: var(--ink-2);
 }
+
+/* ------------------------------------------------------------------ *
+ * Condition
+ * ------------------------------------------------------------------ */
+.health-body { display: grid; gap: 14px; padding: 14px; }
+.meter-head { display: flex; align-items: baseline; justify-content: space-between; }
+.meter-label { font-size: 12px; font-weight: 600; color: var(--ink); }
+.meter-value {
+  font: 700 13px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.meter-track {
+  margin-top: 5px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--raised);
+  border: 1px solid var(--hairline-soft);
+  overflow: hidden;
+}
+.meter-fill { height: 100%; background: var(--live); transition: width .25s; }
+.meter-fill.is-warn { background: var(--accent); }
+.meter-fill.is-bad { background: var(--away); }
+.meter-hint { margin: 5px 0 0; font-size: 11px; color: var(--muted); }
+
+.card-note.is-warn { color: var(--accent); }
+.card-note.is-bad { color: var(--away); }
+
+.health-injury {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--away);
+  background: color-mix(in srgb, var(--away) 8%, transparent);
+}
+.health-injury-name { font-size: 13px; font-weight: 600; color: var(--away); }
+.health-injury-games { font: 500 11px/1 var(--mono); color: var(--muted); }

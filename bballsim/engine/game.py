@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..health import starting_condition
 from ..models import Lineup, Team
 from ..ratings import normalize
 from .boxscore import TeamBox
@@ -155,7 +156,10 @@ class GameSimulator:
 
     def _team_state(self, team: Team) -> TeamState:
         for player in team.players:
-            player.condition = 100.0
+            # Not 100 for everybody: a man carrying a season's fatigue starts
+            # the night already down. This is the only place season-level
+            # health enters a game -- everything after it reads `condition`.
+            player.condition = starting_condition(player)
         starters = team.starters()
         if len(starters) < 5:
             raise ValueError(f"{team.full_name} needs at least 5 healthy players, has {len(starters)}")

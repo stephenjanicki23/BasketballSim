@@ -39,6 +39,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta, timezone
 
+from .. import health
 from ..models import Player
 from ..progression import build_profile, develop_season
 from ..prospects import intake
@@ -361,6 +362,8 @@ def roll(league, *, seed: str | None = None) -> OffseasonReport | None:
 
     seed = seed or f"offseason-{league.season}"
     league.history.append(archive(league))
+    # Four months off: fatigue and knocks clear, wear mostly does not.
+    health.reset_season(league.teams.values())
     report, retirements = develop(league, seed)
     draft(league, retirements, report, seed)
     reschedule(league)

@@ -176,6 +176,9 @@ def player_detail(player) -> dict:
         "height": player.height,
         "bio": player.bio.to_dict(),
         "personality": player.personality,
+        # Fatigue, wear and any injury. The one part of a player that changes
+        # week to week, so it is the one part a squad page has to lead with.
+        "health": player.health.to_dict(),
         "tier": player.tier,
         "archetype": player.archetype.label if player.archetype else None,
         # Hidden in a real save. Shipped here so the squad page can show what a

@@ -16,17 +16,25 @@ Every function returns a 1-99 value on the same scale as the attributes, so
 
 from __future__ import annotations
 
+from .health import effective
 from .models import Lineup, Player
-from .ratings import Ratings
 
 # --------------------------------------------------------------------------
 # Helper
 # --------------------------------------------------------------------------
 
-def blend(ratings: Ratings, weights: dict[str, float]) -> float:
-    """Weighted mean of named attributes."""
+def blend(player: Player, weights: dict[str, float]) -> float:
+    """Weighted mean of named attributes, as the player can use them now.
+
+    Takes the *player* rather than his `Ratings` because tiredness is a
+    property of the man on the floor, not of the rating sheet. Every composite
+    goes through here, so this one line is where fatigue reaches the engine --
+    which is the same reason the module note above says this is the layer to
+    tune. `health.effective` returns the stored attribute for anything fatigue
+    does not touch, so the untouched two-thirds of the sheet cost nothing.
+    """
     total = sum(weights.values())
-    return sum(getattr(ratings, key) * weight for key, weight in weights.items()) / total
+    return sum(effective(player, key) * weight for key, weight in weights.items()) / total
 
 
 # --------------------------------------------------------------------------
@@ -35,7 +43,7 @@ def blend(ratings: Ratings, weights: dict[str, float]) -> float:
 
 def shooting_rim(player: Player) -> float:
     """Finishing at the rim: layups, dunks, and absorbing contact."""
-    return blend(player.ratings, {
+    return blend(player, {
         "layups": 1.0,
         "close_shot": 0.9,
         "dunking": 0.6,
@@ -49,7 +57,7 @@ def shooting_rim(player: Player) -> float:
 
 def shooting_paint(player: Player) -> float:
     """Floaters, hooks and post work inside the arc but off the rim."""
-    return blend(player.ratings, {
+    return blend(player, {
         "floater": 1.0,
         "post_moves": 0.7,
         "post_footwork": 0.6,
@@ -61,7 +69,7 @@ def shooting_paint(player: Player) -> float:
 
 
 def shooting_mid(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "mid_range": 1.0,
         "pull_up_shooting": 0.5,
         "fadeaway": 0.4,
@@ -72,7 +80,7 @@ def shooting_mid(player: Player) -> float:
 
 def shooting_corner_three(player: Player) -> float:
     """Corner threes are overwhelmingly catch-and-shoot."""
-    return blend(player.ratings, {
+    return blend(player, {
         "three_point": 1.0,
         "catch_and_shoot": 0.6,
         "off_ball_shooting": 0.4,
@@ -82,7 +90,7 @@ def shooting_corner_three(player: Player) -> float:
 
 def shooting_above_break_three(player: Player) -> float:
     """Above the break mixes catch-and-shoot with pull-ups off the dribble."""
-    return blend(player.ratings, {
+    return blend(player, {
         "three_point": 1.0,
         "pull_up_shooting": 0.4,
         "catch_and_shoot": 0.3,
@@ -92,7 +100,7 @@ def shooting_above_break_three(player: Player) -> float:
 
 
 def free_throw(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "free_throws": 1.0,
         "focus": 0.25,
         "composure": 0.15,
@@ -105,7 +113,7 @@ def free_throw(player: Player) -> float:
 
 def shot_creation(player: Player) -> float:
     """How well a player generates his own look."""
-    return blend(player.ratings, {
+    return blend(player, {
         "isolation": 0.8,
         "pick_and_roll_creation": 0.7,
         "dribbling": 0.7,
@@ -118,7 +126,7 @@ def shot_creation(player: Player) -> float:
 
 def shot_quality(player: Player) -> float:
     """Does he take good shots? Feeds shot selection, not make probability."""
-    return blend(player.ratings, {
+    return blend(player, {
         "shot_selection": 1.0,
         "decision_making": 0.6,
         "offensive_awareness": 0.5,
@@ -128,7 +136,7 @@ def shot_quality(player: Player) -> float:
 
 def off_ball_gravity(player: Player) -> float:
     """Movement without the ball -- creates looks for everyone else."""
-    return blend(player.ratings, {
+    return blend(player, {
         "off_ball_movement": 1.0,
         "cutting": 0.7,
         "off_ball_shooting": 0.6,
@@ -139,7 +147,7 @@ def off_ball_gravity(player: Player) -> float:
 
 def spacing(player: Player) -> float:
     """How much the defence has to respect him out to the arc."""
-    return blend(player.ratings, {
+    return blend(player, {
         "three_point": 1.0,
         "catch_and_shoot": 0.5,
         "off_ball_shooting": 0.4,
@@ -152,7 +160,7 @@ def spacing(player: Player) -> float:
 
 def playmaking(player: Player) -> float:
     """Creating shots for others."""
-    return blend(player.ratings, {
+    return blend(player, {
         "passing": 1.0,
         "court_vision": 0.9,
         "assist_iq": 0.8,
@@ -165,7 +173,7 @@ def playmaking(player: Player) -> float:
 
 def ball_security(player: Player) -> float:
     """How hard he is to take the ball from."""
-    return blend(player.ratings, {
+    return blend(player, {
         "ball_handling": 1.0,
         "dribbling": 0.7,
         "decision_making": 0.8,
@@ -181,7 +189,7 @@ def ball_security(player: Player) -> float:
 # --------------------------------------------------------------------------
 
 def interior_defense(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "interior_defense": 1.0,
         "rim_protection": 0.9,
         "post_defense": 0.6,
@@ -193,7 +201,7 @@ def interior_defense(player: Player) -> float:
 
 
 def perimeter_defense(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "perimeter_defense": 1.0,
         "shot_contest": 0.7,
         "wing_defense": 0.5,
@@ -205,7 +213,7 @@ def perimeter_defense(player: Player) -> float:
 
 
 def pick_and_roll_defense(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "pick_and_roll_defense": 1.0,
         "switchability": 0.6,
         "defensive_iq": 0.5,
@@ -215,7 +223,7 @@ def pick_and_roll_defense(player: Player) -> float:
 
 
 def help_defense(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "help_defense": 1.0,
         "defensive_awareness": 0.7,
         "defensive_iq": 0.6,
@@ -225,7 +233,7 @@ def help_defense(player: Player) -> float:
 
 
 def steal_threat(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "steals": 1.0,
         "anticipation": 0.7,
         "defensive_iq": 0.5,
@@ -235,7 +243,7 @@ def steal_threat(player: Player) -> float:
 
 
 def block_threat(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "blocks": 1.0,
         "rim_protection": 0.8,
         "vertical_leap": 0.5,
@@ -246,7 +254,7 @@ def block_threat(player: Player) -> float:
 
 def contest_quality(player: Player) -> float:
     """How much a closeout actually bothers a jump shooter."""
-    return blend(player.ratings, {
+    return blend(player, {
         "shot_contest": 1.0,
         "perimeter_defense": 0.5,
         "vertical_leap": 0.3,
@@ -259,7 +267,7 @@ def contest_quality(player: Player) -> float:
 # --------------------------------------------------------------------------
 
 def offensive_rebounding(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "offensive_rebounding": 1.0,
         "rebound_positioning": 0.6,
         "rebound_timing": 0.6,
@@ -271,7 +279,7 @@ def offensive_rebounding(player: Player) -> float:
 
 
 def defensive_rebounding(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "defensive_rebounding": 1.0,
         "boxing_out": 0.7,
         "rebound_positioning": 0.6,
@@ -287,7 +295,7 @@ def defensive_rebounding(player: Player) -> float:
 
 def foul_avoidance(player: Player) -> float:
     """High = disciplined defender who contests without fouling."""
-    return blend(player.ratings, {
+    return blend(player, {
         "discipline": 1.0,
         "defensive_iq": 0.6,
         "emotional_control": 0.4,
@@ -296,7 +304,7 @@ def foul_avoidance(player: Player) -> float:
 
 
 def foul_drawing(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "finishing_through_contact": 0.8,
         "aggression": 0.7,
         "euro_step": 0.4,
@@ -306,7 +314,7 @@ def foul_drawing(player: Player) -> float:
 
 
 def endurance(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "stamina": 1.0,
         "durability": 0.4,
         "work_rate": 0.3,
@@ -314,7 +322,7 @@ def endurance(player: Player) -> float:
 
 
 def transition_threat(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "transition_play": 1.0,
         "transition_finishing": 0.7,
         "speed": 0.6,
@@ -328,7 +336,7 @@ def transition_threat(player: Player) -> float:
 # --------------------------------------------------------------------------
 
 def clutch(player: Player) -> float:
-    return blend(player.ratings, {
+    return blend(player, {
         "clutch_performance": 1.0,
         "pressure_handling": 0.8,
         "composure": 0.6,
