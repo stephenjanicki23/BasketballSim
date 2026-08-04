@@ -315,16 +315,21 @@ def starting_condition(player) -> float:
 # pinning at the top of the scale by December.
 MINUTES_COST = 18.0 / 36.0
 
-# A game on no days' rest. The most expensive thing on a calendar and the one
-# real managers actually plan around.
-BACK_TO_BACK = 7.0
-THREE_IN_FOUR = 3.0
+# A game on no real rest. Kept deliberately small, and the reason is this
+# calendar: with three slates a day, *almost every game is a back-to-back*, so
+# a large flat charge is not a penalty for a hard schedule -- it is a constant
+# tax that lands on everybody equally and squeezes the gap between a
+# thirty-eight-minute star and a twelve-minute reserve, which is the one gap
+# the whole system exists to show. At 7.0 it did exactly that and the league
+# pinned at Critical Fatigue to a man.
+BACK_TO_BACK = 2.0
+THREE_IN_FOUR = 0.9
 
 # Overtime is five more minutes at the highest intensity of the night.
-OVERTIME_COST = 3.5
+OVERTIME_COST = 2.0
 
 # Every road game carries a flight. Small, but it is on the schedule 41 times.
-TRAVEL_COST = 1.8
+TRAVEL_COST = 0.7
 
 # Age. A 22-year-old and a 35-year-old do not leave the same game equally
 # tired, and this is the curve that says so.
@@ -404,7 +409,7 @@ RECOVERY_PER_DAY = 2.4
 # equilibrium against a repeating schedule: load pushes fatigue up, decay pulls
 # it down harder the higher it gets, and a player settles at the level his
 # minutes deserve instead of drifting to one end of the scale.
-RECOVERY_PROPORTIONAL = 0.62
+RECOVERY_PROPORTIONAL = 1.20
 
 # What a club's medical and conditioning staff are worth. Read off the head
 # coach's development rating, which is the closest thing this project has to a
@@ -489,8 +494,9 @@ def game_wear(player, minutes: float, fatigue_at_end: float) -> float:
 # --------------------------------------------------------------------------
 
 # Chance per player-game of picking up a knock, at league-average everything
-# and zero fatigue. Fatigue and wear multiply it hard.
-BASE_KNOCK_CHANCE = 0.019
+# and zero fatigue. Fatigue and wear multiply it hard, so the figure a season
+# actually produces is several times this.
+BASE_KNOCK_CHANCE = 0.0065
 
 # Chance per player-game of a major injury, same baseline. This is the number
 # that decides whether the league feels realistic or feels like a hospital: at
