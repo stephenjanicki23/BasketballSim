@@ -9,6 +9,7 @@ matchup-based logic later without touching the possession engine.
 from __future__ import annotations
 
 from .. import composites as C
+from ..health import starting_condition
 from ..lineup import DEFAULT_RULES, can_swap
 from ..models import Lineup, Player
 from ..ratings import normalize
@@ -16,6 +17,24 @@ from ..tactics import slider_mod
 from .state import TeamState
 
 TIRED_THRESHOLD = 62.0     # condition below this and a player wants out
+
+# How much of a player's *carried* fatigue the bench absorbs rather than
+# charging him in minutes.
+#
+# The tired line is an absolute condition, and season fatigue now starts a
+# player below 100 -- so without this a man who tipped off at 70 crossed the
+# line far sooner than one who tipped off fresh, and season fatigue quietly
+# became a minutes cap. Measured: the league's heaviest workload fell from 39.2
+# minutes a night to 32.3 and the leading scorer from 28.8 points to 24.4, with
+# team scoring unchanged. The points had not gone anywhere; they had been spread
+# down the bench by a coach nobody asked.
+#
+# A real coach does the opposite of that with a tired star: he rides him a
+# little longer and accepts a worse version of him, which is exactly what the
+# attribute penalty already models. So most of the carried deficit is absorbed
+# here and the rest still bites -- a knackered player does lose some floor time,
+# just not seven minutes of it.
+CARRIED_FATIGUE_ABSORBED = 0.62
 RESTED_THRESHOLD = 78.0    # a bench player needs this much to come in
 BENCH_RECOVERY_PER_SECOND = 0.115
 CLOSING_TIME_SECONDS = 6 * 60  # inside this in the 4th, stars stay on
@@ -59,6 +78,10 @@ class RotationManager:
                 else DEEP_BENCH_TOLERANCE
             )
             line = TIRED_THRESHOLD + tolerance + stagger * 12.0
+            # Most of what he walked in carrying is forgiven, so the line
+            # follows him down instead of cutting his night short.
+            carried = 100.0 - starting_condition(player)
+            line -= carried * CARRIED_FATIGUE_ABSORBED
             return line - 25.0 if closing else line
 
         fouled_out = [p for p in on_court if self._fouled_out(team_state, p)]
