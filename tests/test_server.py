@@ -394,6 +394,49 @@ class TestALiveGameDoesNotLeakItsEnding(unittest.TestCase):
         final = (self.game.result.home_score, self.game.result.away_score)
         self.assertNotEqual((summary["homeScore"], summary["awayScore"]), final)
 
+    def test_a_live_game_carries_the_names_of_everyone_playing(self):
+        """The tracker rebuilds its box score from the event stream, and an
+        event carries a player id and nothing else. Without this the live app
+        printed "NCI-04" in the Player column while the play-by-play beside it
+        said his name -- it was reading names off the squads, which the live app
+        only fetches when the Teams tab is opened."""
+        detail = views.game_detail(self.game, self.league)
+        roster = detail["roster"]
+        squads = [self.league.teams[self.game.home_team_id],
+                  self.league.teams[self.game.away_team_id]]
+        self.assertEqual(len(roster), sum(len(t.players) for t in squads))
+        for team in squads:
+            for player in team.players:
+                self.assertEqual(roster[player.id],
+                                 [player.name, player.position.value])
+
+        # Every id the revealed play-by-play mentions can be named from it.
+        mentioned = {row[8] for row in detail["events"] if row[8]}
+        mentioned |= {row[9] for row in detail["events"] if row[9]}
+        self.assertTrue(mentioned)
+        self.assertFalse(mentioned - set(roster))
+
+    def test_a_live_game_does_not_ship_the_finished_box_score(self):
+        """The engine simulates a game in full at tip-off, so `result` holds the
+        final box and the final line score from the first second. Handing either
+        to a page showing the first quarter gives away the ending -- `events`
+        was filtered but these two were sent whole."""
+        detail = views.game_detail(self.game, self.league)
+        for key in ("homeBox", "awayBox", "homeLine", "awayLine"):
+            self.assertNotIn(key, detail)
+
+    def test_a_finished_game_ships_its_box_score(self):
+        """There is nothing left to spoil, and the demo's verifier checks its
+        rebuilt box against this one."""
+        self.league.clock.advance(timedelta(days=1))
+        self.league.tick()
+        detail = views.game_detail(self.game, self.league)
+        for key in ("homeBox", "awayBox", "homeLine", "awayLine", "roster"):
+            self.assertIn(key, detail)
+        self.assertEqual(
+            detail["homeBox"]["players"][0]["name"],
+            detail["roster"][detail["homeBox"]["players"][0]["player_id"]][0])
+
     def test_a_finished_game_reports_its_final_score(self):
         self.league.clock.advance(timedelta(days=1))
         self.league.tick()

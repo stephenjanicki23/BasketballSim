@@ -397,20 +397,41 @@ def game_detail(game, league, revealed_only: bool = True) -> dict:
 
     home = league.teams.get(game.home_team_id)
     away = league.teams.get(game.away_team_id)
+    hidden = revealed_only and game.status == GameStatus.LIVE
+
     data.update({
         "homeStarters": [p.id for p in home.starters()] if home else [],
         "awayStarters": [p.id for p in away.starters()] if away else [],
-        "homeLine": result.home_box.points_by_period,
-        "awayLine": result.away_box.points_by_period,
         "duration": round(result.duration_game_seconds, 1),
-        "homeBox": result.home_box.to_dict(),
-        "awayBox": result.away_box.to_dict(),
+        # Who is playing, by id. The tracker rebuilds its box score from the
+        # event stream, and an event carries a player id and nothing else -- so
+        # without this the live app printed "NCI-04" in the Player column while
+        # the play-by-play beside it said "Kai Irvington". It read the names off
+        # the squads, which the live app only fetches when you open the Teams
+        # tab; the published demo bakes every squad in, which is why the bug
+        # only ever showed up on a game being played.
+        "roster": {
+            player.id: [player.name, player.position.value]
+            for team in (home, away) if team
+            for player in team.players
+        },
     })
 
     events = result.events
-    if revealed_only and game.status == GameStatus.LIVE:
+    if hidden:
         revealed = game.revealed_seconds(league.clock.now(), league.tracker_speed)
         events = [e for e in events if e.game_seconds <= revealed]
+    else:
+        # Only once there is nothing left to spoil. The engine simulates a game
+        # in full at tip-off, so `result` holds the final box and the final line
+        # score from the first second -- shipping either to a page that is
+        # showing the first quarter hands over the ending.
+        data.update({
+            "homeLine": result.home_box.points_by_period,
+            "awayLine": result.away_box.points_by_period,
+            "homeBox": result.home_box.to_dict(),
+            "awayBox": result.away_box.to_dict(),
+        })
     data["events"] = [event_row(e) for e in events]
     data["detailed"] = bool(events)
     data["live"] = game.status == GameStatus.LIVE

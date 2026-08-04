@@ -988,6 +988,24 @@ function formatMinutes(seconds) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/* Who a player id belongs to, for a screen that only has ids.
+ *
+ * The game's own `roster` first, then the squad index. The order matters: a
+ * game carries the twenty-four men who played it, while `state.players` is
+ * filled in only as squads are fetched -- which the live app does when you open
+ * the Teams tab and not before. Reading the squad index alone is what printed
+ * "NCI-04" in a live box score next to a play-by-play that knew his name.
+ *
+ * The id is the last resort rather than a blank, because a row with no label at
+ * all is worse than one you can still tell apart. */
+function playerLabel(playerId, game) {
+  const entry = game && game.roster && game.roster[playerId];
+  if (entry) return { name: entry[0], pos: entry[1] };
+  const player = state.players.get(playerId);
+  if (player) return { name: player.name, pos: player.pos };
+  return { name: playerId, pos: "" };
+}
+
 function renderBox() {
   const container = $("#box");
   container.textContent = "";
@@ -1018,12 +1036,12 @@ function renderBox() {
 
     const tbody = el("tbody");
     for (const l of lines) {
-      const player = state.players.get(l.playerId);
+      const who = playerLabel(l.playerId, game);
       const row = el("tr");
       if (side.onCourt.has(l.playerId)) row.classList.add("is-on-court");
       const nameCell = el("td", "col-name");
-      nameCell.appendChild(el("span", "player-pos", player ? player.pos : ""));
-      nameCell.appendChild(el("span", "player-name", player ? player.name : l.playerId));
+      nameCell.appendChild(el("span", "player-pos", who.pos));
+      nameCell.appendChild(el("span", "player-name", who.name));
       row.appendChild(nameCell);
       for (const [key2] of BOX_COLUMNS) row.appendChild(el("td", null, String(cellValue(l, key2))));
       tbody.appendChild(row);
