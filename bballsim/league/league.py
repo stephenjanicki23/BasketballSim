@@ -143,11 +143,6 @@ class League:
             now = self.clock.now()
             moved = False
 
-            # Rest first, then play. A day off has to be banked before the
-            # night's fixtures spend it, or a back-to-back reads as two rested
-            # games and the schedule stops mattering.
-            health.advance_to(self, now.astimezone(PACIFIC).date())
-
             for game in self.schedule:
                 if game.status == GameStatus.SCHEDULED and game.tipoff_at <= now:
                     self._start(game)
@@ -175,6 +170,10 @@ class League:
             if not moved:
                 break
 
+        # Recovery between games is paid out by `health.after_game`, in fixture
+        # order. This is the tail: a live app sitting on a day with no games
+        # still has players getting their wind back.
+        health.advance_to(self, self.clock.now())
         return changed
 
     def _start(self, game: ScheduledGame) -> None:

@@ -234,7 +234,7 @@ class Health:
     knock: float = 0.0       # 0-100 minor injury severity. Heals in days.
     injury: MajorInjury | None = None
     # Days since he last played, for recovery and for the back-to-back test.
-    days_rested: int = 0
+    days_rested: float = 0.0
     games_missed: int = 0
 
     # -- derived ---------------------------------------------------------
@@ -273,7 +273,7 @@ class Health:
             "health": round(self.score, 1),
             "condition": self.condition_label,
             "available": self.available,
-            "daysRested": self.days_rested,
+            "daysRested": round(self.days_rested, 2),
             "gamesMissed": self.games_missed,
             "injury": self.injury.to_dict() if self.injury else None,
         }
@@ -382,14 +382,29 @@ def game_fatigue(player, minutes: float, *, intensity: float = 1.0,
 # Recovery: what a day off is worth
 # --------------------------------------------------------------------------
 
-# Points shed by an average professional on a full day's rest. Deliberately a
-# little under what a 36-minute game costs, which is what makes a heavy
-# schedule accumulate and a light one clear.
-RECOVERY_PER_DAY = 15.5
+# Recovery is measured in **hours between games**, not calendar days, and that
+# is forced by the calendar this league actually plays: 82 games in 28 days,
+# three slates a day, so a club plays 2.93 times a *day*. A model that handed
+# out a night's sleep per date would be pricing a schedule nobody here plays.
+#
+# What a player gets between two tip-offs is therefore the real gap -- about
+# five hours between slates, thirteen overnight -- and the constants below are
+# set against that cadence rather than against a real-world one. On a 165-day
+# NBA calendar the same player would clear far more between games; the shape of
+# the model would not change, only these two numbers.
+HOURS_PER_DAY = 24.0
 
-# Recovery is proportional as well as flat: there is more to shed when there is
-# more in the tank, and this is what keeps fatigue off both floor and ceiling.
-RECOVERY_PROPORTIONAL = 0.16
+# The flat part: what an average professional sheds in a day regardless of how
+# much he is carrying. Small, because on this calendar the proportional term
+# below does nearly all the work.
+RECOVERY_PER_DAY = 2.4
+
+# The part that matters. Recovery proportional to what is in the tank is
+# exponential decay toward fresh, and it is the only shape that gives a stable
+# equilibrium against a repeating schedule: load pushes fatigue up, decay pulls
+# it down harder the higher it gets, and a player settles at the level his
+# minutes deserve instead of drifting to one end of the scale.
+RECOVERY_PROPORTIONAL = 0.62
 
 # What a club's medical and conditioning staff are worth. Read off the head
 # coach's development rating, which is the closest thing this project has to a
@@ -414,14 +429,21 @@ def recovery_rate(player, staff: float = 50.0) -> float:
     return max(4.0, rate)
 
 
-def rest(player, days: float = 1.0, staff: float = 50.0) -> None:
-    """Advance a player's recovery by `days`. Mutates his health."""
+def rest(player, hours: float, staff: float = 50.0) -> None:
+    """Advance a player's recovery by `hours` of elapsed time.
+
+    The proportional term is applied as true exponential decay rather than a
+    linear subtraction. Over a five-hour gap the difference is small; over a
+    four-month summer a linear one would drive fatigue thousands of points
+    negative before the clamp caught it, and the clamp is not the model.
+    """
     health = player.health
-    if health is None or days <= 0:
+    if health is None or hours <= 0:
         return
+    days = hours / HOURS_PER_DAY
     rate = recovery_rate(player, staff)
-    shed = (rate + health.fatigue * RECOVERY_PROPORTIONAL) * days
-    health.fatigue = max(0.0, health.fatigue - shed)
+    health.fatigue = max(0.0, health.fatigue * math.exp(-RECOVERY_PROPORTIONAL * days)
+                         - rate * days)
     health.knock = max(0.0, health.knock - KNOCK_HEAL_PER_DAY * days)
 
 
@@ -620,27 +642,35 @@ def sync(player) -> None:
     player.injured = player.health.injury is not None
 
 
-def advance_to(league, day) -> None:
-    """Rest every player for the days that have passed since this last ran.
+def advance_to(league, moment) -> None:
+    """Rest every player for the time that has passed since this last ran.
 
-    Called from `League.tick`, which is the only clock this project has. The
-    first call just anchors the date: without that, a league loaded on a
-    Tuesday would hand everybody a full night's recovery for a day that had
-    not happened.
+    The first call anchors the clock rather than paying anything out: a league
+    loaded on a Tuesday must not be handed a night's recovery for a night that
+    did not happen.
+
+    **This has to be interleaved with the games, not applied in a lump.** It is
+    called immediately before each finished game is folded in, using that
+    game's own tip-off. Calling it once per `tick` instead looked equivalent
+    and was not: a clock jumped to the end of a season pays out the whole
+    season's recovery in one go and *then* plays the season's games into it, so
+    fatigue ended a full 82-game year at a mean of 0.8 with nobody above Fresh.
+    Rest has to be spent in the order it was earned.
     """
-    last = getattr(league, "health_day", None)
+    last = getattr(league, "health_clock", None)
     if last is None:
-        league.health_day = day
+        league.health_clock = moment
         return
-    gap = (day - last).days
-    if gap <= 0:
+    hours = (moment - last).total_seconds() / 3600.0
+    if hours <= 0:
         return
+    days = hours / HOURS_PER_DAY
     for team in league.teams.values():
         staff = team.coach.ratings.development if team.coach else 50.0
         for player in team.players:
-            rest(player, gap, staff)
-            player.health.days_rested += gap
-    league.health_day = day
+            rest(player, hours, staff)
+            player.health.days_rested += days
+    league.health_clock = moment
 
 
 def after_game(league, game) -> None:
@@ -654,6 +684,9 @@ def after_game(league, game) -> None:
     result = game.result
     if result is None:
         return
+    # Everything the players earned between the last game and this one, before
+    # tonight is charged to them.
+    advance_to(league, game.tipoff_at)
     margin = abs(result.home_score - result.away_score)
     overtimes = max(0, result.periods_played - 4)
     intensity = game_intensity(getattr(game, "round_label", "") or "", margin)
@@ -684,15 +717,18 @@ def after_game(league, game) -> None:
             if minutes <= 0:
                 continue
 
-            back_to_back = health.days_rested < 1
-            three_in_four = health.days_rested < 2
+            # On this calendar a "back-to-back" is the second or third slate
+            # of the same day -- under nine hours between tip-offs -- and the
+            # softer case is a gap under a full day.
+            back_to_back = health.days_rested < 0.38
+            three_in_four = health.days_rested < 1.0
             health.fatigue = min(100.0, health.fatigue + game_fatigue(
                 player, minutes, intensity=intensity,
                 back_to_back=back_to_back, three_in_four=three_in_four,
                 overtimes=overtimes, away=away))
             health.wear = min(100.0, health.wear + game_wear(
                 player, minutes, health.fatigue))
-            health.days_rested = 0
+            health.days_rested = 0.0
 
             kind, detail = roll_injury(player, minutes, f"{game.id}-{player.id}")
             if kind == "major":
@@ -716,7 +752,7 @@ def reset_season(teams) -> None:
             health.fatigue = 0.0
             health.knock = 0.0
             health.injury = None
-            health.days_rested = 3
+            health.days_rested = 3.0
             health.games_missed = 0
             health.wear = max(0.0, health.wear * (1.0 - WEAR_OFFSEASON_RECOVERY))
             sync(player)
