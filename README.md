@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 401 tests
+python3 -m unittest discover -s tests    # 455 tests
 ```
 
 In the browser: six tabs — **Home** (the news wire), **Games** (today's slate
@@ -613,14 +613,84 @@ is a test, exact rather than within a tolerance: a tolerance would pass a series
 that had drifted by less than it and still put two different numbers in front of
 a manager for the same player.
 
-**One honest limit, and the page says it too.** This league has played one
-season, so the x-axis is games, not years. A year axis would have a single point
-on it, and drawing a career arc across seasons that were never simulated would
-be inventing data — which is the one thing this codebase does not do. The series
-carries its season label and the chart draws a line per season, so a second
-season needs no new code here. It needs a second season: an offseason loop over
-`bballsim/progression.py`, which exists and ages players but has never been run
-at league level.
+There are **two axes**, and the toggle in the card head switches between them:
+
+- **By season** — one point a year, the career. Each point is that season's
+  advanced line, derived from the season's stored totals.
+- **This season** — the checkpoint line within the current year.
+
+A rookie has one season, and a chart cannot draw a line through one point. It
+says so and offers the other axis rather than inventing the years either side.
+
+## The offseason
+
+A league that reaches the Keystone Finals and then sits there forever is a
+season, not a league. `bballsim/league/offseason.py` is what turns one into the
+other. `League.tick` calls it exactly the way it calls `playoffs.advance` —
+every heartbeat, declining unless the league has earned it — and it runs when
+the championship is decided and 120 days of summer have passed. That gap is
+realistic and also load-bearing: it is what stops a clock nudged forward a
+fortnight from rolling a year nobody asked for.
+
+Five steps, in this order:
+
+1. **Archive** the finished season — its totals, its final table, its champion.
+2. **Age** every player through `progression.develop_season`, on the minutes he
+   actually played and under his club's actual development rating.
+3. **Retire** whoever the progression engine says is finished.
+4. **Replace** them from an intake, worst club picking first.
+5. **Reschedule** — new label, fresh calendar the same length as the last one,
+   standings and totals cleared.
+
+**The archive is taken before anybody develops.** A season line belongs to the
+player who produced it at the age he was, not to the year-older man he becomes
+one statement later.
+
+**Career profiles are stored, not rebuilt.** `Player.career` is saved with the
+roster, and this is not tidiness. Everything in a profile drawn from the
+player's id — prime age, arc, realisation — would rebuild identically. But
+`baseline_ca` would not: rebuilt each summer it resets to whatever the player is
+worth today, and `effective_ceiling` then hands him a fresh share of the
+remaining gap every year. A player of poor character is supposed to stall short
+of his ceiling, and with a resetting baseline nobody ever does.
+
+**A retired player's id is never reissued.** Newcomers are stamped with the
+season they arrived — `D2029-01`, not `NCI-13` — because his season lines stay
+in the archive under his id forever, and the career chart reads those archives
+by id. A recycled id is a player inheriting a career he never had.
+
+### Where past seasons live
+
+`data/history.json`, and it is the one file in this project that stores numbers
+a screen shows. The distinction is worth being precise about. Everywhere else a
+derived number is absent because what it derives from is present — standings are
+rebuilt from results because the results are in `season.json`. A finished season
+is different: its fixtures are retired when the next calendar goes up, because
+twenty years of box scores is hundreds of megabytes read on every boot. The
+totals those games produced are the last surviving record of them, and storing a
+record of what happened is the same category as storing that a player is 26.
+
+What is stored is **totals only**. A 2028-29 advanced table is computed on read
+by the same `advanced_table` the live season goes through, so changing a formula
+moves every season on a career chart together — which is what keeps a career
+comparable to itself. `tests/test_offseason.py` asserts both halves: that the
+file carries no rates, and that a reloaded archive produces an identical
+advanced table.
+
+### Is the league stable?
+
+Over twenty simulated offseasons at realistic minutes, mean age oscillates
+between 26.6 and 29.0 and comes back rather than climbing, retirements settle
+around 15–30 a season, and mean current ability drifts from 111.7 to 110.3.
+So it holds, with a mild talent deflation worth watching if the loop is ever run
+for fifty years.
+
+### What this is not
+
+There are no trades, no free agency, no contracts, and no scouting of the intake
+beyond what the squad page already shows. A club keeps the players it has, loses
+the ones who retire, and drafts to fill the holes. **Draft-and-develop loop** is
+the honest name for it; "offseason system" would be overselling.
 
 ## Power rankings
 
@@ -1000,19 +1070,23 @@ bballsim/
   league/
     calendar.py    fixtures, tip-off times, game status
     stats.py       season totals -> per-game rates, for players and teams
-    history.py     per-player game logs; advanced stats across the season
+    history.py     per-player game logs; advanced stats by game and by season
+    offseason.py   archive, age, retire, draft, reschedule
     league.py      standings, the sim clock, tick(), the tracker feed
   api/server.py    stdlib HTTP: JSON API + static files
   api/payload.py   the shapes the front end reads, shared by API and demo
   save.py          the file formats: stored values only, nothing derived
   roster.py        the one place anything asks for teams
+  names.py         the name pools every player is drawn from
+  prospects.py     the offseason intake: young players with real headroom
   placeholder.py   THROWAWAY generator — ran once to build data/league.json
 ui/                the whole front end (vanilla JS, no build step)
   index.html       markup; styles.css; app.js
   source-live.js   data from the API        (the running app)
   source-static.js data from a baked payload (the published demo)
 data/league.json   who is in the league: 30 teams, 360 players, 30 coaches
-data/season.json   what has happened: 870 fixtures, and results
+data/season.json   what has happened: the fixture list, and results
+data/history.json  seasons that are over: totals and champions (written by play)
 tools/make_league.py, tools/make_season.py   built them (one-off)
 render.yaml        hosting blueprint — see DEPLOY.md
 ```

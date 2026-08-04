@@ -210,8 +210,12 @@ def team_squad(team, league=None) -> dict:
     data["players"] = [player_detail(p) for p in team.players]
     if league is not None:
         data["gameLog"] = history.game_log(league, team.id)
+        # Two shapes for one chart, because they answer different questions.
+        # `advancedSeries` is this season game by game; `advancedSeasons` is the
+        # career, one point a year. The second only has more than one point once
+        # the league has played more than one season.
         data["advancedSeries"] = history.team_advanced_series(league, team.id)
-        data["seasons"] = [league.season]
+        data["advancedSeasons"] = history.team_season_series(league, team.id)
     return data
 
 
@@ -445,6 +449,9 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
         # movement fall out of that rather than being stored anywhere.
         "power": power.rank_history(league),
         "conferences": list(CONFERENCES),
+        # Every season the league has played, oldest first, with its champion.
+        # One entry until an offseason has been rolled.
+        "seasons": history.seasons(league),
         # Advanced stats are derived on read from the same season totals the
         # basic table uses -- nothing extra is stored or simulated.
         "advancedStats": advanced_table(league.stats, minimum_games=minimum_games),

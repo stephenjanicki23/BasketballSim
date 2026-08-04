@@ -214,6 +214,7 @@ const state = {
   playerId: null,
   posFilter: "",
   chartStat: "per",
+  chartAxis: "season",
   standingsView: "league",
   powerTeam: null,
   statIndex: null,
@@ -276,6 +277,7 @@ async function boot() {
 
   renderWire();
   renderBracket();
+  renderHonours();
   renderPower();
   bindStandingsScope();
   renderSchedule();
@@ -1376,6 +1378,45 @@ function seriesRow(series) {
   return box;
 }
 
+/* Every season the league has finished, and who won it. Hidden until there is
+ * one -- a roll of honour with nothing on it is not a roll of honour. */
+function renderHonours() {
+  const card = $("#honours-card");
+  const table = $("#honours");
+  if (!card || !table) return;
+  const done = (state.data.seasons || []).filter((s) => s.complete && s.champion);
+  if (!done.length) { card.hidden = true; return; }
+  card.hidden = false;
+  table.textContent = "";
+
+  const head = el("thead");
+  const headRow = el("tr");
+  for (const label of ["SEASON", "CHAMPION", "RUNNER-UP"]) {
+    headRow.appendChild(el("th", label === "SEASON" ? "col-name" : null, label));
+  }
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const body = el("tbody");
+  for (const row of [...done].reverse()) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "col-name", row.season));
+    for (const id of [row.champion, row.runnerUp]) {
+      const team = state.teams.get(id);
+      const cell = el("td");
+      if (team) {
+        cell.appendChild(teamMark(team));
+        cell.appendChild(el("span", null, ` ${team.city} ${team.name}`));
+      } else {
+        cell.textContent = "—";
+      }
+      tr.appendChild(cell);
+    }
+    body.appendChild(tr);
+  }
+  table.appendChild(body);
+}
+
 function renderBracket() {
   const holder = $("#bracket");
   const empty = $("#bracket-empty");
@@ -1958,12 +1999,18 @@ function renderPlayerGames(player, team) {
  * the number the Advanced tab has for the season. The final point tying out is
  * the property that makes the line worth reading.
  *
- * The x-axis is games played, and the reason is worth stating plainly rather
- * than hiding: this league has played one season. A year axis would have one
- * point on it, and drawing a career arc for seasons that were never simulated
- * would be inventing data. The series carries its season label and the chart
- * draws a line per season, so a second season needs no new code here -- it
- * needs a second season.
+ * Two axes, because they answer different questions and both are real:
+ *
+ *   By season -- one point a year, the career. This is the chart the league
+ *     could not draw before the offseason loop existed, because there was one
+ *     season and a year axis would have had a single point on it.
+ *   This season -- the checkpoint line within the current year.
+ *
+ * A past season's point is *derived on read*, exactly like the live one: the
+ * archive stores the totals those games produced and the advanced table is
+ * computed from them now, by the same code. Change a formula and every season
+ * on the chart moves with it, which is what keeps a career comparable to
+ * itself.
  * ------------------------------------------------------------------ */
 
 const CHART = { width: 720, height: 260, left: 52, right: 16, top: 16, bottom: 30 };
@@ -2014,6 +2061,58 @@ function bindChartStat() {
     state.chartStat = picker.value;
     renderTeamDetail();
   });
+
+  // One season in the league means the by-season axis is a single point, so it
+  // opens on the within-season line instead. It is still offered -- the toggle
+  // is how you find out the league has only played one year.
+  const seasons = state.data.seasons || [];
+  if (seasons.length < 2) state.chartAxis = "games";
+
+  $$("#chart-axis button").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.axis === state.chartAxis);
+    button.onclick = () => {
+      state.chartAxis = button.dataset.axis;
+      $$("#chart-axis button").forEach((b) => {
+        const on = b.dataset.axis === state.chartAxis;
+        b.classList.toggle("is-active", on);
+        b.setAttribute("aria-selected", String(on));
+      });
+      renderTeamDetail();
+    };
+  });
+}
+
+/* The two series, reduced to the one shape the renderer draws: a list of
+ * points, an x value per point, and a label for each end of the axis. */
+function chartPoints(player, team) {
+  if (state.chartAxis === "season") {
+    const points = ((team.advancedSeasons || {})[player.id]) || [];
+    return {
+      points,
+      // Spaced by year, not by index. A player who took no minutes at all in a
+      // season has no line for it, and evenly spacing the points he does have
+      // would draw 2028-29 next to 2030-31 as though nothing were missing.
+      x: points.map((p) => parseInt(p.season, 10) || 0),
+      tick: (i) => (points[i] ? points[i].season : ""),
+      caption: (last) =>
+        `by season — ${last.season}${last.complete ? "" : " so far"}, `
+        + `${last.games} games. One point a year, each derived from that `
+        + `season's stored totals by the same code the Advanced tab uses.`,
+      note: (point) => `${point.season}: ${point.games} games`,
+    };
+  }
+  const series = (team.advancedSeries || {})[player.id];
+  const points = (series && series.points) || [];
+  return {
+    points,
+    x: points.map((p) => p.games),
+    tick: (i) => `${points[i].games} GP`,
+    caption: (last) =>
+      `through the ${series ? series.season : ""} season, cumulative — `
+      + `${last.games} games. One point per checkpoint; the last one is the `
+      + `figure on the Advanced tab.`,
+    note: (point) => `after ${point.games} games`,
+  };
 }
 
 function renderPlayerChart(player, team) {
@@ -2024,19 +2123,28 @@ function renderPlayerChart(player, team) {
   note.textContent = "";
 
   const card = figure.closest(".card");
-  const series = (team.advancedSeries || {})[player.id];
   const key = chartStatKey();
   const column = (state.data.advancedColumns || []).find((c) => c.key === key);
-  const points = (series && series.points) || [];
+  const axis = chartPoints(player, team);
+  const points = axis.points;
   if (!column || points.length < 2) {
-    if (card) card.hidden = true;
+    // A rookie has one season and a chart cannot draw a line through one point.
+    // Rather than inventing the years either side of it, the card says which
+    // axis has nothing on it and offers the other one.
+    if (card) card.hidden = false;
+    figure.textContent = "";
+    note.textContent = points.length === 1 && state.chartAxis === "season"
+      ? `${player.name} has played one season. A career line needs two — `
+        + `switch to "This season" for his progression within it.`
+      : "";
+    if (!column || !points.length) { if (card) card.hidden = true; }
     return;
   }
   if (card) card.hidden = false;
   $("#chart-stat").value = key;
 
   const values = points.map((p) => p[key]);
-  const games = points.map((p) => p.games);
+  const games = axis.x;
   let low = Math.min(...values);
   let high = Math.max(...values);
   if (high - low < 1e-9) { low -= 1; high += 1; }   // a flat line still needs a band
@@ -2055,7 +2163,8 @@ function renderPlayerChart(player, team) {
   const chart = svg("svg", {
     viewBox: `0 0 ${CHART.width} ${CHART.height}`,
     role: "img",
-    "aria-label": `${player.name}, ${column.label} through the ${series.season} season`,
+    "aria-label": `${player.name}, ${column.label} ${
+      state.chartAxis === "season" ? "season by season" : "through the season"}`,
   });
 
   // Horizontal gridlines and their labels.
@@ -2089,24 +2198,21 @@ function renderPlayerChart(player, team) {
       class: "chart-dot", cx: x(games[index]), cy: y(point[key]), r: 3.5,
     });
     dot.appendChild(svg("title", {},
-      `${column.label} ${point[key]} after ${point.games} games`));
+      `${column.label} ${point[key]} ${axis.note(point)}`));
     chart.appendChild(dot);
   });
 
   // Only the ends get an x label; sixteen of them would be a smear.
-  for (const [game, anchor] of [[firstGame, "start"], [lastGame, "end"]]) {
+  for (const [index, anchor] of [[0, "start"], [points.length - 1, "end"]]) {
     chart.appendChild(svg("text", {
-      class: "chart-tick", x: x(game), y: CHART.height - 10, "text-anchor": anchor,
-    }, `${game} GP`));
+      class: "chart-tick", x: x(games[index]), y: CHART.height - 10,
+      "text-anchor": anchor,
+    }, axis.tick(index)));
   }
 
   figure.appendChild(chart);
   const last = points[points.length - 1];
-  note.textContent =
-    `${column.label} through the season, cumulative — ${last[key]} after `
-    + `${last.games} games. One point per checkpoint; the last one is the `
-    + `${series.season} figure on the Advanced tab. The league has played one `
-    + `season, so the axis is games rather than years.`;
+  note.textContent = `${column.label} ${axis.caption(last)}`;
 }
 
 /* A collapsible section: heading and star rating always visible, the
@@ -2336,6 +2442,7 @@ async function refreshLeague({ quiet = false } = {}) {
   // the standings rather than waiting for a reload.
   renderWire();
   renderBracket();
+  renderHonours();
   renderPower();
   renderSchedule();
   renderStandings();

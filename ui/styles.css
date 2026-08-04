@@ -1458,3 +1458,7 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
 @media (max-width: 720px) {
   .power-bar-label { flex-basis: 120px; font-size: 11px; }
 }
+
+/* Chart controls: an axis toggle and a stat picker side by side in the head. */
+.card-controls { display: flex; align-items: center; gap: 10px; }
+.card-controls .scope-toggle button { font-size: 11px; padding: 4px 9px; }

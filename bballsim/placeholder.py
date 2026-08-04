@@ -15,6 +15,7 @@ import random
 from .ability import (
     Archetype,
     POSITION_ARCHETYPES,
+    POSITION_PROFILE,
     ca_tier,
     generate_ratings,
     make_ability,
@@ -22,6 +23,7 @@ from .ability import (
 from .biography import draw_age, draw_height, draw_weight, make_biography
 from .coach import make_coaches
 from .models import Player, Position, Team
+from .names import FIRST_NAMES, SURNAMES
 from .ratings import HiddenAttributes, Ratings, Tendencies, clamp
 from .tactics import DefensiveScheme, OffensiveScheme, Tactics
 
@@ -61,180 +63,8 @@ _TEAM_NAMES = [
 # Deliberately long: the league needs a unique surname per player so the
 # play-by-play never reads "D. Reyes blocks D. Reyes's shot". 30 teams of 12
 # is 360 players, so the pool has to clear that with room to spare.
-_SURNAMES = [
-    "Alder", "Brook", "Calloway", "Dunmore", "Ellery", "Fenwick", "Gale",
-    "Hollis", "Ingram", "Jarvis", "Kessler", "Larkin", "Mercer", "Nash",
-    "Oakes", "Prescott", "Quill", "Reyes", "Sparrow", "Thorne", "Underhill",
-    "Vance", "Whitlock", "Yarrow", "Ashcroft", "Bellamy", "Cardew", "Dashiell",
-    "Everly", "Fairbank", "Gossard", "Halloway", "Isley", "Jessup", "Kingsley",
-    "Lathrop", "Marchetti", "Norwood", "Ostrander", "Pemberton", "Quintero",
-    "Ravenel", "Sedgwick", "Tillman", "Ulmer", "Verlander", "Wexford",
-    "Yates", "Ziegler", "Ainsworth", "Bramwell", "Colvin", "Denholm",
-    "Eastwick", "Falkner", "Granger", "Hawthorne", "Ives", "Joplin",
-    "Kirkwood", "Lindqvist", "Merriweather", "Nordstrom", "Osgood",
-    "Pennington", "Quarles", "Rockwell", "Sandoval", "Trueblood", "Ulrich",
-    "Vandermeer", "Wolcott", "Yeardley", "Zabala", "Amberly", "Blackwood",
-    "Castellan", "Doverly", "Ellsworth", "Fitzhugh", "Galbraith", "Hartsock",
-    "Inglewood", "Jansen", "Keswick", "Loudermilk", "Mainwaring", "Netherton",
-    "Oxley", "Pathmore", "Quilliam", "Rutherford", "Stillwell", "Tanaka",
-    "Uxbridge", "Vasquez", "Wentworth", "Yorke", "Zamora", "Abernathy",
-    "Braddock", "Chaudhry", "Delacroix", "Emberly", "Fontaine", "Greaves",
-    "Hallowell", "Ibarra", "Jelani", "Kowalczyk", "Lundqvist", "Moreau",
-    "Nakamura", "Okonkwo", "Petrov", "Quinlan", "Rasmussen", "Solberg",
-    "Takahashi", "Ustinov", "Villalobos", "Wagstaff", "Xiong", "Yamamoto",
-    "Zielinski", "Ackerman", "Barrington", "Caldwell", "Draper", "Eberhardt",
-    "Fairweather", "Gundersen", "Hollingsworth", "Iverson", "Jacoby",
-    "Kaminski", "Langford", "Mattheson", "Novak", "Ortega", "Pankhurst",
-    "Quesada", "Radcliffe", "Sorensen", "Thibodeaux", "Ugarte", "Voss",
-    "Whittaker", "Yeoman", "Zaragoza", "Ashford", "Bexley", "Carrington",
-    "Duquette", "Emerson", "Fitzgibbon", "Garrity", "Hendricks", "Ilyushin",
-    "Jorgensen", "Kilpatrick", "Lockhart", "Montrose", "Nightingale",
-    "Ordonez", "Paxton", "Quimby", "Ridgeway", "Stanhope", "Tremaine",
-    "Upshaw", "Valdez", "Wilkerson", "Yancey", "Zeller", "Attwater",
-    "Bergstrom", "Chandler", "Devereaux", "Eastgate", "Fairholm", "Gladwell",
-    "Harrowgate", "Innsbruck", "Jankovic", "Kettering", "Lascelles",
-    "Mortimer", "Nunnally", "Oldfield", "Pemberly", "Quillon", "Ravensworth",
-    "Sinclair", "Thackeray", "Umbridge", "Vanderberg", "Whitmore", "Yelverton",
-    "Zabriskie", "Alcott", "Bannerman", "Crowther", "Dunstable", "Eldridge",
-    "Fothergill", "Goodwin", "Hargreaves", "Iremonger", "Jephson",
-    "Kenworthy", "Lyttleton", "Marchbanks", "Nettlefold", "Ollerenshaw",
-    "Prendergast", "Quennell", "Rowntree", "Standish", "Tattersall",
-    "Underwood", "Vickery", "Wolstenholme", "Yardley", "Zouche", "Applegarth",
-    "Birtwistle", "Cholmondeley", "Dalrymple", "Etheridge", "Farthingale",
-    "Grimsditch", "Huddleston", "Ingoldsby", "Jerningham", "Kirkbride",
-    "Loveridge", "Mallinson", "Ninnis", "Ogilvie", "Postlethwaite",
-    "Quatermain", "Rushworth", "Snodgrass", "Thorneycroft", "Ubaldini",
-    "Vansittart", "Wickersham", "Yoxall", "Zetterberg", "Aldington",
-    "Blenkinsop", "Carmichael", "Dinsdale", "Ellerbeck", "Featherstone",
-    "Gainsborough", "Hollingbourne", "Ickringill", "Jellicoe", "Kempthorne",
-    "Lightfoot", "Micklethwaite", "Naismith", "Oglethorpe", "Pilkington",
-    "Quantrill", "Ravenscroft", "Shackleton", "Trelawney", "Uttridge",
-    "Verinder", "Winterbourne", "Yelland", "Zimmerman", "Arbuthnot",
-    "Beauchamp", "Cadwallader", "Duckworth", "Endicott", "Fanshawe",
-    "Garforth", "Hawksmoor", "Iddesleigh", "Joliffe", "Kirkpatrick",
-    "Lansbury", "Meredith", "Nuttall", "Ottoline", "Popplewell", "Quilter",
-    "Rickenbacker", "Somerville", "Templeton", "Urquhart", "Vivian",
-    "Wolfenden", "Yeatman", "Zangwill", "Aberdeen", "Broadbent", "Culpepper",
-    "Danvers", "Edgerton", "Fitzroy", "Glanville", "Havelock", "Isherwood",
-    "Jardine", "Kilbride", "Lamplugh", "Mowbray", "Norrington", "Osbourne",
-    "Prideaux", "Quiller", "Rasmusson", "Selwyn", "Thistlewood", "Ulverston",
-    "Ventris", "Wadsworth", "Yelverley", "Zealand", "Ancaster", "Bickerstaff",
-    "Cranleigh", "Devonport", "Ecclestone", "Fitzalan", "Godolphin",
-    "Hazelwood", "Irvington", "Jessamine", "Kenilworth", "Lindisfarne",
-    "Mandeville", "Northbrook", "Orpington", "Pendlebury", "Quorndon",
-    "Rothesay", "Stapleton", "Tewkesbury", "Ullswater", "Vandeleur",
-    "Wrottesley", "Yarborough", "Zennor", "Ashbourne", "Beddingfield",
-    "Chelmsford", "Dunwoody", "Elphinstone", "Fairbrother", "Grosvenor",
-    "Hartlepool", "Ilchester", "Jerviswood", "Knatchbull", "Lauderdale",
-    "Marlborough", "Newcombe", "Oxenford", "Pontefract", "Quendon",
-    "Ravenglass", "Strathmore", "Tunstall", "Uppingham", "Vereker",
-    "Willoughby", "Yattendon", "Zouch",
-]
 
-_FIRST_NAMES = [
-    "Andre", "Bryce", "Cam", "Dante", "Elias", "Finn", "Gus", "Hector",
-    "Isaiah", "Jonah", "Kai", "Luca", "Miles", "Noel", "Omar", "Pierce",
-    "Quinn", "Rashad", "Silas", "Tobias", "Amari", "Brandon", "Caleb",
-    "Damian", "Ezra", "Felix", "Gabriel", "Harun", "Ivan", "Jalen",
-    "Kofi", "Lorenzo", "Malik", "Nikola", "Oscar", "Patrice", "Rafael",
-    "Sebastian", "Tariq", "Vince", "Wesley", "Xavier", "Yusuf", "Zane",
-    "Adrian", "Bilal", "Cole", "Diego", "Emmett", "Franco", "Grayson",
-    "Hugo", "Idris", "Jasper", "Kenji", "Leonel", "Marcus", "Nathanael",
-    "Oren", "Pavel", "Reuben", "Santiago", "Theo", "Ulrich", "Viktor",
-    "Warren", "Yannick", "Zeke",
-]
 
-# --------------------------------------------------------------------------
-# Positional archetypes: mean shifts in rating points applied over a player's
-# base draw. Anything unlisted sits at the base for that player's tier.
-# --------------------------------------------------------------------------
-
-_POSITION_PROFILE: dict[Position, dict[str, float]] = {
-    Position.PG: {
-        "close_shot": -0.8, "layups": 1.2, "dunking": -4.4, "three_point": 1.6,
-        "free_throws": 1.6, "off_ball_shooting": -0.4,
-        "finishing_through_contact": -2.0, "floater": 2.4, "euro_step": 2.0,
-        "post_moves": -4.4, "post_footwork": -4.4, "post_hook": -4.8, "fadeaway": -0.8,
-        "passing": 3.6, "ball_handling": 4.0, "dribbling": 4.0, "court_vision": 3.6,
-        "pick_and_roll_handler": 3.6, "decision_making": 2.0, "creativity": 2.4,
-        "assist_iq": 3.2,
-        "perimeter_defense": 1.2, "interior_defense": -4.0, "help_defense": -1.2,
-        "blocks": -4.4, "steals": 1.6, "switchability": -1.2, "post_defense": -4.4,
-        "rim_protection": -5.2, "shot_contest": -0.8,
-        "offensive_rebounding": -3.6, "defensive_rebounding": -3.2,
-        "boxing_out": -2.8, "rebound_positioning": -2.0, "rebound_timing": -1.6,
-        "speed": 2.4, "acceleration": 2.8, "agility": 2.8, "quickness": 3.2,
-        "strength": -2.8, "balance": 1.2,
-        "pick_and_roll_creation": 3.6, "isolation": 1.6, "pull_up_shooting": 2.0,
-        "transition_play": 2.8, "pace_control": 3.6,
-        "catch_and_shoot": 0.4, "cutting": -1.2, "off_ball_movement": -0.8,
-        "wing_defense": -1.2, "transition_finishing": 0.8,
-        "screen_setting": -3.6, "roll_man": -4.4, "passing_from_post": -2.4,
-        "offensive_awareness": 1.6, "spatial_awareness": 1.6,
-    },
-    Position.SG: {
-        "three_point": 2.8, "mid_range": 2.4, "free_throws": 1.2,
-        "off_ball_shooting": 2.4, "shot_selection": 0.4,
-        "layups": 0.8, "euro_step": 1.2, "fadeaway": 0.8,
-        "post_moves": -3.2, "post_hook": -3.6, "post_footwork": -3.2,
-        "ball_handling": 1.6, "dribbling": 1.6, "passing": 0.4, "court_vision": 0.4,
-        "perimeter_defense": 1.2, "interior_defense": -2.8, "blocks": -3.2,
-        "steals": 0.8, "rim_protection": -4.0, "post_defense": -3.2,
-        "offensive_rebounding": -2.4, "defensive_rebounding": -2.0, "boxing_out": -1.6,
-        "speed": 1.6, "acceleration": 1.6, "agility": 1.6, "quickness": 1.6, "strength": -1.2,
-        "pull_up_shooting": 2.4, "catch_and_shoot": 2.8, "isolation": 1.2,
-        "off_ball_movement": 2.0, "transition_play": 1.2,
-        "screen_setting": -2.4, "roll_man": -3.2, "passing_from_post": -1.6,
-    },
-    Position.SF: {
-        "three_point": 1.2, "mid_range": 0.8, "layups": 1.2,
-        "finishing_through_contact": 1.2, "offensive_versatility": 2.0,
-        "off_ball_shooting": 1.2,
-        "perimeter_defense": 1.2, "wing_defense": 2.4, "switchability": 1.6,
-        "defensive_rebounding": 0.4, "help_defense": 0.8,
-        "cutting": 2.0, "off_ball_movement": 1.6, "transition_finishing": 1.6,
-        "catch_and_shoot": 1.2,
-        "post_moves": -0.8, "post_hook": -1.2, "rim_protection": -1.6,
-        "screen_setting": -0.8, "roll_man": -1.2,
-    },
-    Position.PF: {
-        "close_shot": 1.6, "layups": 1.2, "dunking": 2.4,
-        "finishing_through_contact": 2.4, "post_moves": 2.0, "post_footwork": 2.0,
-        "post_hook": 1.6, "three_point": -1.2, "off_ball_shooting": -0.8,
-        "ball_handling": -2.8, "dribbling": -2.8, "passing": -1.2,
-        "court_vision": -1.2, "pick_and_roll_handler": -2.8, "assist_iq": -1.2,
-        "interior_defense": 2.4, "help_defense": 1.6, "blocks": 2.0,
-        "post_defense": 2.4, "rim_protection": 1.6, "perimeter_defense": -0.8,
-        "offensive_rebounding": 2.4, "defensive_rebounding": 2.8,
-        "boxing_out": 2.8, "rebound_positioning": 2.4, "rebound_timing": 2.0,
-        "strength": 2.8, "vertical_leap": 1.6, "speed": -1.2, "quickness": -1.6,
-        "agility": -1.2,
-        "screen_setting": 2.4, "roll_man": 2.4, "passing_from_post": 1.2,
-        "isolation": -1.6, "pull_up_shooting": -1.6, "pick_and_roll_creation": -2.8,
-        "pace_control": -2.0, "cutting": 0.8,
-    },
-    Position.C: {
-        "close_shot": 2.8, "layups": 1.6, "dunking": 4.0,
-        "finishing_through_contact": 3.2, "post_moves": 3.2, "post_footwork": 3.2,
-        "post_hook": 3.6, "floater": -0.8,
-        "three_point": -4.0, "mid_range": -2.4, "free_throws": -2.4,
-        "off_ball_shooting": -2.8, "fadeaway": -1.2,
-        "ball_handling": -4.4, "dribbling": -4.4, "passing": -1.6,
-        "court_vision": -2.0, "pick_and_roll_handler": -4.4, "assist_iq": -1.6,
-        "creativity": -1.6,
-        "interior_defense": 4.0, "rim_protection": 4.0, "post_defense": 4.0,
-        "blocks": 4.0, "help_defense": 2.0, "perimeter_defense": -2.8,
-        "switchability": -2.4, "steals": -1.6,
-        "offensive_rebounding": 3.6, "defensive_rebounding": 4.0,
-        "boxing_out": 3.6, "rebound_positioning": 3.2, "rebound_timing": 2.8,
-        "strength": 4.0, "vertical_leap": 1.6, "speed": -2.8, "quickness": -3.2,
-        "agility": -2.8, "acceleration": -2.4,
-        "screen_setting": 4.0, "roll_man": 4.0, "passing_from_post": 2.4,
-        "isolation": -3.2, "pull_up_shooting": -3.6, "pick_and_roll_creation": -4.4,
-        "transition_play": -2.4, "pace_control": -2.8, "cutting": -0.8,
-        "wing_defense": -2.8,
-    },
-}
 
 # A 12-man roster's positional make-up. Every team carries at least two of
 # each position, then fills the last two places with whatever the front office
@@ -321,7 +151,7 @@ def _make_player(
         position=position.value,
         archetype=archetype,
         age=age,
-        position_profile=_POSITION_PROFILE[position],
+        position_profile=POSITION_PROFILE[position.value],
     )
 
     # Character and mental, on their own axis and outside the CA budget.
@@ -430,8 +260,8 @@ def make_team(
 ) -> Team:
     # Surnames come from a league-wide pool when one is supplied, so no two
     # players anywhere share a name.
-    surnames = surnames or rng.sample(_SURNAMES, _ROSTER_SIZE)
-    first_names = rng.sample(_FIRST_NAMES, _ROSTER_SIZE)
+    surnames = surnames or rng.sample(SURNAMES, _ROSTER_SIZE)
+    first_names = rng.sample(FIRST_NAMES, _ROSTER_SIZE)
 
     # Deal the CA ladder to a shuffled set of positions. Each team therefore
     # has its best player at a random position, while the starting five still
@@ -486,9 +316,9 @@ def make_teams(count: int = 8, seed: int = 7, season_start_year: int = 2026) -> 
     # Two rounds for a league this size, so pick numbers stay coherent.
     draft_size = count * 2
     needed = count * _ROSTER_SIZE
-    if needed > len(_SURNAMES):
-        raise ValueError(f"need {needed} unique surnames, pool has {len(_SURNAMES)}")
-    pool = rng.sample(_SURNAMES, needed)
+    if needed > len(SURNAMES):
+        raise ValueError(f"need {needed} unique surnames, pool has {len(SURNAMES)}")
+    pool = rng.sample(SURNAMES, needed)
     size = _ROSTER_SIZE
     coaches = make_coaches(rng, count)
     teams = [

@@ -14,7 +14,7 @@ from ..chemistry import drift_after_game
 from ..engine.game import GameRules, GameSimulator
 from ..conferences import conference_for
 from ..models import Team
-from . import playoffs
+from . import offseason, playoffs
 from .calendar import GameStatus, ScheduledGame
 from .stats import SeasonStats
 
@@ -25,10 +25,11 @@ from .stats import SeasonStats
 # "three slates a day" describes.
 DEFAULT_TRACKER_SPEED = 1.0
 
-# How many times `tick` will re-check after the postseason adds fixtures. A
-# whole playoff run is four rounds of at most seven games, so this is far more
-# headroom than a single tick can ever need; it exists to bound the loop.
-MAX_TICK_PASSES = 64
+# How many times `tick` will re-check after the postseason or the offseason
+# adds fixtures. A playoff run is four rounds and an offseason is one more
+# pass, so a single season needs a handful; the headroom is for a clock
+# jumped years forward, which rolls a whole season on every few passes.
+MAX_TICK_PASSES = 256
 
 # Padding after the final buzzer before a game flips to FINAL.
 POSTGAME_TAIL_SECONDS = 15.0
@@ -95,6 +96,9 @@ class League:
     tracker_speed: float = DEFAULT_TRACKER_SPEED
     # Season totals, folded in as each game finalises.
     stats: SeasonStats = field(default_factory=SeasonStats)
+    # Seasons that are over, oldest first. Appended by the offseason; the only
+    # thing in this class that survives a new schedule being installed.
+    history: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Setup
@@ -151,6 +155,17 @@ class League:
 
             if playoffs.advance(self):
                 moved = True
+
+            # The season is over and the summer has passed: age everybody,
+            # replace whoever retired, and put a new calendar up. Same shape as
+            # `playoffs.advance` above -- called every tick, declines unless the
+            # league has actually earned it -- and it loops for the same reason,
+            # because a clock jumped a long way forward can be owed more than
+            # one of them.
+            if offseason.is_due(self):
+                if offseason.roll(self) is not None:
+                    moved = True
+
             if not moved:
                 break
 

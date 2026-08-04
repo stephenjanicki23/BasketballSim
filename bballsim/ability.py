@@ -402,6 +402,105 @@ def age_shift(attribute: str, age: int) -> float:
 # Generation: solve for the attributes that spend exactly this CA.
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Positional shape: mean shifts in rating points applied over a player's base
+# draw. Anything unlisted sits at the base for that player's tier.
+#
+# This lived in `placeholder.py` while the only thing that made players was
+# the throwaway generator. The offseason intake makes them too, and it is not
+# throwaway, so the shape moved to the module that consumes it. Keyed by the
+# position *string* -- `ability` does not import `models`, and a bare "PG" is
+# what `generate_ratings` is handed anyway.
+# --------------------------------------------------------------------------
+
+POSITION_PROFILE: dict[str, dict[str, float]] = {
+    "PG": {
+        "close_shot": -0.8, "layups": 1.2, "dunking": -4.4, "three_point": 1.6,
+        "free_throws": 1.6, "off_ball_shooting": -0.4,
+        "finishing_through_contact": -2.0, "floater": 2.4, "euro_step": 2.0,
+        "post_moves": -4.4, "post_footwork": -4.4, "post_hook": -4.8, "fadeaway": -0.8,
+        "passing": 3.6, "ball_handling": 4.0, "dribbling": 4.0, "court_vision": 3.6,
+        "pick_and_roll_handler": 3.6, "decision_making": 2.0, "creativity": 2.4,
+        "assist_iq": 3.2,
+        "perimeter_defense": 1.2, "interior_defense": -4.0, "help_defense": -1.2,
+        "blocks": -4.4, "steals": 1.6, "switchability": -1.2, "post_defense": -4.4,
+        "rim_protection": -5.2, "shot_contest": -0.8,
+        "offensive_rebounding": -3.6, "defensive_rebounding": -3.2,
+        "boxing_out": -2.8, "rebound_positioning": -2.0, "rebound_timing": -1.6,
+        "speed": 2.4, "acceleration": 2.8, "agility": 2.8, "quickness": 3.2,
+        "strength": -2.8, "balance": 1.2,
+        "pick_and_roll_creation": 3.6, "isolation": 1.6, "pull_up_shooting": 2.0,
+        "transition_play": 2.8, "pace_control": 3.6,
+        "catch_and_shoot": 0.4, "cutting": -1.2, "off_ball_movement": -0.8,
+        "wing_defense": -1.2, "transition_finishing": 0.8,
+        "screen_setting": -3.6, "roll_man": -4.4, "passing_from_post": -2.4,
+        "offensive_awareness": 1.6, "spatial_awareness": 1.6,
+    },
+    "SG": {
+        "three_point": 2.8, "mid_range": 2.4, "free_throws": 1.2,
+        "off_ball_shooting": 2.4, "shot_selection": 0.4,
+        "layups": 0.8, "euro_step": 1.2, "fadeaway": 0.8,
+        "post_moves": -3.2, "post_hook": -3.6, "post_footwork": -3.2,
+        "ball_handling": 1.6, "dribbling": 1.6, "passing": 0.4, "court_vision": 0.4,
+        "perimeter_defense": 1.2, "interior_defense": -2.8, "blocks": -3.2,
+        "steals": 0.8, "rim_protection": -4.0, "post_defense": -3.2,
+        "offensive_rebounding": -2.4, "defensive_rebounding": -2.0, "boxing_out": -1.6,
+        "speed": 1.6, "acceleration": 1.6, "agility": 1.6, "quickness": 1.6, "strength": -1.2,
+        "pull_up_shooting": 2.4, "catch_and_shoot": 2.8, "isolation": 1.2,
+        "off_ball_movement": 2.0, "transition_play": 1.2,
+        "screen_setting": -2.4, "roll_man": -3.2, "passing_from_post": -1.6,
+    },
+    "SF": {
+        "three_point": 1.2, "mid_range": 0.8, "layups": 1.2,
+        "finishing_through_contact": 1.2, "offensive_versatility": 2.0,
+        "off_ball_shooting": 1.2,
+        "perimeter_defense": 1.2, "wing_defense": 2.4, "switchability": 1.6,
+        "defensive_rebounding": 0.4, "help_defense": 0.8,
+        "cutting": 2.0, "off_ball_movement": 1.6, "transition_finishing": 1.6,
+        "catch_and_shoot": 1.2,
+        "post_moves": -0.8, "post_hook": -1.2, "rim_protection": -1.6,
+        "screen_setting": -0.8, "roll_man": -1.2,
+    },
+    "PF": {
+        "close_shot": 1.6, "layups": 1.2, "dunking": 2.4,
+        "finishing_through_contact": 2.4, "post_moves": 2.0, "post_footwork": 2.0,
+        "post_hook": 1.6, "three_point": -1.2, "off_ball_shooting": -0.8,
+        "ball_handling": -2.8, "dribbling": -2.8, "passing": -1.2,
+        "court_vision": -1.2, "pick_and_roll_handler": -2.8, "assist_iq": -1.2,
+        "interior_defense": 2.4, "help_defense": 1.6, "blocks": 2.0,
+        "post_defense": 2.4, "rim_protection": 1.6, "perimeter_defense": -0.8,
+        "offensive_rebounding": 2.4, "defensive_rebounding": 2.8,
+        "boxing_out": 2.8, "rebound_positioning": 2.4, "rebound_timing": 2.0,
+        "strength": 2.8, "vertical_leap": 1.6, "speed": -1.2, "quickness": -1.6,
+        "agility": -1.2,
+        "screen_setting": 2.4, "roll_man": 2.4, "passing_from_post": 1.2,
+        "isolation": -1.6, "pull_up_shooting": -1.6, "pick_and_roll_creation": -2.8,
+        "pace_control": -2.0, "cutting": 0.8,
+    },
+    "C": {
+        "close_shot": 2.8, "layups": 1.6, "dunking": 4.0,
+        "finishing_through_contact": 3.2, "post_moves": 3.2, "post_footwork": 3.2,
+        "post_hook": 3.6, "floater": -0.8,
+        "three_point": -4.0, "mid_range": -2.4, "free_throws": -2.4,
+        "off_ball_shooting": -2.8, "fadeaway": -1.2,
+        "ball_handling": -4.4, "dribbling": -4.4, "passing": -1.6,
+        "court_vision": -2.0, "pick_and_roll_handler": -4.4, "assist_iq": -1.6,
+        "creativity": -1.6,
+        "interior_defense": 4.0, "rim_protection": 4.0, "post_defense": 4.0,
+        "blocks": 4.0, "help_defense": 2.0, "perimeter_defense": -2.8,
+        "switchability": -2.4, "steals": -1.6,
+        "offensive_rebounding": 3.6, "defensive_rebounding": 4.0,
+        "boxing_out": 3.6, "rebound_positioning": 3.2, "rebound_timing": 2.8,
+        "strength": 4.0, "vertical_leap": 1.6, "speed": -2.8, "quickness": -3.2,
+        "agility": -2.8, "acceleration": -2.4,
+        "screen_setting": 4.0, "roll_man": 4.0, "passing_from_post": 2.4,
+        "isolation": -3.2, "pull_up_shooting": -3.6, "pick_and_roll_creation": -4.4,
+        "transition_play": -2.4, "pace_control": -2.8, "cutting": -0.8,
+        "wing_defense": -2.8,
+    },
+}
+
+
 def generate_ratings(
     rng: random.Random,
     ca: float,

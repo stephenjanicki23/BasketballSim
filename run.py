@@ -22,11 +22,16 @@ from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
 from bballsim.roster import load_teams
 from bballsim.save import (
+    HISTORY_PATH,
+    LEAGUE_PATH,
     SEASON_PATH,
     apply_season,
+    read_history,
     read_season,
     season_exists,
     seed_data_dir,
+    write_history,
+    write_league,
     write_season,
 )
 
@@ -50,6 +55,11 @@ def build_league(team_count: int = 30) -> League:
     for team in saved.teams:
         league.add_team(team)
 
+    # Seasons already finished. Read before the current one, because a save
+    # written after an offseason is a league several years along and its
+    # `season.json` is the calendar it built for itself.
+    league.history = read_history()
+
     if season_exists():
         # Fixtures, results played so far, and the sim date you left on.
         apply_season(league, read_season())
@@ -69,10 +79,22 @@ def build_league(team_count: int = 30) -> League:
 
 
 def save_season(league: League) -> None:
+    """Write everything the league has changed since the last checkpoint.
+
+    Three files now, not one. The offseason ages every player and replaces the
+    ones who retire, so the roster is no longer a fixed thing that only
+    `tools/make_league.py` writes -- saving the season without saving the league
+    would reload 2031-32 fixtures against the players of 2026.
+    """
     write_season(SEASON_PATH, league)
+    write_league(LEAGUE_PATH, list(league.teams.values()),
+                 name=league.name, season=league.season)
+    if league.history:
+        write_history(HISTORY_PATH, league.history)
     played = sum(1 for g in league.schedule if g.status == GameStatus.FINAL)
     print(f"saved {played} played of {len(league.schedule)} fixtures "
-          f"to {SEASON_PATH} (sim date {league.clock.now().date()})")
+          f"to {SEASON_PATH} (sim date {league.clock.now().date()}"
+          f"{f', {len(league.history)} seasons archived' if league.history else ''})")
 
 
 def command_serve(args: argparse.Namespace) -> None:

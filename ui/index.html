@@ -246,6 +246,13 @@
         conference, seeded on record, in best-of-seven series.
       </p>
       <p class="note" id="bracket-legend"></p>
+
+      <div class="card" id="honours-card" hidden>
+        <div class="card-head"><h2>Champions</h2></div>
+        <div class="sheet table-scroll">
+          <table id="honours"></table>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -302,7 +309,13 @@
         <div class="card">
           <div class="card-head">
             <h2>Advanced Progression</h2>
-            <select id="chart-stat" aria-label="Which advanced stat to chart"></select>
+            <div class="card-controls">
+              <div class="scope-toggle" id="chart-axis" role="tablist" aria-label="Chart axis">
+                <button type="button" class="is-active" data-axis="season" role="tab" aria-selected="true">By season</button>
+                <button type="button" data-axis="games" role="tab" aria-selected="false">This season</button>
+              </div>
+              <select id="chart-stat" aria-label="Which advanced stat to chart"></select>
+            </div>
           </div>
           <div class="chart-wrap">
             <figure id="profile-chart" class="chart"></figure>

@@ -53,6 +53,7 @@ from .engine.boxscore import PlayerLine, TeamBox
 from .engine.game import GameResult
 from .league.calendar import GameStatus, ScheduledGame
 from .league.league import DEFAULT_TRACKER_SPEED
+from .league.stats import PlayerSeasonLine, SeasonStats, TeamSeasonLine
 from .models import Player, Position, Team
 from .ratings import HiddenAttributes, Ratings, Tendencies
 from .tactics import Tactics
@@ -85,6 +86,23 @@ LEAGUE_PATH = data_dir() / "league.json"
 # been played. Standings and season stats are absent on purpose -- they are
 # derived from these results on load.
 SEASON_PATH = data_dir() / "season.json"
+
+# Seasons that are over. This one *does* store totals, and the distinction is
+# worth being precise about rather than waving at.
+#
+# Everywhere else, a derived number is absent because the thing it derives from
+# is present: standings are rebuilt from results because the results are in
+# `season.json`. A finished season is different. Its fixtures are retired when
+# the next one is scheduled -- keeping twenty years of box scores would be
+# hundreds of megabytes read on every boot -- so the totals those games produced
+# are the last surviving record of them. Storing a record of what happened is
+# not caching a derivation; it is the same category as storing that a player is
+# 26 years old.
+#
+# What is stored is *totals only*. Advanced stats for a 2027-28 season are still
+# computed on read by the same `advanced_table` the current season goes through,
+# from these totals. Nothing derived is written here.
+HISTORY_PATH = data_dir() / "history.json"
 
 
 def schedule_fingerprint(games) -> str:
@@ -150,6 +168,14 @@ def _should_replace_season(name: str, source: Path, destination: Path) -> bool:
         return False  # the roster is never overwritten; it has no calendar
     if os.environ.get("BBALLSIM_RESET_SEASON", "").strip().lower() in {"1", "true", "yes"}:
         return True
+    # A league that has rolled an offseason is playing a calendar it built for
+    # itself, which will never match the bundled one -- so the fingerprint test
+    # below would replace it on every single deploy. That would put the league
+    # back on 2026-27 while `league.json` still held players four years older
+    # and `history.json` still held the seasons they played. The presence of a
+    # history file is the signal that this save has moved on from the seed.
+    if (destination.parent / HISTORY_PATH.name).is_file():
+        return False
     return _season_schedule_id(source) != _season_schedule_id(destination)
 
 # Decimal places kept for every stored float. A ten-thousandth of a point on a
@@ -176,7 +202,7 @@ def _round(value):
 # --------------------------------------------------------------------------
 
 def dump_player(player: Player) -> dict:
-    return {
+    data = {
         "id": player.id,
         "first_name": player.first_name,
         "last_name": player.last_name,
@@ -201,6 +227,59 @@ def dump_player(player: Player) -> dict:
         # fatigue and the engine sets every player to 100 at tip-off.
         "injured": player.injured,
     }
+    # What his career has accumulated. The key is **omitted** rather than
+    # written as null when there is none, and that is not cosmetic: `fingerprint`
+    # hashes this dict, and a league that has never played a summer must
+    # fingerprint the same as it did before career profiles existed. Writing
+    # `"career": null` against all 360 players changed the committed league's
+    # digest and failed the test whose entire job is to notice somebody
+    # regenerating the roster -- for a schema change that moved no player at all.
+    if player.career is not None:
+        data["career"] = dump_career(player.career)
+    return data
+
+
+def dump_career(career) -> dict | None:
+    """A `progression.CareerProfile`, in full precision.
+
+    Deliberately not `CareerProfile.to_dict()` -- that is a display view, it
+    rounds, it renames to camelCase and it drops `baseline_ca` entirely. A
+    baseline that reloaded as a rounded number would move every player's
+    effective ceiling on every restart, and a baseline that did not reload at
+    all would reset it to today's ability, which is the whole reason the
+    profile is stored rather than rebuilt.
+    """
+    if career is None:
+        return None
+    return {
+        "prime_age": career.prime_age,
+        "athletic_peak": career.athletic_peak,
+        "arc": career.arc.value,
+        "realisation": career.realisation,
+        "baseline_ca": career.baseline_ca,
+        "injury_load": career.injury_load,
+        "seasons_played": career.seasons_played,
+        "peak_ca": career.peak_ca,
+        "retired": career.retired,
+    }
+
+
+def load_career(data: dict | None):
+    if not data:
+        return None
+    from .progression import CareerArc, CareerProfile
+
+    return CareerProfile(
+        prime_age=data["prime_age"],
+        athletic_peak=data["athletic_peak"],
+        arc=CareerArc(data["arc"]),
+        realisation=data["realisation"],
+        baseline_ca=data.get("baseline_ca", 0.0),
+        injury_load=data.get("injury_load", 0.0),
+        seasons_played=data.get("seasons_played", 0),
+        peak_ca=data.get("peak_ca", 0.0),
+        retired=data.get("retired", False),
+    )
 
 
 def load_player(data: dict) -> Player:
@@ -223,6 +302,7 @@ def load_player(data: dict) -> Player:
         hidden=HiddenAttributes.from_dict(data.get("hidden", {})),
         bio=load_biography(data.get("bio") or {}),
         injured=data.get("injured", False),
+        career=load_career(data.get("career")),
     )
 
 
@@ -638,3 +718,153 @@ def apply_season(league, saved: SavedSeason) -> None:
     league.season = saved.season
     league.clock.offset = timedelta(seconds=saved.clock_offset_seconds)
     league.restore_schedule(saved.games)
+
+
+# --------------------------------------------------------------------------
+# Completed seasons
+#
+# Player and team season *totals*, plus who won. See `HISTORY_PATH` above for
+# why this file stores totals when nothing else here stores anything derived.
+# --------------------------------------------------------------------------
+
+def dump_player_season(line: PlayerSeasonLine) -> dict:
+    """One player's totals. Counting stats and seconds -- never a per-game rate.
+
+    `to_dict()` is the display view: it divides by games, rounds to three places
+    and adds percentages. Reloading that would give a season whose totals cannot
+    be recovered, and every advanced stat is built on totals.
+    """
+    data = {
+        "player_id": line.player_id,
+        "name": line.name,
+        "team_id": line.team_id,
+        "position": line.position,
+        "games": line.games,
+        "seconds": line.seconds,
+    }
+    for key in PlayerSeasonLine.COUNTING:
+        data[key] = getattr(line, key)
+    return data
+
+
+def load_player_season(data: dict) -> PlayerSeasonLine:
+    line = PlayerSeasonLine(
+        player_id=data["player_id"],
+        name=data.get("name", ""),
+        team_id=data.get("team_id", ""),
+        position=data.get("position", ""),
+        games=data.get("games", 0),
+        seconds=data.get("seconds", 0.0),
+    )
+    for key in PlayerSeasonLine.COUNTING:
+        setattr(line, key, data.get(key, 0))
+    return line
+
+
+TEAM_SEASON_FIELDS = (
+    "games", "wins", "losses", "points", "points_against", "possessions",
+    "fgm", "fga", "tpm", "tpa", "ftm", "fta",
+    "offensive_rebounds", "defensive_rebounds", "assists", "steals", "blocks",
+    "turnovers", "fouls",
+    "opp_possessions", "opp_fga", "opp_tpa", "opp_fta",
+    "opp_offensive_rebounds", "opp_defensive_rebounds", "opp_turnovers",
+)
+
+
+def dump_team_season(line: TeamSeasonLine) -> dict:
+    data = {
+        "team_id": line.team_id,
+        "name": line.name,
+        "abbreviation": line.abbreviation,
+    }
+    for key in TEAM_SEASON_FIELDS:
+        data[key] = getattr(line, key)
+    return data
+
+
+def load_team_season(data: dict) -> TeamSeasonLine:
+    line = TeamSeasonLine(
+        team_id=data["team_id"],
+        name=data.get("name", ""),
+        abbreviation=data.get("abbreviation", ""),
+    )
+    for key in TEAM_SEASON_FIELDS:
+        setattr(line, key, data.get(key, 0))
+    return line
+
+
+def dump_stats(stats: SeasonStats) -> dict:
+    return {
+        "players": [dump_player_season(l) for l in stats.players.values()],
+        "teams": [dump_team_season(l) for l in stats.teams.values()],
+    }
+
+
+def load_stats(data: dict) -> SeasonStats:
+    stats = SeasonStats()
+    for row in data.get("players", []):
+        line = load_player_season(row)
+        stats.players[line.player_id] = line
+    for row in data.get("teams", []):
+        line = load_team_season(row)
+        stats.teams[line.team_id] = line
+    return stats
+
+
+def dump_archive(archive) -> dict:
+    """One finished season: its totals, its final table, and who won it."""
+    return {
+        "season": archive.season,
+        "stats": dump_stats(archive.stats),
+        "standings": archive.standings,
+        "champion": archive.champion,
+        "runner_up": archive.runner_up,
+        "conference_champions": dict(archive.conference_champions),
+    }
+
+
+def load_archive(data: dict):
+    from .league.offseason import SeasonArchive
+
+    return SeasonArchive(
+        season=data["season"],
+        stats=load_stats(data.get("stats") or {}),
+        standings=data.get("standings") or [],
+        champion=data.get("champion"),
+        runner_up=data.get("runner_up"),
+        conference_champions=data.get("conference_champions") or {},
+    )
+
+
+def dump_history(archives: list) -> dict:
+    return {
+        "version": SAVE_VERSION,
+        "seasons": [dump_archive(a) for a in archives],
+    }
+
+
+def load_history(data: dict) -> list:
+    version = data.get("version", 0)
+    if version > SAVE_VERSION:
+        raise ValueError(
+            f"history file is version {version}, this build understands {SAVE_VERSION}"
+        )
+    return [load_archive(row) for row in data.get("seasons", [])]
+
+
+def write_history(path: Path, archives: list, *, indent: int | None = 1) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _round(dump_history(archives))
+    path.write_text(json.dumps(payload, indent=indent, sort_keys=True) + "\n")
+    return path
+
+
+def read_history(path: Path = HISTORY_PATH) -> list:
+    if not Path(path).is_file():
+        return []
+    return load_history(json.loads(Path(path).read_text()))
+
+
+def history_exists(path: Path = HISTORY_PATH) -> bool:
+    return Path(path).is_file()

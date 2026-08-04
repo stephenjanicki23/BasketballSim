@@ -62,6 +62,15 @@ since that save are lost. Paying for Starter avoids both problems.
    deploy replaces the save when that no longer matches, logging
    `installed season.json -> /var/data/season.json`.
 
+   **Once the league has rolled an offseason, that exception stops applying.**
+   A league in its third season is playing a calendar it built for itself,
+   which will never match the bundled one — so the fingerprint check would
+   replace it on every single deploy, putting the league back on 2026-27 while
+   `league.json` still held players three years older and `history.json` still
+   held the seasons they played. The presence of `/var/data/history.json` is
+   what tells a boot the save has moved on from the seed, and it is left alone
+   from then on.
+
 4. **Open the URL.** Render gives you `basketball-manager-xxxx.onrender.com`.
    You get the whole app, not just the tracker: Games, Stats, Standings and
    Teams. There are no clock controls — the league runs on real time, so games
@@ -100,7 +109,9 @@ configure beyond DNS.
   every future deploy wipes the season again. (Deleting
   `/var/data/season.json` from a Render shell and restarting does the same
   thing.) The roster is never touched by either; to reset players and coaches,
-  delete `/var/data/league.json`.
+  delete `/var/data/league.json` — and to put a multi-season league back to its
+  first year, delete `/var/data/history.json` alongside it, since that is what
+  records the seasons already played.
 - **The clock is real time, and so is the tracker.** Games tip off at their
   real 8am, 1pm and 7pm Pacific slots, three a day per team, and reveal their
   play-by-play at real speed — a game runs about 48 minutes, so the three

@@ -29,6 +29,7 @@ from bballsim.api.payload import (
     team_squad,
 )
 from bballsim.league import League, build_round_robin
+from bballsim.league import offseason
 from bballsim.league.calendar import GameStatus
 from bballsim.roster import load_teams
 from bballsim.save import apply_season, read_season, season_exists
@@ -62,10 +63,31 @@ def build_season(team_count: int = 30) -> League:
             season=league.season,
         ))
 
-    # Run the whole schedule out.
-    league.clock.advance(timedelta(days=365 * 2))
-    league.tick()
+    play_seasons(league, SEASONS)
     return league
+
+
+# How many seasons the published page has behind it. The by-season chart needs
+# more than one point to be a chart, and each season is a real 1,230-game
+# simulation plus its postseason -- about three minutes apiece -- so this is the
+# knob that trades export time for career length.
+SEASONS = 3
+
+
+def play_seasons(league: League, seasons: int) -> None:
+    """Play `seasons` complete seasons and stop on the last Finals.
+
+    Deliberately not one big clock jump. `League.tick` now rolls the offseason
+    when the summer has passed, so advancing two years lands the page somewhere
+    arbitrary -- possibly mid-season, possibly a season further on than
+    intended. Stepping to the end of each schedule in turn ends the export on a
+    championship, which is the day the demo shows.
+    """
+    while True:
+        offseason.play_out(league)
+        if len(league.history) + 1 >= seasons:
+            return
+        offseason.roll_summer(league)
 
 
 def export_game(game, league) -> dict:

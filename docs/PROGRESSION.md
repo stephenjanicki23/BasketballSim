@@ -4,6 +4,20 @@ How a career unfolds, one offseason at a time. Implemented in
 `bballsim/progression.py`; tested in `tests/test_progression.py`; runnable with
 `python3 tools/careers.py --attributes`.
 
+**Who calls it.** `bballsim/league/offseason.py` runs `develop_season` over
+every player in the league when a season ends — on the minutes he actually
+played and under his club's actual development rating — then retires whoever
+this engine says is finished and drafts replacements. Two things that document
+assumed and the loop had to make real:
+
+- **`CareerProfile` is stored on the player**, not rebuilt each summer. Prime
+  age, arc and realisation would rebuild identically from his id; `baseline_ca`
+  would not, and a baseline that reset every year hands a player a fresh share
+  of his remaining ceiling gap annually — so nobody ever stalls short of PA,
+  which is the one thing `realisation` exists to do.
+- **A newcomer gets his profile at intake**, so there is no player in the league
+  without a prime age and an arc.
+
 ---
 
 ## 1. Philosophy

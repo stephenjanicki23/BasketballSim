@@ -25,6 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bballsim.league import League
+from bballsim.league import offseason
 from bballsim.league.calendar import PACIFIC, GameStatus, build_daily_schedule
 from bballsim.roster import load_teams
 from bballsim.save import (
@@ -122,8 +123,10 @@ def main() -> None:
 
     build(league, args.start or default_start())
     if args.play:
-        league.clock.advance(timedelta(days=365 * 2))
-        league.tick()
+        # One season, to its champion -- not "advance two years", which now
+        # rolls offseasons and would write a calendar three seasons on into
+        # the file this command exists to build.
+        offseason.play_out(league)
 
     write_season(args.path, league)
     print(f"wrote {args.path}")

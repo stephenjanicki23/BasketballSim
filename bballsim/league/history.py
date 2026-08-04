@@ -16,17 +16,21 @@ shares are noise, and a running figure converges on exactly the number the
 Advanced tab shows for the season, which is both the invariant the tests hold
 and the reason the last point on the chart can be trusted.
 
-One honest limit, stated here because the front end says it too: this league
-has played **one** season. So the x-axis of a progression chart is games, not
-years. The shape below carries a `season` label and the chart draws one line per
-season, so the day a second season exists the same code plots two -- but until
-a season actually gets played, there is no second line, and inventing one is
-not on the table.
+`season_series` is the year axis: one point per season a player has played, the
+finished ones out of `league.history` and the current one as it stands. It
+exists because `offseason.py` now rolls the league forward, so there are real
+years to plot. A past season's point is derived here and now from the totals the
+archive stored -- change an advanced formula and every season on a career chart
+moves with it, which is what keeps a career comparable to itself.
+
+A player with one season gets one point, and a chart cannot draw a line through
+one point. The front end says so and offers the other axis; neither end invents
+the years either side.
 """
 
 from __future__ import annotations
 
-from . import playoffs
+from . import offseason, playoffs
 from .advanced import ADVANCED_COLUMNS, advanced_table
 from .calendar import PACIFIC, GameStatus
 from .stats import SeasonStats
@@ -205,3 +209,92 @@ def team_advanced_series(league, team_id: str) -> dict[str, dict]:
         for player in team.players
         if player.id in everyone
     }
+
+
+# --------------------------------------------------------------------------
+# Advanced stats season by season -- the career view
+# --------------------------------------------------------------------------
+
+def season_series(league) -> dict[str, list[dict]]:
+    """Every player's advanced line for each season he has played.
+
+    One point per season: the completed ones out of `league.history`, then the
+    current one as it stands. This is the year axis, and it exists because the
+    league now plays more than one year -- before the offseason loop it would
+    have been a single point, and drawing a career across seasons that were
+    never simulated is the thing this codebase does not do.
+
+    A past season is *derived on read*, exactly like the live one. The archive
+    stores the season totals those games produced and nothing else; the advanced
+    table for 2027-28 is computed here, now, by the same `advanced_table` the
+    current season goes through. Change a formula and every season on the chart
+    changes with it, which is the property that keeps a career comparable to
+    itself.
+    """
+    cached = getattr(league, "_season_series_cache", None)
+    signature = (len(league.history), len(_played(league)), league.season)
+    if cached is not None and cached[0] == signature:
+        return cached[1]
+
+    keys = [key for key, _label in ADVANCED_COLUMNS]
+    series: dict[str, list[dict]] = {}
+
+    def fold(season: str, stats, complete: bool) -> None:
+        for row in advanced_table(stats):
+            point = {
+                "season": season,
+                "complete": complete,
+                "games": row["games"],
+                "minutes": row["minutes"],
+            }
+            for key in keys:
+                point[key] = round(row[key], 2)
+            series.setdefault(row["player_id"], []).append(point)
+
+    for past in league.history:
+        fold(past.season, past.stats, True)
+    # The season being played is complete once somebody has won it, archived or
+    # not -- the archive happens in the summer, months after the last game. A
+    # page that called a decided championship "in progress" until the offseason
+    # rolled would be wrong for exactly as long as the wait.
+    fold(league.season, league.stats, offseason.is_finished(league))
+
+    league._season_series_cache = (signature, series)
+    return series
+
+
+def team_season_series(league, team_id: str) -> dict[str, list[dict]]:
+    """`season_series`, narrowed to one club's current roster.
+
+    A player who has only ever played this season gets one point, and the chart
+    declines to draw a line through a single point rather than inventing the
+    years either side of it.
+    """
+    team = league.teams.get(team_id)
+    if team is None:
+        return {}
+    everyone = season_series(league)
+    return {
+        player.id: everyone[player.id]
+        for player in team.players
+        if everyone.get(player.id)
+    }
+
+
+def seasons(league) -> list[dict]:
+    """Every season the league has played, oldest first, with who won it.
+
+    The last row is the season being played, and it carries a champion as soon
+    as the Keystone Finals is decided rather than waiting for the summer to
+    archive it -- the roll of honour should name a winner the day he wins.
+    """
+    rows = [past.to_dict() | {"complete": True} for past in league.history]
+    current = offseason.archive(league) if offseason.is_finished(league) else None
+    rows.append({
+        "season": league.season,
+        "champion": current.champion if current else None,
+        "runnerUp": current.runner_up if current else None,
+        "conferenceChampions": current.conference_champions if current else {},
+        "complete": current is not None,
+    })
+    return rows

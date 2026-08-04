@@ -63,6 +63,20 @@ class Player:
     archetype: Archetype | None = None
     bio: Biography = field(default_factory=Biography)
 
+    # What a career has accumulated: seasons served, permanent injury damage,
+    # the peak he reached, and the CA he was at when the profile was built.
+    # A `progression.CareerProfile`, held untyped so `models` does not have to
+    # import `progression` (which imports this module).
+    #
+    # It has to be *stored* rather than rebuilt each offseason. Everything in it
+    # that is drawn from the player's id -- prime age, arc, realisation -- would
+    # rebuild identically, but `baseline_ca` would not: rebuilding it resets the
+    # baseline to whatever the player is worth today, and `effective_ceiling`
+    # then hands him a fresh share of the remaining gap every single year. A
+    # player of poor character is supposed to stall short of his ceiling, and
+    # with a resetting baseline nobody ever does.
+    career: object | None = None
+
     # Live, per-game state. Reset by the engine at tip-off.
     condition: float = 100.0   # 0-100 fatigue-adjusted freshness
     injured: bool = False
