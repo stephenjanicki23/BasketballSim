@@ -18,7 +18,7 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 350 tests
+python3 -m unittest discover -s tests    # 374 tests
 ```
 
 In the browser: six tabs — **Home** (the news wire), **Games** (today's slate
@@ -459,6 +459,51 @@ and derives per-game rates on read. Both tables are exposed by the API
 pick a stat tab to sort by it, or click any column header; click again to
 reverse. Percentages are true rates (makes over attempts), not averages of
 per-game percentages.
+
+### Advanced stats
+
+A third scope on the Stats page, alongside Players and Teams: PER, ORB%, DRB%,
+TRB%, AST%, STL%, BLK%, TOV%, USG%, ORtg, DRtg, OWS, DWS, WS, WS/48, BPM,
+OBPM, DBPM and VORP. All derived on read in `bballsim/league/advanced.py` —
+nothing new is stored, saved or simulated.
+
+They are **not equally solid**, and the module says which is which:
+
+- **Rate stats** are Basketball-Reference's definitions implemented exactly.
+  A rebound percentage is a share of the boards that were *available*, which
+  is why the season line now tracks opponent totals: the other side's misses
+  are what made them available.
+- **Ratings and win shares** are Dean Oliver's, as published.
+- **BPM and VORP** are a transparent member of that family rather than a claim
+  to reproduce Basketball-Reference's regression, whose fitted coefficients
+  this project has no way to verify — and inventing plausible ones is the sort
+  of thing the rest of this codebase refuses to do. Production per 100
+  possessions against league average, weighted by usage, then **adjusted so a
+  team's minute-weighted BPM equals its actual point differential per 100**.
+  That last step is what makes BPM mean anything, and it is done properly.
+
+Two anchors do the real work. Individual ORtg and DRtg are estimates built on
+a chain of assumptions; what a *team* scored per 100 possessions is not. Each
+squad is scaled so its minute-weighted ratings equal its real ones, which keeps
+every player's standing against his team-mates while making the column mean
+something league-wide — without it the league averaged an offensive rating of
+122, which no league does.
+
+`tests/test_advanced.py` checks the identities (WS = OWS + DWS, a squad's
+minute-weighted usage comes to 100, PER averages exactly 15) and then the
+ranges, because the failure mode for a long formula is not a crash — it is a
+number that looks like a statistic and is off by a factor of five. Three were:
+defensive win shares peaked at **23.7** against a real record near 5, win
+shares at **42** against 20, and VORP at **2.1** against about 10. The first
+two were the wrong minutes denominator; the third was that VORP and DWS
+genuinely use *different* ones — a starter is 16% of his team's floor time but
+63% of one position's.
+
+Over a full season the table now peaks at PER 33.8, WS 20.3, WS/48 .33,
+BPM 11.8 and VORP 10.5, against real bests of about 32, 20, .34, 13 and 10.
+The one column still short of life is DRtg, which spans 107–118 where a real
+league runs 95–120: it is anchored hard to team defence, so individual
+defenders separate less than they should.
 
 ## The newsroom
 

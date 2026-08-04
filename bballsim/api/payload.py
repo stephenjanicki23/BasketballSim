@@ -29,6 +29,7 @@ from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
 from ..league import playoffs
+from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
 from ..models import Lineup
 from ..ratings import (
@@ -427,6 +428,12 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
         "standings": league.standings_table(),
         "playoffs": playoffs.bracket(league),
         "conferences": list(CONFERENCES),
+        # Advanced stats are derived on read from the same season totals the
+        # basic table uses -- nothing extra is stored or simulated.
+        "advancedStats": advanced_table(league.stats, minimum_games=minimum_games),
+        "advancedColumns": [
+            {"key": key, "label": label} for key, label in ADVANCED_COLUMNS
+        ],
         "playerStats": [
             {k: v for k, v in row.items() if k != "totals"}
             for row in league.stats.player_table(minimum_games=minimum_games)

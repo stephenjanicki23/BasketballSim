@@ -1055,18 +1055,38 @@ const PERCENT_KEYS = new Set(["fg_pct", "tp_pct", "ft_pct", "win_pct"]);
 // reads wrong without a decimal ("8" beside "8.4").
 const WHOLE_KEYS = new Set(["games", "wins", "losses"]);
 
+// Win shares per 48 is the one advanced column that lives below 1 and needs
+// the extra places to say anything.
+const THREE_PLACE_KEYS = new Set(["ws48"]);
+
 function formatStat(key, value) {
   if (value === undefined || value === null) return "—";
+  if (typeof value === "string") return value;
+  if (THREE_PLACE_KEYS.has(key)) return value.toFixed(3).replace(/^0/, "");
   if (PERCENT_KEYS.has(key)) return value.toFixed(3).replace(/^0/, "");
   if (WHOLE_KEYS.has(key)) return String(Math.round(value));
   return value.toFixed(1);
 }
 
 function statsRows() {
-  return state.statsScope === "teams" ? state.data.teamStats : state.data.playerStats;
+  if (state.statsScope === "teams") return state.data.teamStats;
+  if (state.statsScope === "advanced") return state.data.advancedStats || [];
+  return state.data.playerStats;
 }
 
 function statsColumns() {
+  // The advanced table is columns-from-the-payload: `bballsim/league/advanced.py`
+  // owns which stats exist and what they are called, so adding one there puts
+  // it on this page without touching the front end.
+  if (state.statsScope === "advanced") {
+    return [
+      { key: "name", label: "Player", text: true },
+      { key: "position", label: "POS", text: true },
+      { key: "games", label: "GP" },
+      { key: "minutes", label: "MIN" },
+      ...(state.data.advancedColumns || []).map((c) => ({ key: c.key, label: c.label })),
+    ];
+  }
   const base = state.statsScope === "teams"
     ? [
         { key: "abbreviation", label: "Team", text: true },
@@ -1193,7 +1213,7 @@ function buildStatTabs() {
   $$("#stats-scope button").forEach((button) => {
     button.onclick = () => {
       state.statsScope = button.dataset.scope;
-      state.statsSort = "points";
+      state.statsSort = state.statsScope === "advanced" ? "per" : "points";
       state.statsDescending = true;
       renderStats();
     };

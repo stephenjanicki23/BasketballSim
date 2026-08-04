@@ -154,7 +154,21 @@ class TeamSeasonLine:
     turnovers: int = 0
     fouls: int = 0
 
-    def add(self, box: TeamBox, points_against: int, won: bool) -> None:
+    # What the opposition did against them. Half the advanced table cannot be
+    # computed without it: a rebound percentage is a share of the boards that
+    # were *available*, and the other side's misses are what made them
+    # available. Same for block rate (opponent two-point attempts) and steal
+    # rate (opponent possessions).
+    opp_possessions: int = 0
+    opp_fga: int = 0
+    opp_tpa: int = 0
+    opp_fta: int = 0
+    opp_offensive_rebounds: int = 0
+    opp_defensive_rebounds: int = 0
+    opp_turnovers: int = 0
+
+    def add(self, box: TeamBox, points_against: int, won: bool,
+            opponent: TeamBox | None = None) -> None:
         self.games += 1
         self.wins += 1 if won else 0
         self.losses += 0 if won else 1
@@ -170,6 +184,18 @@ class TeamSeasonLine:
             ("turnovers", "turnovers"), ("fouls", "fouls"),
         ):
             setattr(self, key, getattr(self, key) + box.total(source))
+        if opponent is not None:
+            self.opp_possessions += opponent.possessions
+            self.opp_fga += opponent.total("fga")
+            self.opp_tpa += opponent.total("tpa")
+            self.opp_fta += opponent.total("fta")
+            self.opp_offensive_rebounds += opponent.total("offensive_rebounds")
+            self.opp_defensive_rebounds += opponent.total("defensive_rebounds")
+            self.opp_turnovers += opponent.total("turnovers")
+
+    @property
+    def opp_rebounds(self) -> int:
+        return self.opp_offensive_rebounds + self.opp_defensive_rebounds
 
     @property
     def rebounds(self) -> int:
@@ -250,14 +276,16 @@ class SeasonStats:
         """
         roster = roster or {}
         sides = (
-            (result.home_box, result.home_team_id, result.home_score, result.away_score),
-            (result.away_box, result.away_team_id, result.away_score, result.home_score),
+            (result.home_box, result.home_team_id, result.home_score,
+             result.away_score, result.away_box),
+            (result.away_box, result.away_team_id, result.away_score,
+             result.home_score, result.home_box),
         )
-        for box, team_id, scored, conceded in sides:
+        for box, team_id, scored, conceded, opponent in sides:
             team_line = self.team(team_id)
             team_line.name = box.name
             team_line.abbreviation = team_line.abbreviation or box.team_id.upper()
-            team_line.add(box, conceded, won=scored > conceded)
+            team_line.add(box, conceded, won=scored > conceded, opponent=opponent)
 
             for line in box.players.values():
                 season = self.player(line.player_id)
