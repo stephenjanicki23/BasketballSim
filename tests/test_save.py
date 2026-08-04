@@ -65,7 +65,7 @@ from bballsim.save import (
 # Moved deliberately when every coach gained a `player_management` rating.
 # The 360 players were untouched: `tools/migrate_management.py` added one
 # number per coach and changed nothing else.
-COMMITTED_FINGERPRINT = "8bc0a1652e4b19cb"
+COMMITTED_FINGERPRINT = "e6b035674e45c9a6"
 
 
 def round_trip(teams):

@@ -210,6 +210,8 @@ def team_squad(team, league=None) -> dict:
     chemistry = evaluate_chemistry(team, Lineup(team.starters()))
     data = team_summary(team)
     data["lineupChemistry"] = chemistry.to_dict()
+    # Standing manager instructions: who this club is holding out.
+    data["rested"] = list(team.rested)
     data["players"] = [player_detail(p) for p in team.players]
     if league is not None:
         data["gameLog"] = history.game_log(league, team.id)

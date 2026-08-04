@@ -442,6 +442,9 @@ def dump_team(team: Team) -> dict:
             for pair, value in team.pair_chemistry.items()
         ),
         "players": [dump_player(p) for p in team.players],
+        # Standing rest instructions. Omitted when there are none so a league
+        # nobody has managed still fingerprints as it did.
+        **({"rested": list(team.rested)} if team.rested else {}),
     }
 
 
@@ -461,6 +464,7 @@ def load_team(data: dict) -> Team:
             frozenset((a, b)): value for a, b, value in data.get("pair_chemistry", [])
         },
         players=[load_player(p) for p in data.get("players", [])],
+        rested=list(data.get("rested") or []),
     )
 
 

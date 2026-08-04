@@ -1552,3 +1552,9 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
 }
 .health-injury-name { font-size: 13px; font-weight: 600; color: var(--away); }
 .health-injury-games { font: 500 11px/1 var(--mono); color: var(--muted); }
+
+#rest-toggle.is-resting {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}

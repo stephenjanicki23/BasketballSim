@@ -249,6 +249,26 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "changed": [g.to_dict() for g in changed],
             })
 
+        elif len(parts) == 3 and parts[0] == "teams" and parts[2] == "rest":
+            # The manager's lever. An instruction, not a team sheet: it holds
+            # until it is taken back, and it outranks the head coach's own
+            # judgement -- including in the postseason, where the coach rests
+            # nobody.
+            team = league.teams.get(parts[1])
+            if team is None:
+                self._send_json({"error": "team not found"}, 404)
+                return
+            player_id = str(body.get("player_id", ""))
+            if team.player(player_id) is None:
+                self._send_json({"error": "player not on this team"}, 404)
+                return
+            resting = bool(body.get("resting"))
+            if resting and player_id not in team.rested:
+                team.rested.append(player_id)
+            elif not resting and player_id in team.rested:
+                team.rested.remove(player_id)
+            self._send_json({"team_id": team.id, "rested": list(team.rested)})
+
         elif parts == ["clock", "speed"]:
             league.tracker_speed = max(0.25, float(body.get("speed", DEFAULT_TRACKER_SPEED)))
             self._send_json({"tracker_speed": league.tracker_speed})

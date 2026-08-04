@@ -2070,7 +2070,7 @@ function renderPlayer(team) {
   body.appendChild(row);
   table.appendChild(body);
 
-  renderHealth(player);
+  renderHealth(player, team);
   renderPlayerGames(player, team);
   renderPlayerChart(player, team);
 }
@@ -2113,7 +2113,7 @@ function fatigueTone(value) {
   return "";
 }
 
-function renderHealth(player) {
+function renderHealth(player, team) {
   const card = $("#health-card");
   const body = $("#health-body");
   const status = $("#health-status");
@@ -2141,7 +2141,34 @@ function renderHealth(player) {
       key === "wear" ? "" : fatigueTone(value)));
   }
 
+  // The manager's lever. Only the live app has one: a published page has no
+  // server to tell, and a button that silently did nothing is worse than none.
+  const toggle = $("#rest-toggle");
+  const resting = (team.rested || []).includes(player.id);
+  if (toggle) {
+    toggle.hidden = !state.data.live || Boolean(health.injury);
+    toggle.textContent = resting ? "Return to the squad" : "Rest this player";
+    toggle.classList.toggle("is-resting", resting);
+    toggle.onclick = async () => {
+      toggle.disabled = true;
+      try {
+        await state.source.command(
+          `teams/${encodeURIComponent(team.id)}/rest`,
+          { player_id: player.id, resting: !resting });
+        team.rested = resting
+          ? (team.rested || []).filter((id) => id !== player.id)
+          : [...(team.rested || []), player.id];
+      } catch (error) {
+        console.warn("rest instruction failed", error);
+      } finally {
+        toggle.disabled = false;
+        renderTeamDetail();
+      }
+    };
+  }
+
   const bits = [`${health.fatigueLabel} · overall health ${health.health}`];
+  if (resting) bits.unshift("Held out on the manager's instruction");
   if (health.daysRested) {
     bits.push(`${health.daysRested} day${health.daysRested === 1 ? "" : "s"} since he last played`);
   }
