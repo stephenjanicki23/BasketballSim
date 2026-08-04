@@ -57,10 +57,17 @@ places would have charged him for the same tiredness three times.
 ```
 cost  = minutes × 0.5 × intensity × conditioning × age
       × (1 + knock/100 × 0.45)
-      + 7.0   if back-to-back        (3.0 if three-in-four)
-      + 3.5   per overtime
-      + 1.8   if away
+      + 2.0   if back-to-back        (0.9 if three-in-four)
+      + 2.0   per overtime
+      + 0.7   if away
 ```
+
+The flat charges are deliberately small, and the reason is this calendar: with
+three slates a day **almost every game is a back-to-back**, so a large flat
+charge is not a penalty for a hard schedule — it lands on everyone equally and
+squeezes out the gap between a thirty-eight-minute star and a twelfth man,
+which is the one gap the system exists to show. At 7.0 the league pinned at
+Critical Fatigue to a man.
 
 - **Intensity** comes from what kind of game it was: a playoff night is ×1.22, a
   blowout ×0.85 (the bench plays), a game inside five points ×1.08.
@@ -73,21 +80,29 @@ A 36-minute night at ordinary intensity costs an average 27-year-old about
 
 ### Recovery
 
+Measured in **hours between tip-offs**, not calendar days, and that is forced by
+the calendar this league plays: 82 games in 28 days, so a club plays 2.93 times
+a *day*. A model handing out a night's sleep per date would be pricing a
+schedule nobody here plays. What a player gets between two games is the real gap
+— about five hours between slates, thirteen overnight.
+
 ```
-shed = (rate + fatigue × 0.16) × days
-rate = 15.5 × body × staff ÷ age
+fatigue = fatigue × exp(−1.20 × days) − 2.4 × days
+days    = hours ÷ 24
 ```
 
-Recovery is partly **proportional** to what is in the tank, which is what keeps
-fatigue off both the floor and the ceiling: a badly tired player sheds more in
-absolute terms than a fresh one, and nobody converges on 100. `body` is stamina
-and professionalism; `staff` is the club's development rating, standing in for a
-performance department.
+The decay term does nearly all the work, and exponential decay is the only shape
+that settles against a repeating schedule: load pushes fatigue up, decay pulls
+harder the higher it gets, and a player equilibrates at the level his minutes
+deserve instead of drifting to one end of the scale. It also means a four-month
+summer cannot drive fatigue thousands of points negative and leave the clamp
+doing the modelling. `rate` scales with stamina, professionalism, the club's
+development rating and age.
 
-A full rest day is worth about **15.5 points** to an average professional —
-deliberately a little *less* than a 36-minute game costs. That difference is the
-whole game: every-other-day basketball accumulates slowly, back-to-backs
-accumulate fast, and a light night or a day off clears it.
+The constant was **solved, not guessed**: equilibrium is where a day's load
+equals a day's decay, so for 2.93 games a day it fixes what each rotation slot
+settles at. 1.20 is the value that lands a 34-minute starter and a twelve-minute
+reserve where the brief's bands say they belong.
 
 ### Bands
 
@@ -159,7 +174,8 @@ Two tiers, and the split is the brief's central demand.
 
 ### Minor knocks — common, cheap
 
-~1.9% per player-game at baseline. Severity 18–70. A knock **does not** rule
+~0.65% per player-game at baseline, and fatigue and wear multiply it, so a
+season produces several times that. Severity 18–70. A knock **does not** rule
 anyone out: it drags the same attributes fatigue does (at 55% of the equivalent
 rate), makes every subsequent game more tiring, and heals at 12 points a day.
 The manager decides whether to play him through it.
@@ -222,7 +238,55 @@ saved results back into the standings, and re-applying a night's fatigue and
 re-rolling its injuries there would age a squad by a whole season on every boot.
 Chemistry is excluded from `_record` for exactly the same reason.
 
-## 8. What this does not do
+## 8. What a season actually produces
+
+Measured on the last night of a full 1,230-game regular season — during the
+season, not after it, because fatigue read after two months of playoff gaps is
+a reading of a rested league.
+
+| Workload | Fatigue at tip-off | Band |
+|---|---|---|
+| 28+ mpg | 39.5 | Slightly Tired |
+| 22–28 mpg | 36.5 | Slightly Tired |
+| 15–22 mpg | 26.8 | Fresh |
+| under 15 mpg | 17.2 | Fresh |
+
+Those are **trough** figures: fatigue oscillates, spiking after a game and
+decaying before the next. Peak after a heavy night runs near 55, and inside a
+game `condition` keeps falling — so a starter tips off around −1 to his
+athletic attributes and is −2 to −3 by the fourth quarter. That trajectory is
+the point. It is also, almost exactly, the brief's own worked example.
+
+Wear after one season: mean 9, max 17 — single digits for a career quantity.
+Injuries: 27 of 360 players missed a game, 12 out at any one time, 520
+player-games lost across thirty clubs. Rare, as asked.
+
+**What it cost the box score.** The league's heaviest workload went from 39.2
+minutes a night to 36.9 and the leading scorer from 28.8 points to 25.8; team
+scoring is unchanged at 108.8 and the rebounding calibration still puts 15
+players over ten a game. A tenth off the best player in the league is the
+system working: fatigue is supposed to cost production.
+
+### Two bugs worth remembering
+
+Both behaved correctly in every part and were only visible in a full-season
+measurement against a known baseline.
+
+**Rest paid in a lump.** Recovery ran once per `tick`, for the whole span the
+clock had jumped — so playing a season in one tick handed out the season's rest
+first and played the games into it afterwards. An 82-game year finished at a
+mean fatigue of 0.8 with nobody above Fresh.
+
+**The model reading its own output.** Endurance decides how fast a player
+tires, and `stamina` is an attribute fatigue takes points off. Once composites
+read the adjusted sheet, all three inputs to the fatigue model — the possession
+clock, bench recovery, season accrual — began feeding on its output: tired
+lowers stamina, lower stamina drains faster, which makes him tireder. Three
+amplifiers compounding, which is why forgiving the substitution threshold
+barely dented it. `composites.endurance_base` exists for exactly this, and the
+rule is written where it is used.
+
+## 9. What this does not do
 
 - **No training load.** Practices, minutes restrictions and load management as
   an explicit manager instruction are not modelled; the only lever is who plays
@@ -235,3 +299,10 @@ Chemistry is excluded from `_record` for exactly the same reason.
   because that is what keeps the decision with the manager. Real teams do sit
   players with minor issues; this model makes you play them or bench them
   yourself.
+- **Nobody reaches Critical Fatigue**, and that is the model self-regulating
+  rather than a dead band. A tired player starts the night at a lower condition,
+  so the rotation pulls him sooner and his minutes redistribute. Getting to
+  Critical would take overriding the rotation, and there is no manager control
+  to do that — which is the largest gap between this and what the brief calls
+  "strategic rest decisions". The system responds to minutes; it does not yet
+  let you choose them.
