@@ -546,6 +546,30 @@ class TestTheDaySchedule(unittest.TestCase):
                 checked += 1
         self.assertGreater(checked, 0, "nothing was played -- the test proved nothing")
 
+    def test_a_leader_names_a_real_player(self):
+        """A preview prints names, and a name on this site links to the man.
+        The front end has only the string without an id to go with it."""
+        self.play(3)
+        checked = 0
+        for team_id, team in self.league.teams.items():
+            preview = views.team_leaders(self.league, team_id)
+            squad = {p.id: p for p in team.players}
+            for leader in preview["leaders"]:
+                self.assertIn("playerId", leader)
+                self.assertIn(leader["playerId"], squad, team_id)
+                checked += 1
+        self.assertGreater(checked, 0)
+
+    def test_an_unplayed_team_s_fallback_names_a_real_player_too(self):
+        """The rated fallback goes through a different branch, and it was the
+        one that would have shipped a name with nothing behind it."""
+        league = a_league()
+        for team_id, team in league.teams.items():
+            preview = views.team_leaders(league, team_id)
+            self.assertEqual(preview["basis"], "rated")
+            for leader in preview["leaders"]:
+                self.assertIn(leader["playerId"], {p.id for p in team.players})
+
     def test_an_unplayed_team_falls_back_to_its_best_rated_player(self):
         """Three blank stat lines tell a manager nothing, and printing zeroes
         would be a lie. The fallback says what it is."""

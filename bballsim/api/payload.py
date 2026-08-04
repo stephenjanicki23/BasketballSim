@@ -325,6 +325,9 @@ def team_leaders(league, team_id: str) -> dict:
             "leaders": [] if best is None else [{
                 "stat": "TOP", "label": "Top rated",
                 "name": best.short_name, "value": best.stars, "unit": "stars",
+                # So the name can link to the man. A preview names players and
+                # the front end has only the string without this.
+                "playerId": best.id,
             }],
         }
 
@@ -337,6 +340,7 @@ def team_leaders(league, team_id: str) -> dict:
             "name": best.name,
             "value": round(best.per_game(key), 1),
             "unit": "pg",
+            "playerId": best.player_id,
         })
     return {**record, "basis": "played", "leaders": leaders}
 

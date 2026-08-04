@@ -521,6 +521,100 @@ function crestSVG(logo, title) {
     + `</svg>`;
 }
 
+/* ------------------------------------------------------------------ *
+ * Going somewhere
+ *
+ * A name on this site should take you to the thing it names. There is no
+ * routing and no URL to point at, so these are `<button>`s rather than anchors:
+ * an `<a href="#">` is a lie to a screen reader and a broken middle-click to
+ * everybody else.
+ *
+ * Every one of them stops propagation. Several of the rows these sit inside own
+ * a click of their own -- a fixture opens its tracker, a power-rankings row
+ * opens its detail panel -- and a link that also fired the row's handler would
+ * do two things for one press.
+ * ------------------------------------------------------------------ */
+
+/* Which club a player belongs to.
+ *
+ * Callers pass `teamId` whenever the surrounding context already knows it -- a
+ * box score knows which side it is rendering -- because that is the only answer
+ * that always exists. The lookups below cover the places that do not: the
+ * season lines carry a team for everyone who has played, and a loaded squad
+ * carries one for everyone on it, including the twelfth man a `min_games`
+ * filter left out of the stats. */
+function teamOfPlayer(playerId) {
+  const line = statsByPlayer().get(playerId);
+  if (line && line.team_id) return line.team_id;
+  for (const team of state.teams.values()) {
+    if ((team.players || []).some((p) => p.id === playerId)) return team.id;
+  }
+  return null;
+}
+
+function openTeam(teamId) {
+  if (!teamId || !state.teams.has(teamId)) return;
+  state.teamId = teamId;
+  state.playerId = null;
+  jumpToSquad();
+}
+
+function openPlayer(playerId, teamId) {
+  const target = teamId || teamOfPlayer(playerId);
+  if (!target || !state.teams.has(target)) return;
+  state.teamId = target;
+  state.playerId = playerId;
+  jumpToSquad();
+}
+
+/* The squad page, showing whatever `state` was just pointed at.
+ *
+ * The position filter is cleared on the way in. It is a filter on the rail, and
+ * `renderTeamDetail` falls back to the first player still showing -- so
+ * arriving at a centre with the filter left on "Point Guard" would silently
+ * open somebody else. */
+function jumpToSquad() {
+  state.posFilter = "";
+  const filter = $("#pos-filter");
+  if (filter) filter.value = "";
+  const picker = $("#team-picker");
+  if (picker) picker.value = state.teamId;
+  setView("teams");
+  renderTeamDetail();
+  window.scrollTo({ top: 0, behavior: REDUCED_MOTION ? "auto" : "smooth" });
+}
+
+function goLink(className, onClick, label) {
+  const node = el("button", "golink" + (className ? " " + className : ""));
+  node.type = "button";
+  if (label) node.title = label;
+  node.addEventListener("click", (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    onClick();
+  });
+  return node;
+}
+
+/* A player's name, as a link to his page. `teamId` is optional and worth
+ * passing when the caller knows it. `nameClass` is the class the name itself
+ * wears -- null where the surrounding markup already styles it. */
+function playerLink(name, playerId, teamId, className, nameClass = "player-name") {
+  const node = goLink(className, () => openPlayer(playerId, teamId), name);
+  node.appendChild(el("span", nameClass, name));
+  return node;
+}
+
+/* A club, as a link to its squad. `content` fills the button -- a crest, a
+ * name, or both -- so this works in a table cell and in a heading. */
+function teamLink(teamId, content, className) {
+  const team = state.teams.get(teamId);
+  const node = goLink(className, () => openTeam(teamId),
+    team ? `${team.city} ${team.name}` : teamId);
+  content(node);
+  return node;
+}
+
 /* A club's crest, or its abbreviation on a disc if it has none. */
 function teamMark(team) {
   const mark = el("span", "team-mark");
@@ -562,8 +656,22 @@ function schedulePreview(preview, awayTeam, homeTeam) {
     for (const [leader, team] of [[away[i], awayTeam], [home[i], homeTeam]]) {
       const cell = el("span", "sched-preview-cell");
       if (leader) {
-        cell.appendChild(el("span", "sched-preview-abbr", team.abbr));
-        cell.appendChild(el("span", "sched-preview-name", leader.name));
+        // The layout spans stay and the links go *inside* them. These are flex
+        // items sized by rules that already exist -- `.sched-preview-name`
+        // ellipsises, `.sched-preview-abbr` refuses to shrink -- and swapping
+        // the span for a button moved that sizing onto an element with
+        // `overflow: hidden`, whose automatic minimum size is zero. The name
+        // collapsed to nothing and was unclickable.
+        const abbr = el("span", "sched-preview-abbr");
+        abbr.appendChild(teamLink(team.id, (node) => { node.textContent = team.abbr; }));
+        cell.appendChild(abbr);
+
+        const name = el("span", "sched-preview-name");
+        name.appendChild(leader.playerId
+          ? playerLink(leader.name, leader.playerId, team.id, null, null)
+          : el("span", null, leader.name));
+        cell.appendChild(name);
+
         cell.appendChild(el("span", "sched-preview-value",
           leader.unit === "stars" ? `${leader.value}★` : leader.value.toFixed(1)));
       }
@@ -1021,7 +1129,9 @@ function renderBox() {
     const block = el("section", "box-team");
     const heading = el("h3", "box-heading");
     heading.appendChild(el("span", `box-dot side-${key}`));
-    heading.appendChild(el("span", "box-name", team.city + " " + team.name));
+    heading.appendChild(teamLink(teamId, (node) => {
+      node.appendChild(el("span", "box-name", team.city + " " + team.name));
+    }));
     heading.appendChild(el("span", "box-points", String(sideTotals(side).points)));
     block.appendChild(heading);
 
@@ -1041,7 +1151,7 @@ function renderBox() {
       if (side.onCourt.has(l.playerId)) row.classList.add("is-on-court");
       const nameCell = el("td", "col-name");
       nameCell.appendChild(el("span", "player-pos", who.pos));
-      nameCell.appendChild(el("span", "player-name", who.name));
+      nameCell.appendChild(playerLink(who.name, l.playerId, teamId));
       row.appendChild(nameCell);
       for (const [key2] of BOX_COLUMNS) row.appendChild(el("td", null, String(cellValue(l, key2))));
       tbody.appendChild(row);
@@ -1202,15 +1312,18 @@ function renderStats() {
     tr.appendChild(el("td", "col-rank", String(index + 1)));
     for (const col of columns) {
       if (col.key === "name") {
+        // Only the player and advanced tables have this column; the team table
+        // identifies a club by its abbreviation, handled just below.
         const cell = el("td", "col-name");
-        cell.appendChild(el("span", "player-name", row.name));
+        cell.appendChild(playerLink(row.name, row.player_id, row.team_id));
         tr.appendChild(cell);
       } else if (col.key === "team_id" || col.key === "abbreviation") {
         const label = col.key === "team_id"
           ? (state.teams.get(row.team_id) || {}).abbr || row.team_id
           : row.abbreviation;
         const cell = el("td", "col-name");
-        cell.appendChild(el("span", "player-pos", label));
+        cell.appendChild(teamLink(row.team_id, (node) =>
+          node.appendChild(el("span", "player-pos", label))));
         tr.appendChild(cell);
       } else if (col.text) {
         const cell = el("td", "col-name");
@@ -1307,13 +1420,24 @@ function storyCard(story, lead) {
 
   // Crests for the clubs involved, so a fixture is recognisable before reading.
   const clubs = (story.teamIds || []).map((id) => state.teams.get(id)).filter(Boolean);
-  if (clubs.length) {
+  // Whoever the story is about, named and linked. The article names them in
+  // prose too, but prose is not a link -- and matching names back out of a
+  // paragraph to make it one would mangle an article the first time somebody
+  // was called Brooks and played for the Brooks.
+  const cast = (story.playerIds || [])
+    .map((id) => [id, statsByPlayer().get(id)])
+    .filter(([, line]) => line);
+
+  if (clubs.length || cast.length) {
     const marks = el("div", "story-clubs");
     clubs.forEach((team) => {
-      const club = el("span", "story-club");
-      club.appendChild(teamMark(team));
-      club.appendChild(el("span", "story-club-abbr", team.abbr));
-      marks.appendChild(club);
+      marks.appendChild(teamLink(team.id, (node) => {
+        node.appendChild(teamMark(team));
+        node.appendChild(el("span", "story-club-abbr", team.abbr));
+      }, "story-club"));
+    });
+    cast.forEach(([id, line]) => {
+      marks.appendChild(playerLink(line.name, id, line.team_id, "story-club is-player"));
     });
     card.appendChild(marks);
   }
@@ -1385,8 +1509,14 @@ function seriesRow(series) {
     const won = series.winner === id;
     const line = el("div", "series-side" + (won ? " is-winner" : ""));
     line.appendChild(el("span", "series-seed", String(series[side + "Rank"] || "")));
-    if (team) line.appendChild(teamMark(team));
-    line.appendChild(el("span", "series-abbr", team ? team.abbr : id));
+    if (team) {
+      line.appendChild(teamLink(id, (node) => {
+        node.appendChild(teamMark(team));
+        node.appendChild(el("span", "series-abbr", team.abbr));
+      }, "series-club"));
+    } else {
+      line.appendChild(el("span", "series-abbr", id));
+    }
     line.appendChild(el("span", "series-wins", String(wins)));
     box.appendChild(line);
   }
@@ -1423,8 +1553,10 @@ function renderHonours() {
       const team = state.teams.get(id);
       const cell = el("td");
       if (team) {
-        cell.appendChild(teamMark(team));
-        cell.appendChild(el("span", null, ` ${team.city} ${team.name}`));
+        cell.appendChild(teamLink(id, (node) => {
+          node.appendChild(teamMark(team));
+          node.appendChild(el("span", null, ` ${team.city} ${team.name}`));
+        }));
       } else {
         cell.textContent = "—";
       }
@@ -1586,7 +1718,12 @@ function renderPowerDetail(rows) {
   if (!row) { card.hidden = true; return; }
   card.hidden = false;
   const team = state.teams.get(row.teamId);
-  $("#power-detail-name").textContent = team ? `${team.city} ${team.name}` : row.teamId;
+  // The name is the link here rather than the table row, because the row
+  // already has a job -- clicking it is what opened this panel.
+  const title = $("#power-detail-name");
+  title.textContent = "";
+  title.appendChild(teamLink(row.teamId, (node) =>
+    node.appendChild(el("span", null, team ? `${team.city} ${team.name}` : row.teamId))));
   $("#power-detail-tier").textContent = `${row.tier} · rating ${row.rating.toFixed(1)}`;
 
   const holder = $("#power-detail");
@@ -1686,7 +1823,8 @@ function renderStandings() {
       tr.appendChild(el("td", "col-rank", String(rank)));
       const nameCell = el("td", "col-name");
       nameCell.appendChild(el("span", "player-pos", row.abbreviation));
-      nameCell.appendChild(el("span", "player-name", row.team_name));
+      nameCell.appendChild(teamLink(row.team_id, (node) =>
+        node.appendChild(el("span", "player-name", row.team_name))));
       tr.appendChild(nameCell);
       tr.appendChild(el("td", null, String(row.wins)));
       tr.appendChild(el("td", null, String(row.losses)));
