@@ -313,12 +313,47 @@ def foul_drawing(player: Player) -> float:
     })
 
 
+ENDURANCE_WEIGHTS = {
+    "stamina": 1.0,
+    "durability": 0.4,
+    "work_rate": 0.3,
+}
+
+
+def blend_base(player: Player, weights: dict[str, float]) -> float:
+    """`blend`, reading the stored ratings and ignoring fatigue.
+
+    For the one case where fatigue must not be applied: the inputs to the
+    fatigue model itself.
+    """
+    total = sum(weights.values())
+    return sum(getattr(player.ratings, key) * weight
+               for key, weight in weights.items()) / total
+
+
+def endurance_base(player: Player) -> float:
+    """Endurance as the rating sheet has it, before tiredness is applied.
+
+    **The one composite that must not read the fatigue-adjusted sheet.**
+    Endurance is the input that decides how fast a player tires, and `stamina`
+    is one of the attributes fatigue takes points off -- so reading the adjusted
+    value here feeds the model its own output: tired lowers stamina, lower
+    stamina drains faster, which makes him tireder still.
+
+    That spiral is not theoretical. With it in place the league's heaviest
+    workload fell from 39.2 minutes a night to 33.3 and the leading scorer from
+    28.8 points to 25.7, and forgiving the substitution threshold barely dented
+    it, because the drain itself was accelerating.
+
+    Use this anywhere endurance governs fatigue -- the possession clock, bench
+    recovery, season accrual. Use `endurance` for anything that asks how well he
+    plays.
+    """
+    return blend_base(player, ENDURANCE_WEIGHTS)
+
+
 def endurance(player: Player) -> float:
-    return blend(player, {
-        "stamina": 1.0,
-        "durability": 0.4,
-        "work_rate": 0.3,
-    })
+    return blend(player, ENDURANCE_WEIGHTS)
 
 
 def transition_threat(player: Player) -> float:

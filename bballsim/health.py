@@ -352,7 +352,9 @@ def conditioning(player) -> float:
     from . import composites as C
     from .ratings import LEAGUE_AVERAGE
 
-    fitness = (C.endurance(player) * 0.7 + _rating(player, "work_rate") * 0.3)
+    # Base endurance: conditioning decides how tiring a game is, so reading
+    # the fatigue-adjusted value would price tonight from tonight's result.
+    fitness = (C.endurance_base(player) * 0.7 + _rating(player, "work_rate") * 0.3)
     edge = (fitness - LEAGUE_AVERAGE) / LEAGUE_AVERAGE
     return max(0.55, 1.0 - edge * CONDITIONING_SWING)
 

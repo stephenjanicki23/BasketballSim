@@ -276,7 +276,10 @@ class PossessionEngine:
         ids = team_state.on_court.ids()
         for player in team_state.on_court:
             team_state.box.line(player.id, player.name).seconds += seconds
-            stamina = C.endurance(player)
+            # Base endurance, not the fatigue-adjusted one: this is the
+            # input to the fatigue model, and reading its own output here
+            # makes tiredness accelerate itself.
+            stamina = C.endurance_base(player)
             drain = seconds * (1.0 - normalize(stamina) * 0.5) / FATIGUE_SECONDS_PER_POINT
             player.condition = max(0.0, player.condition - drain)
         for i in range(len(ids)):

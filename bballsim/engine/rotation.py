@@ -164,5 +164,7 @@ class RotationManager:
             if player.id in on_court_ids:
                 continue
             # Well-conditioned players get their wind back faster.
-            rate = BENCH_RECOVERY_PER_SECOND * (1.0 + normalize(C.endurance(player)) * 0.4)
+            # Base endurance again -- a tired man must not also recover
+            # more slowly because he is tired.
+            rate = BENCH_RECOVERY_PER_SECOND * (1.0 + normalize(C.endurance_base(player)) * 0.4)
             player.condition = min(100.0, player.condition + seconds * rate)
