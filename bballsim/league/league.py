@@ -179,10 +179,23 @@ class League:
     def _start(self, game: ScheduledGame) -> None:
         home = self.teams[game.home_team_id]
         away = self.teams[game.away_team_id]
-        simulator = GameSimulator(
-            game_id=game.id, home=home, away=away, rules=self.rules, seed=game.id
-        )
-        game.result = simulator.simulate()
+
+        # Team sheets, before anybody takes the floor. Who sits is the coach's
+        # judgement -- or the manager's instruction, which outranks it -- and
+        # nobody is rested out of a postseason game.
+        postseason = playoffs.is_playoff(game)
+        for team in (home, away):
+            health.apply_rest(team, health.plan_rest(team, playoff=postseason))
+        try:
+            simulator = GameSimulator(
+                game_id=game.id, home=home, away=away, rules=self.rules, seed=game.id
+            )
+            game.result = simulator.simulate()
+        finally:
+            # A team sheet lasts one night. Leaving it set would carry tonight's
+            # rest into every future selection, including the squad page.
+            for team in (home, away):
+                health.clear_rest(team)
         game.status = GameStatus.LIVE
         # Anchor the tracker clock to tip-off, not to "now" -- a game that
         # started an hour ago should already be over when you open the app.

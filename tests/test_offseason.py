@@ -301,12 +301,31 @@ class TestTheArchiveStoresTotalsAndNothingElse(unittest.TestCase):
     def test_a_past_season_is_derived_on_read(self):
         """Nothing derived is written. The advanced table for a finished season
         is computed now, by the same code the live season goes through -- so a
-        formula change moves every season on a career chart together."""
+        formula change moves every season on a career chart together.
+
+        Compared to a tolerance rather than exactly, and the reason is the save
+        rather than the model: `seconds` are stored to four decimal places, so a
+        minutes figure can come back a ten-billionth off and carry a percentage
+        rounded to three places across a boundary -- 10.0 against 9.999. The
+        tolerance is tight enough that a table which had actually been *stored*
+        and gone stale could not hide inside it, and the row and column sets are
+        still compared exactly.
+        """
         blob = json.loads(json.dumps(save._round(
             save.dump_history(self.league.history))))
         back = save.load_history(blob)
-        self.assertEqual(advanced_table(back[0].stats),
-                         advanced_table(self.past.stats))
+        reloaded = advanced_table(back[0].stats)
+        original = advanced_table(self.past.stats)
+        self.assertEqual([r["player_id"] for r in reloaded],
+                         [r["player_id"] for r in original])
+        for left, right in zip(reloaded, original):
+            self.assertEqual(set(left), set(right))
+            for key, value in left.items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    self.assertAlmostEqual(value, right[key], delta=0.01,
+                                           msg=f"{left['player_id']} {key}")
+                else:
+                    self.assertEqual(value, right[key], f"{left['player_id']} {key}")
 
     def test_the_file_carries_no_rates(self):
         blob = save.dump_history(self.league.history)

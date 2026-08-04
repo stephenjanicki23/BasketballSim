@@ -69,7 +69,7 @@ def clamp_coach(value: float) -> float:
 
 @dataclass
 class CoachRatings:
-    """The seven numbers. All 0-100, 50 being an ordinary head coach."""
+    """The eight numbers. All 0-100, 50 being an ordinary head coach."""
 
     offense: float = COACH_AVERAGE
     defense: float = COACH_AVERAGE
@@ -77,6 +77,12 @@ class CoachRatings:
     development: float = COACH_AVERAGE
     leadership: float = COACH_AVERAGE
     talent_evaluation: float = COACH_AVERAGE
+    # How well he looks after bodies: how early he pulls a man who has lost a
+    # step, and how willing he is to sit one for a night. High is not
+    # automatically better -- a cautious coach protects a squad in March and
+    # gives away games in November, which is the trade the rating exists to
+    # make.
+    player_management: float = COACH_AVERAGE
     reputation: float = COACH_AVERAGE
 
     def __post_init__(self) -> None:
@@ -102,6 +108,7 @@ COACH_RATING_LABELS: tuple[tuple[str, str], ...] = (
     ("offense", "Offense"),
     ("defense", "Defense"),
     ("development", "Player Development"),
+    ("player_management", "Player Management"),
     ("tactics", "Tactics"),
     ("leadership", "Leadership"),
     ("talent_evaluation", "Scouting Eye"),
@@ -239,11 +246,15 @@ COACH_SURNAMES: tuple[str, ...] = (
 # a leaning and spends above his baseline there. This is why hiring is a real
 # choice rather than a search for the biggest number.
 COACH_PROFILES: dict[str, dict[str, float]] = {
-    "offensive": {"offense": 12.0, "tactics": 4.0, "defense": -8.0, "development": -2.0},
-    "defensive": {"defense": 13.0, "tactics": 5.0, "offense": -9.0, "development": -1.0},
+    "offensive": {"offense": 12.0, "tactics": 4.0, "defense": -8.0, "development": -2.0,
+                  "player_management": -3.0},
+    "defensive": {"defense": 13.0, "tactics": 5.0, "offense": -9.0, "development": -1.0,
+                  "player_management": 1.0},
     "tactician": {"tactics": 13.0, "offense": 4.0, "defense": 4.0, "leadership": -6.0},
-    "developer": {"development": 14.0, "talent_evaluation": 7.0, "tactics": -5.0, "offense": -3.0},
-    "motivator": {"leadership": 14.0, "development": 5.0, "tactics": -7.0, "talent_evaluation": -3.0},
+    "developer": {"development": 14.0, "talent_evaluation": 7.0, "tactics": -5.0, "offense": -3.0,
+                  "player_management": 8.0},
+    "motivator": {"leadership": 14.0, "development": 5.0, "tactics": -7.0, "talent_evaluation": -3.0,
+                  "player_management": -4.0},
     "evaluator": {"talent_evaluation": 15.0, "development": 6.0, "offense": -4.0, "defense": -3.0},
     "balanced": {},
 }

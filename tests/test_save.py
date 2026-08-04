@@ -62,7 +62,10 @@ from bballsim.save import (
 # The league on disk. If this changes, every player and coach in the game has
 # been replaced -- which is exactly what the save file exists to prevent. Only
 # update it deliberately, alongside a regenerated data/league.json.
-COMMITTED_FINGERPRINT = "3b29f0c12cb24b64"
+# Moved deliberately when every coach gained a `player_management` rating.
+# The 360 players were untouched: `tools/migrate_management.py` added one
+# number per coach and changed nothing else.
+COMMITTED_FINGERPRINT = "8bc0a1652e4b19cb"
 
 
 def round_trip(teams):

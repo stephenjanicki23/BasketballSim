@@ -764,3 +764,136 @@ def reset_season(teams) -> None:
             health.games_missed = 0
             health.wear = max(0.0, health.wear * (1.0 - WEAR_OFFSEASON_RECOVERY))
             sync(player)
+
+
+# --------------------------------------------------------------------------
+# What a manager is actually looking at
+# --------------------------------------------------------------------------
+
+def ability_lost(player) -> float:
+    """Current ability points this player has lost to fatigue and knocks.
+
+    The right question for a rest decision, and a better one than "how tired is
+    he". Fatigue is an input; *this* is the output -- how much worse a player he
+    is tonight than the one on the team sheet. A guard whose game is speed and a
+    centre whose game is strength do not lose the same amount to the same
+    tiredness, and CA is already the project's answer to "what is this player
+    worth", position weighting and all.
+
+    Computed by pricing the fatigue-adjusted attribute set through the same
+    `current_ability` the roster uses, so it is denominated in the units every
+    other judgement in this project is made in.
+    """
+    from .ability import current_ability
+    from .ratings import Ratings
+
+    if player.condition >= 99.9 and not (player.health and player.health.knock):
+        return 0.0
+    adjusted = Ratings(**{
+        name: effective(player, name) for name in Ratings.attribute_names()
+    })
+    return max(0.0, player.current_ability
+               - current_ability(adjusted, player.position.value))
+
+
+# --------------------------------------------------------------------------
+# The rest decision
+#
+# The rule, in one sentence: **winning tonight always outranks resting anybody**
+# -- but a coach will not send out a man who has stopped being himself.
+#
+# So the trigger is not fatigue. It is `ability_lost`: how many current-ability
+# points a player has actually shed. A guard whose game is speed loses more of
+# himself to the same tiredness than a centre whose game is strength, and CA is
+# already this project's answer to "what is this player worth". A coach sits a
+# man when the version available tonight is a materially worse player, and not
+# because a meter says 60.
+# --------------------------------------------------------------------------
+
+# Current-ability points an *average* coach will let a player lose before
+# sitting him. Nine is a lot: it is most of a tier, the difference between a
+# starter and the man behind him.
+REST_AT_AVERAGE = 9.0
+
+# How far the rating moves it. A 100 sits a man at 5 points lost; a 0 rides him
+# until 13, which on this scale is a player who has lost a whole tier.
+REST_PER_RATING_POINT = 0.08
+
+# Nobody is rested out of a postseason game. This is the "winning always wins"
+# clause, and it is absolute rather than weighted -- a coach who sits his best
+# player in a playoff game to protect him for a summer is not managing, and no
+# rating should be able to produce that.
+#
+# A club is also never allowed to rest so many men that the night becomes a
+# forfeit, whatever the ratings say.
+MAX_RESTED_PER_GAME = 2
+
+# A rested man still needs to be worth resting *for*: no point sitting the
+# twelfth man, who is not tired and whose absence nobody notices.
+REST_MINIMUM_ROLE = 8
+
+
+def projected_loss(player) -> float:
+    """Ability points he would be down if he tipped off right now.
+
+    Reads the condition he *would* start at rather than his live one, because
+    this is a team-sheet decision taken before the game.
+    """
+    was = player.condition
+    try:
+        player.condition = starting_condition(player)
+        return ability_lost(player)
+    finally:
+        player.condition = was
+
+
+def rest_threshold(management: float) -> float:
+    """Ability points a coach of this rating tolerates before sitting a man."""
+    return max(3.0, REST_AT_AVERAGE - (management - 50.0) * REST_PER_RATING_POINT)
+
+
+def plan_rest(team, *, playoff: bool = False) -> set[str]:
+    """Who this club sits tonight.
+
+    Two sources, and the manager's beats the coach's. An explicit instruction is
+    an instruction: if a manager says sit him, he sits, in a playoff game or
+    anywhere else. The coach's own judgement is the automatic half, and it is
+    the half the `player_management` rating drives.
+    """
+    manager_choice = {pid for pid in getattr(team, "rested", ())
+                      if team.player(pid) is not None}
+    if playoff:
+        # The coach rests nobody; the manager may still overrule that.
+        return manager_choice
+
+    coach = team.coach
+    management = coach.ratings.player_management if coach else 50.0
+    threshold = rest_threshold(management)
+
+    # Ordered worst-affected first, so a club that can only afford to sit two
+    # sits the two who most need it.
+    candidates = sorted(
+        ((projected_loss(p), p) for p in team.players
+         if not p.injured and p.id not in manager_choice),
+        key=lambda pair: (-pair[0], pair[1].id),
+    )
+    rested = set(manager_choice)
+    rotation = team.rotation()[:REST_MINIMUM_ROLE]
+    worth_resting = {p.id for p in rotation}
+    for loss, player in candidates:
+        if len(rested) >= MAX_RESTED_PER_GAME:
+            break
+        if loss < threshold or player.id not in worth_resting:
+            continue
+        rested.add(player.id)
+    return rested
+
+
+def apply_rest(team, resting: set[str]) -> None:
+    for player in team.players:
+        player.resting = player.id in resting
+
+
+def clear_rest(team) -> None:
+    for player in team.players:
+        player.resting = False

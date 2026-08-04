@@ -16,6 +16,7 @@
      "development": 63.4404,
      "leadership": 48.4666,
      "offense": 56.8749,
+     "player_management": 57.9046,
      "reputation": 60.7551,
      "tactics": 74.6445,
      "talent_evaluation": 64.3766
@@ -1670,6 +1671,7 @@
      "development": 66.1361,
      "leadership": 54.8565,
      "offense": 53.2931,
+     "player_management": 54.3895,
      "reputation": 65.7137,
      "tactics": 61.5317,
      "talent_evaluation": 68.0362
@@ -3324,6 +3326,7 @@
      "development": 51.7142,
      "leadership": 44.3423,
      "offense": 61.219,
+     "player_management": 45.3213,
      "reputation": 65.2138,
      "tactics": 65.077,
      "talent_evaluation": 53.5199
@@ -4978,6 +4981,7 @@
      "development": 51.6175,
      "leadership": 50.599,
      "offense": 39.6012,
+     "player_management": 45.2014,
      "reputation": 49.8947,
      "tactics": 52.8299,
      "talent_evaluation": 50.1068
@@ -6632,6 +6636,7 @@
      "development": 78.5017,
      "leadership": 74.7133,
      "offense": 77.8555,
+     "player_management": 56.6713,
      "reputation": 65.3878,
      "tactics": 69.5609,
      "talent_evaluation": 72.8209
@@ -8286,6 +8291,7 @@
      "development": 42.4368,
      "leadership": 38.6579,
      "offense": 47.4266,
+     "player_management": 43.3481,
      "reputation": 49.8496,
      "tactics": 65.916,
      "talent_evaluation": 48.8686
@@ -9940,6 +9946,7 @@
      "development": 62.7312,
      "leadership": 70.625,
      "offense": 61.6791,
+     "player_management": 59.6675,
      "reputation": 81.174,
      "tactics": 55.3735,
      "talent_evaluation": 60.1106
@@ -11594,6 +11601,7 @@
      "development": 49.2778,
      "leadership": 38.2088,
      "offense": 44.138,
+     "player_management": 46.0737,
      "reputation": 45.0232,
      "tactics": 52.9309,
      "talent_evaluation": 43.6371
@@ -13248,6 +13256,7 @@
      "development": 43.5551,
      "leadership": 42.5452,
      "offense": 45.1352,
+     "player_management": 44.9099,
      "reputation": 53.0993,
      "tactics": 46.2297,
      "talent_evaluation": 54.5836
@@ -14902,6 +14911,7 @@
      "development": 74.6837,
      "leadership": 87.9791,
      "offense": 72.8235,
+     "player_management": 50.8414,
      "reputation": 71.8495,
      "tactics": 71.6276,
      "talent_evaluation": 66.655
@@ -16556,6 +16566,7 @@
      "development": 42.8604,
      "leadership": 49.4938,
      "offense": 47.2168,
+     "player_management": 46.4739,
      "reputation": 55.966,
      "tactics": 47.0893,
      "talent_evaluation": 59.566
@@ -18210,6 +18221,7 @@
      "development": 74.9008,
      "leadership": 72.1997,
      "offense": 65.9612,
+     "player_management": 49.7046,
      "reputation": 54.4244,
      "tactics": 58.3658,
      "talent_evaluation": 67.1356
@@ -19864,6 +19876,7 @@
      "development": 56.3279,
      "leadership": 53.8984,
      "offense": 55.3252,
+     "player_management": 53.7193,
      "reputation": 61.2182,
      "tactics": 50.6718,
      "talent_evaluation": 54.5633
@@ -21518,6 +21531,7 @@
      "development": 61.9841,
      "leadership": 65.0972,
      "offense": 76.1484,
+     "player_management": 57.0562,
      "reputation": 61.1497,
      "tactics": 70.124,
      "talent_evaluation": 52.2415
@@ -23172,6 +23186,7 @@
      "development": 82.07,
      "leadership": 55.9304,
      "offense": 64.9761,
+     "player_management": 55.3276,
      "reputation": 61.7299,
      "tactics": 40.3715,
      "talent_evaluation": 69.4208
@@ -24826,6 +24841,7 @@
      "development": 51.9976,
      "leadership": 61.677,
      "offense": 64.7408,
+     "player_management": 43.5576,
      "reputation": 70.0298,
      "tactics": 62.9663,
      "talent_evaluation": 53.5009
@@ -26480,6 +26496,7 @@
      "development": 58.9706,
      "leadership": 52.3363,
      "offense": 63.4369,
+     "player_management": 55.0342,
      "reputation": 71.81,
      "tactics": 79.809,
      "talent_evaluation": 67.3557
@@ -28134,6 +28151,7 @@
      "development": 65.4177,
      "leadership": 54.8292,
      "offense": 51.9957,
+     "player_management": 66.9331,
      "reputation": 58.4281,
      "tactics": 47.0313,
      "talent_evaluation": 50.1732
@@ -29788,6 +29806,7 @@
      "development": 63.0879,
      "leadership": 66.5141,
      "offense": 64.749,
+     "player_management": 61.1977,
      "reputation": 55.1065,
      "tactics": 43.3348,
      "talent_evaluation": 62.8846
@@ -31442,6 +31461,7 @@
      "development": 79.2884,
      "leadership": 62.3617,
      "offense": 71.0775,
+     "player_management": 66.2995,
      "reputation": 68.4324,
      "tactics": 87.1006,
      "talent_evaluation": 66.048
@@ -33096,6 +33116,7 @@
      "development": 62.797,
      "leadership": 46.8997,
      "offense": 44.4668,
+     "player_management": 49.506,
      "reputation": 50.5889,
      "tactics": 58.7688,
      "talent_evaluation": 64.8581
@@ -34750,6 +34771,7 @@
      "development": 49.4922,
      "leadership": 43.669,
      "offense": 48.1557,
+     "player_management": 53.0284,
      "reputation": 59.7366,
      "tactics": 48.0139,
      "talent_evaluation": 61.7536
@@ -36404,6 +36426,7 @@
      "development": 53.566,
      "leadership": 48.5054,
      "offense": 57.1655,
+     "player_management": 58.4287,
      "reputation": 67.5856,
      "tactics": 59.0829,
      "talent_evaluation": 58.3731
@@ -38058,6 +38081,7 @@
      "development": 39.8404,
      "leadership": 44.6955,
      "offense": 37.5079,
+     "player_management": 48.626,
      "reputation": 39.3934,
      "tactics": 30.3279,
      "talent_evaluation": 41.7244
@@ -39712,6 +39736,7 @@
      "development": 74.2276,
      "leadership": 66.1969,
      "offense": 81.4163,
+     "player_management": 50.3214,
      "reputation": 74.557,
      "tactics": 80.3581,
      "talent_evaluation": 65.1878
@@ -41366,6 +41391,7 @@
      "development": 100.0,
      "leadership": 76.3442,
      "offense": 79.0507,
+     "player_management": 79.6568,
      "reputation": 77.2346,
      "tactics": 78.0224,
      "talent_evaluation": 79.3738
@@ -43020,6 +43046,7 @@
      "development": 85.7821,
      "leadership": 73.6408,
      "offense": 73.2246,
+     "player_management": 79.0887,
      "reputation": 72.4297,
      "tactics": 85.5989,
      "talent_evaluation": 99.3492
@@ -44674,6 +44701,7 @@
      "development": 76.8211,
      "leadership": 71.2429,
      "offense": 47.9238,
+     "player_management": 39.3614,
      "reputation": 59.0123,
      "tactics": 72.2305,
      "talent_evaluation": 67.0345
@@ -46328,6 +46356,7 @@
      "development": 58.5606,
      "leadership": 64.8388,
      "offense": 53.4457,
+     "player_management": 63.6579,
      "reputation": 62.8633,
      "tactics": 59.6049,
      "talent_evaluation": 48.1569
@@ -47982,6 +48011,7 @@
      "development": 54.7218,
      "leadership": 54.8547,
      "offense": 51.34,
+     "player_management": 50.7273,
      "reputation": 61.6869,
      "tactics": 62.356,
      "talent_evaluation": 63.3949

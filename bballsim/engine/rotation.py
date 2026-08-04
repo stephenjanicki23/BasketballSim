@@ -35,6 +35,17 @@ TIRED_THRESHOLD = 62.0     # condition below this and a player wants out
 # here and the rest still bites -- a knackered player does lose some floor time,
 # just not seven minutes of it.
 CARRIED_FATIGUE_ABSORBED = 0.62
+
+# How far the head coach's player-management rating moves that. This is the
+# *minutes* half of the lever -- the softer one. Sitting a player out is a team
+# sheet decision taken before the game; this is the coach shortening a shift
+# because the man in front of him has lost a step.
+#
+# A high rating absorbs less, so the line stays high and a tired player comes
+# off sooner. A low one absorbs more and rides him. Neither is free: the careful
+# coach has fresher legs in March and gave away minutes in November, which is
+# the whole trade.
+MANAGEMENT_ABSORB_SWING = 0.26
 RESTED_THRESHOLD = 78.0    # a bench player needs this much to come in
 BENCH_RECOVERY_PER_SECOND = 0.115
 CLOSING_TIME_SECONDS = 6 * 60  # inside this in the 4th, stars stay on
@@ -69,6 +80,10 @@ class RotationManager:
 
         closing = period >= final_period and clock <= CLOSING_TIME_SECONDS
         stagger = slider_mod(team_state.team.tactics.minutes_stagger)
+        coach = team_state.team.coach
+        management = coach.ratings.player_management if coach else 50.0
+        absorbed = max(0.0, min(1.0, CARRIED_FATIGUE_ABSORBED
+                                - ((management - 50.0) / 50.0) * MANAGEMENT_ABSORB_SWING))
 
         def tired_line(player: Player) -> float:
             index = rank.get(player.id, len(RANK_FATIGUE_TOLERANCE))
@@ -79,9 +94,10 @@ class RotationManager:
             )
             line = TIRED_THRESHOLD + tolerance + stagger * 12.0
             # Most of what he walked in carrying is forgiven, so the line
-            # follows him down instead of cutting his night short.
+            # follows him down instead of cutting his night short -- how much,
+            # is what the coach's player-management rating decides.
             carried = 100.0 - starting_condition(player)
-            line -= carried * CARRIED_FATIGUE_ABSORBED
+            line -= carried * absorbed
             return line - 25.0 if closing else line
 
         fouled_out = [p for p in on_court if self._fouled_out(team_state, p)]

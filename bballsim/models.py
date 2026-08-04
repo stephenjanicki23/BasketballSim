@@ -92,6 +92,10 @@ class Player:
     # rotation and the starting five, so a man with a major injury cannot be
     # picked. Kept as a plain flag because that is what selection reads.
     injured: bool = False
+    # Sat out tonight -- by the coach protecting him, or by the manager saying
+    # so. Per-game like `condition` and not saved: it is a team sheet, not a
+    # fact about the player.
+    resting: bool = False
 
     @property
     def name(self) -> str:
@@ -195,6 +199,11 @@ class Team:
     # rotation order. Empty means "let the engine pick by overall".
     depth_chart: list[str] = field(default_factory=list)
 
+    # Player ids the manager has told the club to sit. Survives a save, unlike
+    # `Player.resting`, because it is an instruction rather than a team sheet:
+    # it holds until it is taken back.
+    rested: list[str] = field(default_factory=list)
+
     # Pairwise chemistry, keyed by frozenset of two player ids -> -100..100.
     # Populated by bballsim.chemistry; stored on the team so it persists.
     pair_chemistry: dict[frozenset[str], float] = field(default_factory=dict)
@@ -208,7 +217,7 @@ class Team:
         return next((p for p in self.players if p.id == player_id), None)
 
     def available_players(self) -> list[Player]:
-        return [p for p in self.players if not p.injured]
+        return [p for p in self.players if not p.injured and not p.resting]
 
     def rotation(self) -> list[Player]:
         """Players in depth-chart order, injured players dropped."""
