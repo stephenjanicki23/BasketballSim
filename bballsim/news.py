@@ -1042,7 +1042,18 @@ def rookie_watch(room: Newsroom, night: Night) -> list[Story]:
                     f"{c.plural(rival.points, 'point')}."
                 )
 
-            body_three_parts = []
+            # Always present. The two notes below are both conditional -- a
+            # rookie with no season line yet and a club with nothing worth
+            # saying about its record leave this paragraph as one closing
+            # sentence, and the article lands on the 150-word floor. Where a
+            # man was taken is the thing a reader most wants next to what he
+            # just did, and it is known for every player in the league.
+            body_three_parts = [
+                f"He was the {c.n(draft.pick)} pick of round "
+                f"{c.n(draft.round)} in {c.n(draft.year)}."
+                if not draft.undrafted else
+                f"He went undrafted in {c.n(draft.year)}."
+            ]
             season = season_note(c, room, line.player_id)
             if season:
                 body_three_parts.append(f"He is averaging {season} this season.")
@@ -1301,7 +1312,24 @@ def streaks(room: Newsroom) -> list[Story]:
             (l for n in window for l in n.lines.get(team_id, [])),
             key=lambda l: l.points, default=None,
         )
+        # Always present, and load-bearing for more than one reason. A short run
+        # writes a short "in order they have beaten" list, and a three-game
+        # streak against clubs with brief nicknames used to leave the article
+        # under the 150-word floor -- which is a real fault in the piece, not
+        # just in the count: a reader is owed something about *where* a run was
+        # won. Home and away is that something, and it is always computable.
+        home_games = sum(1 for n in window if n.home_id == team_id)
+        away_games = run - home_games
+        if home_games and away_games:
+            venue = (f"{c.plural(home_games, 'win')} of the run came at home and "
+                     f"{c.n(away_games)} on the road")
+        elif home_games:
+            venue = f"all {c.plural(home_games, 'win')} came at home"
+        else:
+            venue = f"all {c.plural(away_games, 'win')} came on the road"
+
         body_three_parts = [
+            f"{venue.capitalize()}.",
             f"On the season they have scored {c.n(row.points_for)} and allowed "
             f"{c.n(row.points_against)}, a differential of "
             f"{c.n(row.point_differential)} across "
