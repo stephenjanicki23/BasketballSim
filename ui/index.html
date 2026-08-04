@@ -187,21 +187,48 @@
     <div class="team-layout">
       <div class="card">
         <div class="card-head">
-          <h2>Standings</h2>
-          <span class="label" id="standings-note">By conference</span>
+          <h2 id="standings-title">Standings</h2>
+          <div class="stats-controls">
+            <span class="label" id="standings-note">By conference</span>
+            <div class="scope-toggle" id="standings-scope" role="group" aria-label="League standings or power rankings">
+              <button data-standings="league" class="is-active">League Standings</button>
+              <button data-standings="power">Power Rankings</button>
+            </div>
+          </div>
         </div>
-        <div class="sheet table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-rank">#</th>
-                <th class="col-name">Team</th>
-                <th>W</th><th>L</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th>
-              </tr>
-            </thead>
-            <tbody id="standings-body"></tbody>
-          </table>
+
+        <div id="standings-league">
+          <div class="sheet table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th class="col-name">Team</th>
+                  <th>W</th><th>L</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th>
+                </tr>
+              </thead>
+              <tbody id="standings-body"></tbody>
+            </table>
+          </div>
         </div>
+
+        <div id="standings-power" hidden>
+          <div class="sheet table-scroll">
+            <table id="power-table"></table>
+          </div>
+          <p class="empty" id="power-empty" hidden>
+            Power rankings start once games have been played.
+          </p>
+          <p class="note" id="power-note"></p>
+        </div>
+      </div>
+
+      <div class="card" id="power-detail-card" hidden>
+        <div class="card-head">
+          <h2 id="power-detail-name">—</h2>
+          <span class="muted-line" id="power-detail-tier"></span>
+        </div>
+        <div id="power-detail"></div>
       </div>
     </div>
   </section>

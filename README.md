@@ -18,11 +18,11 @@ No dependencies. Python 3.11+.
 python3 run.py serve          # web app on http://127.0.0.1:8000
 python3 run.py sim            # one exhibition game, play-by-play to stdout
 python3 run.py season         # sim the whole schedule, print standings
-python3 -m unittest discover -s tests    # 374 tests
+python3 -m unittest discover -s tests    # 401 tests
 ```
 
 In the browser: six tabs — **Home** (the news wire), **Games** (today's slate
-and the live tracker), **Stats**, **Standings** (by conference), **Playoffs**
+and the live tracker), **Stats**, **Standings** (by conference, plus power rankings), **Playoffs**
 (the bracket) and **Teams** (squads, player profiles, head coaches).
 
 **There are no clock controls.** The league runs on real time: a game tips off
@@ -577,6 +577,50 @@ screen**. All three are still in the payload and still read by the engine on
 every possession; they are just not what a squad page is for. The question it
 answers is who is on the roster and what they are doing, and that question has
 a stats table for an answer.
+
+## Power rankings
+
+A second view under Standings, answering a different question. The standings
+say who has won the most games since October; this says **who is playing the
+best basketball right now**. A 46-36 club on a six-game run outranks a 50-32
+club that has stopped winning, which is the entire point of having both.
+
+Ten weighted components, the brief's own: overall record 20%, last ten 25%,
+strength of schedule 10%, point differential 10%, efficiency 10%, quality wins
+10%, health 5%, momentum 5%, chemistry 3%, coaching 2%. Every one is scored
+0–100 on its own terms and the row carries all ten, so the page can show which
+of them put a club where it is rather than just asserting a number.
+
+**Nothing is stored.** A ranking is produced by replaying the schedule to a
+given day — the same discipline as the standings and the bracket. History is
+then the same function called with an earlier date, movement is today's rank
+against yesterday's, and there is no archive to migrate or drift out of step
+with the games.
+
+Games are weighted by recency exactly as specified: yesterday counts fully,
+each further day five points less, and nothing ever falls to zero because a
+game in November still happened. Quality wins are credited against the top of
+the table (recomputed in a first pass on record and margin alone, so the
+definition does not depend on itself), with extra for winning on the road and
+for coming from behind; bad losses are debited for losing at home to the
+bottom eight, for being beaten by twenty, and for each game of a losing run.
+
+Two things worth being straight about:
+
+- **Health is inert in the shipped build.** `Player.injured` exists and nothing
+  during a season ever sets it, so the component returns a flat 100 for every
+  club and contributes a constant. It reads the real flags rather than a
+  placeholder, so it starts working the day in-season injuries land — but right
+  now it is a 5% weight doing nothing, and pretending otherwise would be
+  inventing a number.
+- **Tier floors are set from the distribution the formula produces**, not from
+  round numbers. At round numbers every club landed in the middle two tiers and
+  the bottom one was never used at all. Cut where the ratings actually fall, a
+  full season splits about 2 / 3 / 6 / 8 / 8 / 3.
+
+`tests/test_power.py` holds the claim directly: it searches a simulated season
+for a club ranked above one with a better record and fails if it cannot find
+one, which is the difference between this table and the one next to it.
 
 ## Conferences and the postseason
 

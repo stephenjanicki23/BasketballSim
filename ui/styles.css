@@ -1338,3 +1338,81 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   .player-head-facts, .player-head-season { grid-column: 1 / -1; text-align: left; }
   .head-stat-row { justify-content: flex-start; }
 }
+
+/* ------------------------------------------------------------------ *
+ * Power rankings
+ * ------------------------------------------------------------------ */
+
+.power-row { cursor: pointer; }
+.power-row.is-selected { background: var(--raised); }
+.power-move { width: 46px; font: 700 11px/1 var(--mono); }
+.move-up { color: #1f8b3d; }
+.move-down { color: var(--away); }
+.move-flat, .move-new { color: var(--muted); }
+.move-new { font-size: 9px; letter-spacing: .06em; }
+
+.power-team { display: flex; align-items: center; gap: 9px; }
+.power-team .team-mark { width: 24px; height: 24px; }
+.power-name { font-weight: 600; color: var(--ink); }
+.power-flag {
+  font: 700 8px/1.6 var(--mono);
+  letter-spacing: .07em;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.power-flag.is-worst { background: var(--muted); }
+
+.power-rating { font-weight: 700; font-variant-numeric: tabular-nums; }
+.power-streak.is-hot { color: #1f8b3d; font-weight: 600; }
+.power-streak.is-cold { color: var(--away); }
+
+/* Tiers read as a ladder, so the colour carries the ordering. */
+.tier-championship-favorite { color: var(--accent); font-weight: 600; }
+.tier-title-contender { color: #1f8b3d; font-weight: 600; }
+.tier-playoff-team { color: var(--home); }
+.tier-play-in-contender { color: var(--ink-2); }
+.tier-middle-of-the-pack, .tier-rebuilding { color: var(--muted); }
+
+.power-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.power-facts dt {
+  font: 600 10px/1.5 var(--mono);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.power-facts dd { color: var(--ink-2); margin-bottom: 6px; }
+
+.power-components { padding: 4px 14px 12px; }
+.power-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.power-bar-label { flex: 0 0 190px; font-size: 12px; color: var(--ink-2); }
+.power-bar-track {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--hairline-soft);
+  overflow: hidden;
+}
+.power-bar-fill { display: block; height: 100%; background: var(--accent); }
+.power-bar-value {
+  flex: 0 0 30px;
+  text-align: right;
+  font: 600 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.power-notes { padding: 4px 14px 14px; }
+.power-note-line { font-size: 12.5px; color: var(--ink-2); margin: 2px 0; }
+.power-note-line.is-bad { color: var(--away); }
+
+@media (max-width: 720px) {
+  .power-bar-label { flex-basis: 120px; font-size: 11px; }
+}

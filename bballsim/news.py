@@ -63,6 +63,7 @@ ROOKIE_WATCH = "Rookie Watch"
 GAME_RECAP = "Game Recap"
 COACHING = "Coaching"
 LEAGUE_NEWS = "League News"
+POWER_RANKINGS = "Power Rankings"
 
 ANCHOR = {
     TRIPLE_DOUBLE: 90,
@@ -75,6 +76,7 @@ ANCHOR = {
     GAME_RECAP: 60,
     COACHING: 55,
     LEAGUE_NEWS: 45,
+    POWER_RANKINGS: 68,
 }
 
 # Thresholds. Each is the point at which a line stops being a good night and
@@ -1096,6 +1098,152 @@ def _draft_year(room: Newsroom) -> int | None:
     return max(years) if years else None
 
 
+
+def power_moves(room: Newsroom) -> list[Story]:
+    """A change at number one, and the day's biggest climb.
+
+    The two rankings are recomputed rather than looked up -- `power.rate` is
+    called for today and for the day before -- so a story about movement is a
+    story about two real tables, not about a number somebody stored.
+    """
+    from .league import power
+
+    league = room.league
+    days = power.ranking_days(league)
+    if len(days) < 2:
+        return []
+
+    today = power.rate(league, days[-1])
+    yesterday = power.rate(league, days[-2])
+    if not today or not yesterday:
+        return []
+    was = {row["teamId"]: row["rank"] for row in yesterday}
+    stories: list[Story] = []
+
+    leader, old_leader = today[0], yesterday[0]
+    if leader["teamId"] != old_leader["teamId"]:
+        c = Copy()
+        story_id = f"power1-{days[-1]}-{leader['teamId']}"
+        club = room.club(leader["teamId"])
+        deposed = room.club(old_leader["teamId"])
+        previous = was.get(leader["teamId"], 0)
+        dropped = next(
+            (r["rank"] for r in today if r["teamId"] == old_leader["teamId"]), 0)
+
+        headline = pick([
+            f"{club} take over at number one",
+            f"{room.nickname(leader['teamId'])} rise to the top of the rankings",
+            f"{room.nickname(leader['teamId'])} climb to first in the power rankings",
+        ], story_id)
+
+        body_one = (
+            f"{club} are the league's new number one, up from "
+            f"{c.n(previous)} on a record of "
+            f"{c.record(leader['wins'], leader['losses'])} and a "
+            f"{leader['lastTen']} run over their last {c.n(10)} games. They "
+            f"displace {deposed}, who slip to {c.n(dropped)}. "
+            f"{club} are currently on {leader['streak']}."
+        )
+        body_two = (
+            f"Their power rating stands at {c.n(leader['rating'], '.1f')} on a "
+            f"hundred-point scale, built on a net rating of "
+            f"{c.n(leader['netRating'], '.1f')} per 100 possessions — "
+            f"{c.n(leader['offensiveRating'], '.1f')} scored against "
+            f"{c.n(leader['defensiveRating'], '.1f')} conceded — and a scoring "
+            f"margin of {c.n(leader['differential'], '.1f')} a game. They are "
+            f"{leader['homeRecord']} at home and {leader['awayRecord']} on the "
+            f"road, with a best run this season of "
+            f"{c.plural(leader['bestWinStreak'], 'straight win')}."
+        )
+        body_three = (
+            f"The power rankings are not the standings and are not trying to be. "
+            f"Form over the last ten games carries a quarter of the rating on its "
+            f"own, every result is weighted by how recently it happened, and beating "
+            f"a contender counts for more than beating a bottom-eight club. A team "
+            f"can top this table without leading the league in wins, which is the "
+            f"whole reason for having it alongside the other one. {club} are rated "
+            f"a {leader['tier'].lower()} on current form."
+        )
+        stories.append(Story(
+            headline=headline,
+            subheadline=(
+                f"{club} move up to first with a power rating of "
+                f"{c.n(leader['rating'], '.1f')}."
+            ),
+            category=POWER_RANKINGS,
+            importance=held(ANCHOR[POWER_RANKINGS] + 8),
+            summary=f"{club} are the new number one, up from {c.n(previous)}.",
+            article=paragraphs(body_one, body_two, body_three),
+            id=story_id,
+            day=days[-1],
+            team_ids=(leader["teamId"], old_leader["teamId"]),
+            figures=frozenset(c.recorded),
+        ))
+
+    climbs = sorted(
+        ((was[row["teamId"]] - row["rank"], row) for row in today if row["teamId"] in was),
+        key=lambda pair: (-pair[0], pair[1]["teamId"]),
+    )
+    climbs = [
+        pair for pair in climbs
+        if int(pair[1]["lastTen"].split("-")[0]) > int(pair[1]["lastTen"].split("-")[1])
+    ]
+    if climbs and climbs[0][0] >= 4:
+        gained, row = climbs[0]
+        c = Copy()
+        story_id = f"powerup-{days[-1]}-{row['teamId']}"
+        club = room.club(row["teamId"])
+        headline = pick([
+            f"{room.nickname(row['teamId'])} surge {c.n(gained)} places in the rankings",
+            f"Biggest climb of the day belongs to {club}",
+            f"{club} jump {c.n(gained)} places in the power rankings",
+        ], story_id)
+
+        body_one = (
+            f"{club} are the day's biggest movers, up {c.plural(gained, 'place')} "
+            f"to {c.n(row['rank'])} in the power rankings on the back of a "
+            f"{row['lastTen']} run over their last {c.n(10)} games. They are "
+            f"{c.record(row['wins'], row['losses'])} on the season and currently "
+            f"{row['streak']}."
+        )
+        body_two = (
+            f"The move puts their rating at {c.n(row['rating'], '.1f')}, with a net "
+            f"rating of {c.n(row['netRating'], '.1f')} per 100 possessions — "
+            f"{c.n(row['offensiveRating'], '.1f')} scored against "
+            f"{c.n(row['defensiveRating'], '.1f')} conceded — and a scoring margin "
+            f"of {c.n(row['differential'], '.1f')} a game. Home and away they "
+            f"split {row['homeRecord']} and {row['awayRecord']}, with a best run "
+            f"this season of {c.plural(row['bestWinStreak'], 'straight win')}."
+        )
+        body_three = (
+            f"Recent games are weighted far more heavily than old ones — a result "
+            f"from yesterday counts in full and one from three weeks ago counts for "
+            f"almost nothing — so a stretch like this one moves a club quickly, and "
+            f"would move it back just as fast. That is the trade a form table makes: "
+            f"it answers who is playing well now rather than who has banked the most "
+            f"wins since October. {club} are rated a {row['tier'].lower()}."
+        )
+        stories.append(Story(
+            headline=headline,
+            subheadline=(
+                f"{club} climb {c.plural(gained, 'place')} to "
+                f"{c.n(row['rank'])} after a {row['lastTen']} stretch."
+            ),
+            category=POWER_RANKINGS,
+            importance=held(ANCHOR[POWER_RANKINGS] + min(10, gained)),
+            summary=(
+                f"{club} rose {c.plural(gained, 'place')} to "
+                f"{c.n(row['rank'])} in the power rankings."
+            ),
+            article=paragraphs(body_one, body_two, body_three),
+            id=story_id,
+            day=days[-1],
+            team_ids=(row["teamId"],),
+            figures=frozenset(c.recorded),
+        ))
+    return stories
+
+
 def streaks(room: Newsroom) -> list[Story]:
     stories = []
     for team_id in room.league.teams:
@@ -1740,6 +1888,7 @@ CATEGORY_LIMIT = {
     MVP_RACE: 1,
     COACHING: 1,
     LEAGUE_NEWS: 1,
+    POWER_RANKINGS: 2,
 }
 
 # Slots held back from the ranking.
@@ -1750,7 +1899,7 @@ CATEGORY_LIMIT = {
 # table never appear, however long the season runs. These four are the stories
 # that tell a reader where the season is rather than what happened last night,
 # and the page keeps room for them.
-RESERVED_FOR = (GAME_RECAP, MVP_RACE, LEAGUE_NEWS, COACHING)
+RESERVED_FOR = (GAME_RECAP, POWER_RANKINGS, MVP_RACE, LEAGUE_NEWS, COACHING)
 
 
 def write_stories(league, limit: int = 12) -> list[Story]:
@@ -1785,6 +1934,7 @@ def write_stories(league, limit: int = 12) -> list[Story]:
         stories.extend(rookie_watch(room, night))
         stories.extend(recaps(room, night))
     stories.extend(streaks(room))
+    stories.extend(power_moves(room))
     stories.extend(mvp_race(room))
     stories.extend(coaching(room))
     stories.extend(league_news(room))
@@ -1798,6 +1948,8 @@ def write_stories(league, limit: int = 12) -> list[Story]:
     feed: list[Story] = []
 
     def take(story: Story) -> bool:
+        if story.id in taken:
+            return False
         if used.get(story.category, 0) >= CATEGORY_LIMIT.get(story.category, 1):
             return False
         if story.game_id and story.game_id in seen_games:

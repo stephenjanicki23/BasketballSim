@@ -28,7 +28,7 @@ from ..league.calendar import PACIFIC, GameStatus
 from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
-from ..league import playoffs
+from ..league import playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
 from ..models import Lineup
@@ -427,6 +427,9 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
         "news": [story.to_dict() for story in write_stories(league)],
         "standings": league.standings_table(),
         "playoffs": playoffs.bracket(league),
+        # Power rankings, recomputed by replaying the schedule -- history and
+        # movement fall out of that rather than being stored anywhere.
+        "power": power.rank_history(league),
         "conferences": list(CONFERENCES),
         # Advanced stats are derived on read from the same season totals the
         # basic table uses -- nothing extra is stored or simulated.

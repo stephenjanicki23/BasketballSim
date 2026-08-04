@@ -213,6 +213,8 @@ const state = {
   teamId: null,
   playerId: null,
   posFilter: "",
+  standingsView: "league",
+  powerTeam: null,
   statIndex: null,
   showHidden: false,
   displayScale: 20,
@@ -273,6 +275,8 @@ async function boot() {
 
   renderWire();
   renderBracket();
+  renderPower();
+  bindStandingsScope();
   renderSchedule();
   renderStandings();
   renderTeams();
@@ -1409,6 +1413,175 @@ function renderBracket() {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Power rankings
+ *
+ * Who is playing the best basketball right now, as opposed to who has won
+ * the most games — which is the table next to it. The rating and its ten
+ * components arrive already computed from `bballsim/league/power.py`; this
+ * lays them out and shows the working when a row is opened.
+ * ------------------------------------------------------------------ */
+
+function movementCell(row) {
+  const cell = el("td", "power-move");
+  const move = row.movement;
+  if (move === null || move === undefined) {
+    cell.appendChild(el("span", "move-new", "NEW"));
+  } else if (move > 0) {
+    cell.appendChild(el("span", "move-up", `▲${move}`));
+  } else if (move < 0) {
+    cell.appendChild(el("span", "move-down", `▼${-move}`));
+  } else {
+    cell.appendChild(el("span", "move-flat", "—"));
+  }
+  return cell;
+}
+
+function tierClass(tier) {
+  return "tier-" + tier.toLowerCase().replace(/[^a-z]+/g, "-");
+}
+
+function renderPower() {
+  const power = state.data.power || { current: [] };
+  const rows = power.current || [];
+  const table = $("#power-table");
+  const empty = $("#power-empty");
+  const note = $("#power-note");
+  table.textContent = "";
+
+  if (!rows.length) {
+    empty.hidden = false;
+    note.textContent = "";
+    $("#power-detail-card").hidden = true;
+    return;
+  }
+  empty.hidden = true;
+
+  const head = el("thead");
+  const headRow = el("tr");
+  for (const [label, cls] of [["#", "col-rank"], ["", null], ["Team", "col-name"],
+                              ["W-L", null], ["L10", null], ["STRK", null],
+                              ["RATING", null], ["TIER", "col-name"]]) {
+    headRow.appendChild(el("th", cls, label));
+  }
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const body = el("tbody");
+  for (const row of rows) {
+    const team = state.teams.get(row.teamId);
+    const tr = el("tr", "power-row" + (row.teamId === state.powerTeam ? " is-selected" : ""));
+    tr.appendChild(el("td", "col-rank", String(row.rank)));
+    tr.appendChild(movementCell(row));
+
+    const nameCell = el("td", "col-name power-team");
+    if (team) nameCell.appendChild(teamMark(team));
+    const label = el("span", "power-name", team ? `${team.city} ${team.name}` : row.teamId);
+    nameCell.appendChild(label);
+    // The two marks the brief asks for, and they only mean something once a
+    // club has a season behind it to be the best or worst of.
+    if (row.isSeasonBest) nameCell.appendChild(el("span", "power-flag", "SEASON BEST"));
+    else if (row.isSeasonWorst) nameCell.appendChild(el("span", "power-flag is-worst", "SEASON WORST"));
+    tr.appendChild(nameCell);
+
+    tr.appendChild(el("td", null, `${row.wins}-${row.losses}`));
+    tr.appendChild(el("td", null, row.lastTen));
+    tr.appendChild(el("td", "power-streak" + (row.streakValue > 0 ? " is-hot" : row.streakValue < 0 ? " is-cold" : ""), row.streak));
+    tr.appendChild(el("td", "power-rating", row.rating.toFixed(1)));
+    tr.appendChild(el("td", "col-name " + tierClass(row.tier), row.tier));
+
+    tr.addEventListener("click", () => {
+      state.powerTeam = row.teamId;
+      renderPower();
+    });
+    body.appendChild(tr);
+  }
+  table.appendChild(body);
+
+  note.textContent = "Rated on ten weighted components — recent form carries the most, "
+    + "and every game is weighted by how recently it was played. Click a club to see "
+    + "which parts of the rating put it there.";
+
+  renderPowerDetail(rows);
+}
+
+function statLine(list, term, value) {
+  list.appendChild(el("dt", null, term));
+  list.appendChild(el("dd", null, String(value)));
+}
+
+function renderPowerDetail(rows) {
+  const card = $("#power-detail-card");
+  const row = rows.find((r) => r.teamId === state.powerTeam);
+  if (!row) { card.hidden = true; return; }
+  card.hidden = false;
+  const team = state.teams.get(row.teamId);
+  $("#power-detail-name").textContent = team ? `${team.city} ${team.name}` : row.teamId;
+  $("#power-detail-tier").textContent = `${row.tier} · rating ${row.rating.toFixed(1)}`;
+
+  const holder = $("#power-detail");
+  holder.textContent = "";
+
+  const facts = el("dl", "power-facts");
+  statLine(facts, "Current", `#${row.rank}`);
+  statLine(facts, "Previous", row.previousRank ? `#${row.previousRank}` : "—");
+  statLine(facts, "Best", `#${row.bestRank}`);
+  statLine(facts, "Worst", `#${row.worstRank}`);
+  statLine(facts, "Average", `#${row.averageRank}`);
+  statLine(facts, "Net rating", row.netRating.toFixed(1));
+  statLine(facts, "Offensive", row.offensiveRating.toFixed(1));
+  statLine(facts, "Defensive", row.defensiveRating.toFixed(1));
+  statLine(facts, "Home", row.homeRecord);
+  statLine(facts, "Away", row.awayRecord);
+  statLine(facts, "Last 10", row.lastTen);
+  statLine(facts, "Streak", row.streak);
+  statLine(facts, "Longest win run", row.bestWinStreak);
+  statLine(facts, "Longest losing run", row.worstLossStreak);
+  if (team && team.coach) statLine(facts, "Coach", team.coach.name);
+  holder.appendChild(facts);
+
+  // The working: which of the ten components carried the rating, weighted.
+  const labels = (state.data.power || {}).componentLabels || {};
+  const weights = (state.data.power || {}).weights || {};
+  const bars = el("div", "power-components");
+  bars.appendChild(el("p", "label", "What makes up the rating"));
+  const ordered = Object.keys(weights).sort((a, b) => weights[b] - weights[a]);
+  for (const key of ordered) {
+    const value = row.components[key];
+    if (value === undefined) continue;
+    const line = el("div", "power-bar");
+    line.appendChild(el("span", "power-bar-label",
+      `${labels[key] || key} · ${Math.round(weights[key] * 100)}%`));
+    const track = el("span", "power-bar-track");
+    const fill = el("span", "power-bar-fill");
+    fill.style.width = `${Math.max(0, Math.min(100, value))}%`;
+    track.appendChild(fill);
+    line.appendChild(track);
+    line.appendChild(el("span", "power-bar-value", value.toFixed(0)));
+    bars.appendChild(line);
+  }
+  holder.appendChild(bars);
+
+  const notes = el("div", "power-notes");
+  if (row.qualityWins && row.qualityWins.length) {
+    notes.appendChild(el("p", "label", "Recent quality wins"));
+    for (const win of row.qualityWins.slice().reverse()) {
+      const other = state.teams.get(win.opponent);
+      notes.appendChild(el("p", "power-note-line",
+        `beat ${other ? other.name : win.opponent} by ${win.margin} — ${win.reasons.join(", ")}`));
+    }
+  }
+  if (row.badLosses && row.badLosses.length) {
+    notes.appendChild(el("p", "label", "Recent bad losses"));
+    for (const loss of row.badLosses.slice().reverse()) {
+      const other = state.teams.get(loss.opponent);
+      notes.appendChild(el("p", "power-note-line is-bad",
+        `lost to ${other ? other.name : loss.opponent} by ${-loss.margin} — ${loss.reasons.join(", ")}`));
+    }
+  }
+  if (notes.childNodes.length) holder.appendChild(notes);
+}
+
 function renderStandings() {
   const tbody = $("#standings-body");
   tbody.textContent = "";
@@ -1524,6 +1697,25 @@ function statValue(row, key, places) {
   if (value === undefined || value === null) return "—";
   if (key.endsWith("_pct")) value *= 100;
   return value.toFixed(places);
+}
+
+function bindStandingsScope() {
+  $$("#standings-scope button").forEach((button) => {
+    button.onclick = () => {
+      state.standingsView = button.dataset.standings;
+      $$("#standings-scope button").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.standings === state.standingsView);
+      });
+      const power = state.standingsView === "power";
+      $("#standings-league").hidden = power;
+      $("#standings-power").hidden = !power;
+      $("#power-detail-card").hidden = !power || !state.powerTeam;
+      $("#standings-title").textContent = power ? "Power Rankings" : "Standings";
+      $("#standings-note").textContent = power
+        ? "Who is playing the best basketball right now"
+        : "By conference";
+    };
+  });
 }
 
 function renderTeams() {
@@ -1981,6 +2173,7 @@ async function refreshLeague({ quiet = false } = {}) {
   // the standings rather than waiting for a reload.
   renderWire();
   renderBracket();
+  renderPower();
   renderSchedule();
   renderStandings();
   renderStats();
