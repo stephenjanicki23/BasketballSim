@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bballsim.api.payload import team_squad
+from bballsim.api.payload import bootstrap, team_squad
 from bballsim.league import history, playoffs
 from bballsim.league.advanced import ADVANCED_COLUMNS, advanced_table
 from bballsim.league.calendar import GameStatus, build_daily_schedule
@@ -262,23 +262,39 @@ class TestAdvancedSeries(unittest.TestCase):
 
 
 class TestTheSquadPayload(unittest.TestCase):
-    def test_a_squad_carries_both_views(self):
+    def test_a_squad_carries_all_three_views(self):
+        """The game log, the within-season line, and the career by season.
+        All three are per-club, so all three ride on the squad rather than the
+        bootstrap -- the same split that keeps 81 attributes a head off the
+        first paint."""
         league = played()
         team = league.teams[any_team(league)]
         squad = team_squad(team, league)
         roster = {p["id"] for p in squad["players"]}
-        self.assertTrue(set(squad["gameLog"]) <= roster)
-        self.assertTrue(set(squad["advancedSeries"]) <= roster)
-        self.assertTrue(squad["gameLog"])
-        self.assertEqual(squad["seasons"], [league.season])
+        for key in ("gameLog", "advancedSeries", "advancedSeasons"):
+            self.assertTrue(squad[key], key)
+            self.assertTrue(set(squad[key]) <= roster, key)
+
+    def test_the_career_view_has_a_point_for_the_season_being_played(self):
+        """One season played means one point, which is the honest answer and
+        the reason the chart offers the other axis instead of drawing it."""
+        league = played()
+        team = league.teams[any_team(league)]
+        squad = team_squad(team, league)
+        for points in squad["advancedSeasons"].values():
+            self.assertEqual([p["season"] for p in points], [league.season])
+
+    def test_the_league_ships_the_seasons_it_has_played(self):
+        rows = bootstrap(played())["seasons"]
+        self.assertEqual([r["season"] for r in rows], [played().season])
 
     def test_a_squad_without_a_league_is_unchanged(self):
         """The roster view is still answerable on its own -- the history is an
         addition, not a requirement."""
         team = load_teams().teams[0]
         squad = team_squad(team)
-        self.assertNotIn("gameLog", squad)
-        self.assertNotIn("advancedSeries", squad)
+        for key in ("gameLog", "advancedSeries", "advancedSeasons"):
+            self.assertNotIn(key, squad)
         self.assertTrue(squad["players"])
 
 
