@@ -170,10 +170,6 @@ class League:
             if not moved:
                 break
 
-        # Recovery between games is paid out by `health.after_game`, in fixture
-        # order. This is the tail: a live app sitting on a day with no games
-        # still has players getting their wind back.
-        health.advance_to(self, self.clock.now())
         return changed
 
     def _start(self, game: ScheduledGame) -> None:

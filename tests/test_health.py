@@ -13,10 +13,10 @@ both failures were invisible from the code:
     the whole season's rest and then played the games into it. An 82-game year
     finished at a mean fatigue of 0.8.
   * `TestTheSpreadSurvivesTheSchedule` -- the flat back-to-back charge used to
-    be large, and on a calendar where nearly every game is a back-to-back that
-    is not a penalty for a hard schedule, it is a tax on everybody that
-    squeezes out the gap between a starter and a reserve. The league pinned at
-    Critical Fatigue to a man.
+    be large, and back when every game was a back-to-back that is not a penalty
+    for a hard schedule, it is a tax on everybody that squeezes out the gap
+    between a starter and a reserve. The league pinned at Critical Fatigue to a
+    man.
 
 Run with:  python3 -m unittest discover -s tests -v
 """
@@ -177,15 +177,15 @@ class TestRestIsSpentInTheOrderItIsEarned(unittest.TestCase):
         self.assertGreater(max(peaks), 40.0,
                            "nobody got tired across a whole season")
 
-    def test_two_games_in_a_day_cost_more_than_two_games_in_two_days(self):
+    def test_a_short_gap_leaves_more_fatigue_than_a_long_one(self):
         saved = load_teams(2)
         player = saved.teams[0].players[0]
         player.health.fatigue = 50.0
-        H.rest(player, 5.0)      # between slates
+        H.rest(player, 1 * H.HOURS_PER_DAY)      # back-to-back
         crowded = player.health.fatigue
 
         player.health.fatigue = 50.0
-        H.rest(player, 24.0)     # a full day
+        H.rest(player, 3 * H.HOURS_PER_DAY)      # three days off
         spaced = player.health.fatigue
 
         self.assertGreater(crowded, spaced)
@@ -200,13 +200,55 @@ class TestRestIsSpentInTheOrderItIsEarned(unittest.TestCase):
         self.assertLessEqual(player.health.fatigue, 4.0)
 
 
+class TestTheRestGapIsDrawnNotRead(unittest.TestCase):
+    """The fixture list is a viewing calendar, not a basketball schedule.
+
+    Three slates a day and 82 games in 28 days means a club's games sit about
+    five hours apart on the real clock. No professional plays that, so the
+    health model draws its own gap instead of reading one off the clock.
+    """
+
+    def test_the_same_fixture_always_gives_the_same_gap(self):
+        first = H.rest_gap("BOS", "g-0412")
+        for _ in range(5):
+            self.assertEqual(H.rest_gap("BOS", "g-0412"), first)
+
+    def test_two_clubs_in_the_same_fixture_can_get_different_gaps(self):
+        pairs = [("t%02d" % i, "t%02d" % (i + 1)) for i in range(0, 20, 2)]
+        differ = any(H.rest_gap(home, "g-1") != H.rest_gap(away, "g-1")
+                     for home, away in pairs)
+        self.assertTrue(differ, "the gap does not depend on the club")
+
+    def test_the_draw_matches_its_weights(self):
+        counts = {days: 0 for days, _ in H.REST_GAP_WEIGHTS}
+        draws = 20000
+        for i in range(draws):
+            counts[H.rest_gap("t%02d" % (i % 30), "g-%05d" % i)] += 1
+        for days, weight in H.REST_GAP_WEIGHTS:
+            self.assertAlmostEqual(counts[days] / draws, weight, delta=0.02,
+                                   msg=f"{days}-day gaps")
+
+    def test_a_back_to_back_is_the_occasional_one(self):
+        """A real season has a dozen or so, not forty and not none."""
+        share = dict(H.REST_GAP_WEIGHTS)[1]
+        self.assertGreater(share * 82, 8)
+        self.assertLess(share * 82, 20)
+
+    def test_the_mean_gap_is_the_two_or_three_days_that_was_asked_for(self):
+        self.assertGreater(H.MEAN_REST_GAP, 2.0)
+        self.assertLess(H.MEAN_REST_GAP, 3.0)
+
+    def test_the_weights_are_a_distribution(self):
+        self.assertAlmostEqual(sum(w for _, w in H.REST_GAP_WEIGHTS), 1.0, places=6)
+
+
 class TestTheSpreadSurvivesTheSchedule(unittest.TestCase):
     """A starter has to end up more tired than a reserve.
 
-    This league plays 82 games in 28 days, so nearly every game is a
-    back-to-back. A large flat charge for one is therefore a tax on everybody
-    rather than a penalty for a hard schedule, and it flattens exactly the
-    difference the system exists to show.
+    Rest gaps are drawn per club per game, so the flat charges land on some
+    nights and not others. If a charge is large enough to dominate the minutes
+    term it becomes a tax on everybody rather than a penalty for a hard
+    schedule, and it flattens exactly the difference the system exists to show.
     """
 
     @classmethod
@@ -331,6 +373,47 @@ class TestWearAndTear(unittest.TestCase):
                 self.assertEqual(player.health.knock, 0.0)
                 self.assertLess(player.health.wear, 40.0)
                 self.assertGreater(player.health.wear, 25.0)
+
+
+class TestRecoveryStillDependsOnTheBody(unittest.TestCase):
+    """`recovery_rate` once ended `max(4.0, rate)`.
+
+    That floor was set when the constant it guarded was much larger. When the
+    rest model moved to whole days and the constant came down, every computed
+    rate fell below the floor -- so the floor became the only term and stamina,
+    professionalism, staff and age stopped mattering to recovery entirely.
+    Nothing failed; the league just recovered at one flat rate.
+    """
+
+    def rate(self, **kwargs):
+        player = load_teams(1).teams[0].players[0]
+        staff = kwargs.pop("staff", 50.0)
+        for field, value in kwargs.items():
+            target = player.hidden if field == "professionalism" else player
+            if field == "stamina":
+                target = player.ratings
+            setattr(target, field, value)
+        return H.recovery_rate(player, staff)
+
+    def test_the_floor_does_not_swallow_the_constant(self):
+        """The thing that actually went wrong: a floor above the typical rate."""
+        rates = [H.recovery_rate(p)
+                 for team in load_teams(4).teams for p in team.players]
+        self.assertGreater(max(rates), min(rates) * 1.05,
+                           "every player recovers at the same rate")
+
+    def test_stamina_pays(self):
+        self.assertGreater(self.rate(stamina=18.0), self.rate(stamina=5.0))
+
+    def test_professionalism_pays(self):
+        self.assertGreater(self.rate(professionalism=18.0),
+                           self.rate(professionalism=5.0))
+
+    def test_a_good_performance_department_pays(self):
+        self.assertGreater(self.rate(staff=90.0), self.rate(staff=20.0))
+
+    def test_older_bodies_do_not_bounce_back(self):
+        self.assertLess(self.rate(age=36), self.rate(age=22))
 
 
 class TestWhatCostsWhat(unittest.TestCase):
