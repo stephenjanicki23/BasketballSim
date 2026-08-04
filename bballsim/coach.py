@@ -118,6 +118,19 @@ COACH_RATING_LABELS: tuple[tuple[str, str], ...] = (
 COACHING_SKILLS = tuple(key for key, _ in COACH_RATING_LABELS if key != "reputation")
 
 
+# One per coaching skill, and `test_coach` checks the two lists agree so this
+# cannot fall behind `COACH_RATING_LABELS` again.
+SPECIALISM_LABELS: dict[str, str] = {
+    "offense": "Offensive mind",
+    "defense": "Defensive specialist",
+    "tactics": "Tactician",
+    "development": "Player developer",
+    "player_management": "Man manager",
+    "leadership": "Motivator",
+    "talent_evaluation": "Talent spotter",
+}
+
+
 @dataclass
 class Coach:
     id: str
@@ -149,14 +162,12 @@ class Coach:
     def specialism(self) -> str:
         """What this coach is known for -- his best skill, named."""
         best = max(COACHING_SKILLS, key=lambda key: getattr(self.ratings, key))
-        return {
-            "offense": "Offensive mind",
-            "defense": "Defensive specialist",
-            "tactics": "Tactician",
-            "development": "Player developer",
-            "leadership": "Motivator",
-            "talent_evaluation": "Talent spotter",
-        }[best]
+        # Every coaching skill needs a name here. `COACHING_SKILLS` is derived
+        # from `COACH_RATING_LABELS`, so adding a rating there without adding
+        # it below leaves this raising a KeyError for whichever coach happens
+        # to be best at the new one -- which is exactly what adding
+        # `player_management` did.
+        return SPECIALISM_LABELS[best]
 
     def to_dict(self) -> dict:
         return {

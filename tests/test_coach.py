@@ -52,27 +52,39 @@ def coach_with(**ratings) -> Coach:
 
 
 class TestCoachRatings(unittest.TestCase):
-    """The seven numbers the user asked for, on the scale they asked for."""
+    """The eight numbers, on the scale they were asked for."""
 
-    def test_the_seven_ratings_exist_and_are_the_only_ones(self):
+    def test_the_eight_ratings_exist_and_are_the_only_ones(self):
         self.assertEqual(
             set(CoachRatings.attribute_names()),
             {
                 "offense", "defense", "tactics", "development",
-                "leadership", "talent_evaluation", "reputation",
+                "player_management", "leadership", "talent_evaluation",
+                "reputation",
             },
         )
 
     def test_every_rating_has_a_display_label(self):
         labelled = {key for key, _ in COACH_RATING_LABELS}
         self.assertEqual(labelled, set(CoachRatings.attribute_names()))
+        self.assertEqual(dict(COACH_RATING_LABELS)["player_management"],
+                         "Player Management")
         # Labels must be the ones a team page reads, not the field names.
         self.assertEqual(dict(COACH_RATING_LABELS)["talent_evaluation"], "Scouting Eye")
         self.assertEqual(dict(COACH_RATING_LABELS)["development"], "Player Development")
 
     def test_reputation_is_not_counted_as_a_coaching_skill(self):
         self.assertNotIn("reputation", COACHING_SKILLS)
-        self.assertEqual(len(COACHING_SKILLS), 6)
+        self.assertEqual(len(COACHING_SKILLS), 7)
+
+    def test_every_coaching_skill_can_be_a_specialism(self):
+        """`specialism` names a coach's best skill from a lookup, and the two
+        lists are built separately -- so adding a rating to the labels without
+        adding it here raised a KeyError for whichever coach was best at the
+        new one. Which is what adding `player_management` did."""
+        from bballsim.coach import SPECIALISM_LABELS
+
+        self.assertEqual(set(SPECIALISM_LABELS), set(COACHING_SKILLS))
 
     def test_ratings_are_clamped_to_the_scale(self):
         ratings = CoachRatings(offense=140.0, defense=-30.0)
