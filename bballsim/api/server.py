@@ -156,7 +156,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             if team is None:
                 self._send_json({"error": "team not found"}, 404)
             else:
-                self._send_json(views.team_squad(team))
+                self._send_json(views.team_squad(team, league))
 
         elif len(parts) == 2 and parts[0] == "teams":
             team = league.teams.get(parts[1])

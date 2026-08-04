@@ -568,15 +568,59 @@ similar games do not read alike.
 ### The squad page
 
 The Teams tab is a **stats page**, not a ratings page: pick a club and a player
-on the left, and read a per-game line on the right — headline averages, a
-season split, and the whole roster as one table of GP/MIN/FG%/3P%/FT%/REB/AST/
-BLK/STL/PF/TOV/PTS.
+on the left, and read that player on the right — headline averages, a season
+split of GP/MIN/FG%/3P%/FT%/REB/AST/BLK/STL/PF/TOV/PTS, his last fifteen box
+scores, and a chart of any advanced stat across the season.
 
 Tactics, the head coach's ratings and the 81-attribute grid are **not on this
 screen**. All three are still in the payload and still read by the engine on
 every possession; they are just not what a squad page is for. The question it
 answers is who is on the roster and what they are doing, and that question has
 a stats table for an answer.
+
+### Recent games, and the progression chart
+
+Both are derived in `bballsim/league/history.py`, and both ride on the **squad**
+payload rather than the bootstrap — the same split that keeps 360 players with
+81 attributes each off the first paint. A game log is only ever read on a screen
+showing one club.
+
+`game_log` reads the box scores hanging off finished fixtures. Every FINAL game
+carries one, including a season restored from disk (the play-by-play is dropped
+on save, the box score is not), so the table works everywhere the app does.
+Playoff games are in it and labelled with their round — a postseason box score
+is part of what a player did recently, whatever the standings do with it.
+`tests/test_history.py` holds the claim that matters: a full log with the
+postseason filtered out **adds back up to exactly the season line** the Stats
+page shows, category by category.
+
+There is no `+/-` column. `PlayerLine` has the field and the engine never fills
+it in, so every value would be a zero dressed up as a stat. A per-game table is
+precisely where someone would read that column and believe it, so it does not
+exist — same reason the power rankings' Health component is documented as inert
+rather than faked. Give the engine on/off tracking and it is a one-line change.
+
+The chart plots any of the nineteen advanced stats — the dropdown is built from
+`advancedColumns`, so it offers exactly what the Advanced tab shows and cannot
+drift from it. `advanced_series` replays the regular season sixteen checkpoints
+at a time and runs the advanced table at each one, which costs 0.37s for a full
+1,230-game season and is memoised on the league by games played.
+
+Each point is **cumulative** — the player's season to that date, not that
+night's game. A single game's win shares are noise, and a running figure ends on
+precisely the number the Advanced tab carries for the season. That last property
+is a test, exact rather than within a tolerance: a tolerance would pass a series
+that had drifted by less than it and still put two different numbers in front of
+a manager for the same player.
+
+**One honest limit, and the page says it too.** This league has played one
+season, so the x-axis is games, not years. A year axis would have a single point
+on it, and drawing a career arc across seasons that were never simulated would
+be inventing data — which is the one thing this codebase does not do. The series
+carries its season label and the chart draws a line per season, so a second
+season needs no new code here. It needs a second season: an offseason loop over
+`bballsim/progression.py`, which exists and ages players but has never been run
+at league level.
 
 ## Power rankings
 
@@ -956,6 +1000,7 @@ bballsim/
   league/
     calendar.py    fixtures, tip-off times, game status
     stats.py       season totals -> per-game rates, for players and teams
+    history.py     per-player game logs; advanced stats across the season
     league.py      standings, the sim clock, tick(), the tracker feed
   api/server.py    stdlib HTTP: JSON API + static files
   api/payload.py   the shapes the front end reads, shared by API and demo

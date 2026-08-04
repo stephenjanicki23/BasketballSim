@@ -290,18 +290,24 @@
         </div>
 
         <div class="card">
-          <div class="card-head"><h2>Recent Games</h2></div>
+          <div class="card-head">
+            <h2>Recent Games</h2>
+            <p class="card-note" id="profile-games-count"></p>
+          </div>
           <div class="sheet table-scroll">
             <table id="profile-games"></table>
           </div>
-          <p class="note" id="profile-games-note"></p>
         </div>
 
         <div class="card">
-          <div class="card-head"><h2>Roster</h2></div>
-          <div class="sheet table-scroll">
-            <table id="squad-table"></table>
+          <div class="card-head">
+            <h2>Advanced Progression</h2>
+            <select id="chart-stat" aria-label="Which advanced stat to chart"></select>
           </div>
+          <div class="chart-wrap">
+            <figure id="profile-chart" class="chart"></figure>
+          </div>
+          <p class="note" id="profile-chart-note"></p>
         </div>
       </div>
     </div>

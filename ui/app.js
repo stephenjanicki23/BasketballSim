@@ -213,6 +213,7 @@ const state = {
   teamId: null,
   playerId: null,
   posFilter: "",
+  chartStat: "per",
   standingsView: "league",
   powerTeam: null,
   statIndex: null,
@@ -279,6 +280,7 @@ async function boot() {
   bindStandingsScope();
   renderSchedule();
   renderStandings();
+  bindChartStat();
   renderTeams();
   buildStatTabs();
   renderStats();
@@ -305,11 +307,20 @@ function indexTeams(teams) {
   }
 }
 
+/* A squad is fetched once and kept. Ratings do not move during a season, but
+ * the game log and the progression series do -- they are derived from finished
+ * fixtures, and finished fixtures are exactly what a refresh brings. So a
+ * refresh marks the cached squads stale rather than clearing them, and the next
+ * visit to the Teams tab re-fetches the club being looked at. Without this, a
+ * "Recent Games" table in the live app never gains a game. */
 async function squadFor(teamId) {
   const team = state.teams.get(teamId);
-  if (team && team.players) return team;
+  if (team && team.players && !team.stale) return team;
   const loaded = await state.source.squad(teamId);
-  if (loaded) indexTeams([loaded]);
+  if (loaded) {
+    indexTeams([loaded]);
+    state.teams.get(teamId).stale = false;
+  }
   return state.teams.get(teamId);
 }
 
@@ -1757,7 +1768,6 @@ async function renderTeamDetail() {
   const shown = squadFilter(team.players);
   if (!shown.length) {
     $("#roster-list").textContent = "";
-    $("#squad-table").textContent = "";
     return;
   }
   if (!state.playerId || !shown.some((p) => p.id === state.playerId)) {
@@ -1785,42 +1795,7 @@ async function renderTeamDetail() {
     list.appendChild(row);
   });
 
-  renderSquadTable(team, shown);
   renderPlayer(team);
-}
-
-/* The whole roster as one per-game table -- the view that answers "who is on
- * this team and what are they doing" without opening anyone. */
-function renderSquadTable(team, players) {
-  const table = $("#squad-table");
-  table.textContent = "";
-  const stats = statsByPlayer();
-
-  const head = el("thead");
-  const headRow = el("tr");
-  headRow.appendChild(el("th", "col-name", "Player"));
-  for (const [, label] of SQUAD_COLUMNS) headRow.appendChild(el("th", null, label));
-  head.appendChild(headRow);
-  table.appendChild(head);
-
-  const body = el("tbody");
-  for (const player of players) {
-    const row = el("tr", player.id === state.playerId ? "is-selected" : null);
-    const nameCell = el("td", "col-name");
-    nameCell.appendChild(el("span", "player-pos", player.pos));
-    nameCell.appendChild(el("span", "player-name", player.name));
-    row.appendChild(nameCell);
-    const line = stats.get(player.id);
-    for (const [key, , places] of SQUAD_COLUMNS) {
-      row.appendChild(el("td", null, statValue(line, key, places)));
-    }
-    row.addEventListener("click", () => {
-      state.playerId = player.id;
-      renderTeamDetail();
-    });
-    body.appendChild(row);
-  }
-  table.appendChild(body);
 }
 
 function fact(list, term, value) {
@@ -1848,9 +1823,13 @@ function renderPlayer(team) {
   fact(facts, "HT/WT", `${player.height}, ${player.weight} lbs`);
   fact(facts, "AGE", String(player.age));
   const bio = player.bio || {};
-  if (bio.draft && bio.draft.year) {
+  // An undrafted player still has a draft *class* -- year is set, round and
+  // pick are not -- so testing the year alone printed "Rd null, Pk null".
+  if (bio.draft && bio.draft.year && !bio.draft.undrafted) {
     fact(facts, "DRAFT INFO",
       `${bio.draft.year}: Rd ${bio.draft.round}, Pk ${bio.draft.pick}`);
+  } else if (bio.draft && bio.draft.year) {
+    fact(facts, "DRAFT INFO", `${bio.draft.year}: Undrafted`);
   } else {
     fact(facts, "DRAFT INFO", "Undrafted");
   }
@@ -1895,61 +1874,239 @@ function renderPlayer(team) {
   table.appendChild(body);
 
   renderPlayerGames(player, team);
+  renderPlayerChart(player, team);
 }
 
-/* The player's last few box scores, pulled out of the games already loaded
- * for the day. Only the fixtures that ship play-by-play can supply one, so
- * the note says so rather than leaving an empty table unexplained. */
+/* The player's last box scores.
+ *
+ * These come off the squad payload (`gameLog`), not off the day's fixtures.
+ * Reading them from the loaded day meant only the games that ship play-by-play
+ * could supply one, which on a page showing the Finals was one fixture in the
+ * whole league -- so the card hid itself for twenty-eight clubs out of thirty.
+ * The server derives the log from every finished fixture's box score instead,
+ * which every save keeps.
+ */
+const GAME_LOG_COLUMNS = [
+  ["minutes", "MIN"], ["points", "PTS"], ["rebounds", "REB"], ["assists", "AST"],
+  ["steals", "STL"], ["blocks", "BLK"], ["turnovers", "TO"], ["fouls", "PF"],
+];
+
+function shooting(made, attempted) {
+  return `${made}-${attempted}`;
+}
+
 function renderPlayerGames(player, team) {
   const table = $("#profile-games");
-  const note = $("#profile-games-note");
+  const count = $("#profile-games-count");
   table.textContent = "";
+  count.textContent = "";
 
-  const rows = [];
-  for (const game of dayGames()) {
-    if (game.home !== team.id && game.away !== team.id) continue;
-    const box = game.home === team.id ? game.homeBox : game.awayBox;
-    if (!box || !box.players) continue;
-    const found = box.players.find((l) => l.player_id === player.id);
-    if (found) rows.push({ game, line: found });
-  }
-
-  // An empty card with an apology in it is worse than no card. Only the
-  // fixtures that ship play-by-play can supply a box score, which on a page
-  // showing the Finals is most of the league.
+  const rows = ((team.gameLog || {})[player.id]) || [];
   const card = table.closest(".card");
   if (!rows.length) {
+    // Nothing to apologise for and nothing to show: a player with no finished
+    // games has no log, and an empty table with a caption is worse than none.
     if (card) card.hidden = true;
     return;
   }
   if (card) card.hidden = false;
-  note.textContent = "";
+  count.textContent = `Last ${rows.length}`;
+
   const head = el("thead");
   const headRow = el("tr");
-  for (const label of ["DATE", "OPP", "RESULT", "MIN", "PTS", "REB", "AST", "STL", "BLK", "TO"]) {
-    headRow.appendChild(el("th", label === "DATE" ? "col-name" : null, label));
-  }
+  headRow.appendChild(el("th", "col-name", "DATE"));
+  for (const label of ["OPP", "RESULT"]) headRow.appendChild(el("th", null, label));
+  for (const [, label] of GAME_LOG_COLUMNS) headRow.appendChild(el("th", null, label));
+  // No +/- column: the engine does not track on/off, so every value would be
+  // a zero dressed up as a stat.
+  for (const label of ["FG", "3P", "FT"]) headRow.appendChild(el("th", null, label));
   head.appendChild(headRow);
   table.appendChild(head);
 
   const body = el("tbody");
-  for (const { game, line } of rows) {
-    const opponentId = game.home === team.id ? game.away : game.home;
-    const opponent = state.teams.get(opponentId);
-    const us = game.home === team.id ? game.homeScore : game.awayScore;
-    const them = game.home === team.id ? game.awayScore : game.homeScore;
+  for (const row of rows) {
     const tr = el("tr");
-    tr.appendChild(el("td", "col-name", gameDate(game)));
-    tr.appendChild(el("td", null,
-      `${game.home === team.id ? "vs" : "@"} ${opponent ? opponent.abbr : ""}`));
-    tr.appendChild(el("td", null, `${us > them ? "W" : "L"} ${us}-${them}`));
-    tr.appendChild(el("td", null, line.minutes || "—"));
-    for (const key of ["points", "rebounds", "assists", "steals", "blocks", "turnovers"]) {
-      tr.appendChild(el("td", null, String(line[key] ?? "—")));
+    const when = el("td", "col-name");
+    when.appendChild(el("span", null, row.label));
+    // A postseason line is still a recent game, but it is not the same kind of
+    // game, so it says which round it was.
+    if (row.round) when.appendChild(el("span", "log-round", row.round));
+    tr.appendChild(when);
+    tr.appendChild(el("td", null, `${row.home ? "vs" : "@"} ${row.opponent}`));
+    tr.appendChild(el("td", row.result === "W" ? "log-win" : "log-loss",
+      `${row.result} ${row.score}`));
+    for (const [key] of GAME_LOG_COLUMNS) {
+      tr.appendChild(el("td", null, String(row[key] ?? "—")));
     }
+    tr.appendChild(el("td", null, shooting(row.fgm, row.fga)));
+    tr.appendChild(el("td", null, shooting(row.tpm, row.tpa)));
+    tr.appendChild(el("td", null, shooting(row.ftm, row.fta)));
     body.appendChild(tr);
   }
   table.appendChild(body);
+}
+
+/* ------------------------------------------------------------------ *
+ * Advanced progression chart
+ *
+ * One line, one player, one of the nineteen advanced stats -- chosen from a
+ * dropdown built out of `advancedColumns`, so the chart offers exactly what
+ * the Advanced tab shows and cannot drift from it.
+ *
+ * Each point is the player's season *to that date*, not that night's game: a
+ * single game's win shares are noise, and a running figure ends on precisely
+ * the number the Advanced tab has for the season. The final point tying out is
+ * the property that makes the line worth reading.
+ *
+ * The x-axis is games played, and the reason is worth stating plainly rather
+ * than hiding: this league has played one season. A year axis would have one
+ * point on it, and drawing a career arc for seasons that were never simulated
+ * would be inventing data. The series carries its season label and the chart
+ * draws a line per season, so a second season needs no new code here -- it
+ * needs a second season.
+ * ------------------------------------------------------------------ */
+
+const CHART = { width: 720, height: 260, left: 52, right: 16, top: 16, bottom: 30 };
+
+function svg(tag, attrs, text) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    node.setAttribute(key, String(value));
+  }
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/* Round numbers for the axis, whatever the stat's scale: DRB% runs to 30,
+ * WS/48 to 0.25, and both should get labels a reader recognises. */
+function niceStep(span, target) {
+  const raw = span / Math.max(1, target);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+  for (const factor of [1, 2, 2.5, 5, 10]) {
+    if (magnitude * factor >= raw) return magnitude * factor;
+  }
+  return magnitude * 10;
+}
+
+function axisLabel(value, step) {
+  const places = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step)));
+  return value.toFixed(places);
+}
+
+function chartStatKey() {
+  const columns = state.data.advancedColumns || [];
+  if (!columns.length) return null;
+  if (columns.some((c) => c.key === state.chartStat)) return state.chartStat;
+  return columns[0].key;
+}
+
+function bindChartStat() {
+  const picker = $("#chart-stat");
+  if (!picker) return;
+  picker.textContent = "";
+  for (const column of state.data.advancedColumns || []) {
+    const option = el("option", null, column.label);
+    option.value = column.key;
+    picker.appendChild(option);
+  }
+  picker.value = chartStatKey() || "";
+  picker.addEventListener("change", () => {
+    state.chartStat = picker.value;
+    renderTeamDetail();
+  });
+}
+
+function renderPlayerChart(player, team) {
+  const figure = $("#profile-chart");
+  const note = $("#profile-chart-note");
+  if (!figure) return;
+  figure.textContent = "";
+  note.textContent = "";
+
+  const card = figure.closest(".card");
+  const series = (team.advancedSeries || {})[player.id];
+  const key = chartStatKey();
+  const column = (state.data.advancedColumns || []).find((c) => c.key === key);
+  const points = (series && series.points) || [];
+  if (!column || points.length < 2) {
+    if (card) card.hidden = true;
+    return;
+  }
+  if (card) card.hidden = false;
+  $("#chart-stat").value = key;
+
+  const values = points.map((p) => p[key]);
+  const games = points.map((p) => p.games);
+  let low = Math.min(...values);
+  let high = Math.max(...values);
+  if (high - low < 1e-9) { low -= 1; high += 1; }   // a flat line still needs a band
+  const step = niceStep(high - low, 4);
+  low = Math.floor(low / step) * step;
+  high = Math.ceil(high / step) * step;
+
+  const firstGame = games[0];
+  const lastGame = games[games.length - 1];
+  const spanX = Math.max(1, lastGame - firstGame);
+  const plotWidth = CHART.width - CHART.left - CHART.right;
+  const plotHeight = CHART.height - CHART.top - CHART.bottom;
+  const x = (g) => CHART.left + ((g - firstGame) / spanX) * plotWidth;
+  const y = (v) => CHART.top + (1 - (v - low) / (high - low)) * plotHeight;
+
+  const chart = svg("svg", {
+    viewBox: `0 0 ${CHART.width} ${CHART.height}`,
+    role: "img",
+    "aria-label": `${player.name}, ${column.label} through the ${series.season} season`,
+  });
+
+  // Horizontal gridlines and their labels.
+  for (let value = low; value <= high + step / 2; value += step) {
+    const at = y(value);
+    chart.appendChild(svg("line", {
+      class: "chart-grid", x1: CHART.left, x2: CHART.width - CHART.right, y1: at, y2: at,
+    }));
+    chart.appendChild(svg("text", {
+      class: "chart-tick", x: CHART.left - 8, y: at + 4, "text-anchor": "end",
+    }, axisLabel(value, step)));
+  }
+
+  // Zero matters for the stats that go negative -- BPM, VORP, the win shares.
+  if (low < 0 && high > 0) {
+    chart.appendChild(svg("line", {
+      class: "chart-zero", x1: CHART.left, x2: CHART.width - CHART.right,
+      y1: y(0), y2: y(0),
+    }));
+  }
+
+  const line = points.map((p, i) => `${i ? "L" : "M"}${x(games[i])} ${y(p[key])}`).join(" ");
+  chart.appendChild(svg("path", {
+    class: "chart-area",
+    d: `${line} L${x(lastGame)} ${CHART.top + plotHeight} L${x(firstGame)} ${CHART.top + plotHeight} Z`,
+  }));
+  chart.appendChild(svg("path", { class: "chart-line", d: line }));
+
+  points.forEach((point, index) => {
+    const dot = svg("circle", {
+      class: "chart-dot", cx: x(games[index]), cy: y(point[key]), r: 3.5,
+    });
+    dot.appendChild(svg("title", {},
+      `${column.label} ${point[key]} after ${point.games} games`));
+    chart.appendChild(dot);
+  });
+
+  // Only the ends get an x label; sixteen of them would be a smear.
+  for (const [game, anchor] of [[firstGame, "start"], [lastGame, "end"]]) {
+    chart.appendChild(svg("text", {
+      class: "chart-tick", x: x(game), y: CHART.height - 10, "text-anchor": anchor,
+    }, `${game} GP`));
+  }
+
+  figure.appendChild(chart);
+  const last = points[points.length - 1];
+  note.textContent =
+    `${column.label} through the season, cumulative — ${last[key]} after `
+    + `${last.games} games. One point per checkpoint; the last one is the `
+    + `${series.season} figure on the Advanced tab. The league has played one `
+    + `season, so the axis is games rather than years.`;
 }
 
 /* A collapsible section: heading and star rating always visible, the
@@ -2167,6 +2324,12 @@ async function refreshLeague({ quiet = false } = {}) {
     return previous && !previous.live ? Object.assign(previous, g) : g;
   });
 
+  // Season lines and squad histories were derived from a schedule that has
+  // since moved. Drop the index and mark the squads stale so the screens that
+  // read them ask again rather than showing last minute's numbers.
+  state.statIndex = null;
+  for (const team of state.teams.values()) team.stale = true;
+
   indexTeams(data.teams);
   renderSeasonLabel();
   // Games finishing is exactly what makes new news, so the wire refreshes with
@@ -2177,6 +2340,9 @@ async function refreshLeague({ quiet = false } = {}) {
   renderSchedule();
   renderStandings();
   renderStats();
+  // Only when it is the screen being looked at: re-rendering the squad page
+  // re-fetches a squad, and that is not worth doing for a tab nobody is on.
+  if (state.view === "teams") renderTeamDetail();
   if (openId && !quiet) selectGame(openId);
   else if (openId) markSelectedFixture(openId);
 }

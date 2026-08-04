@@ -28,7 +28,7 @@ from ..league.calendar import PACIFIC, GameStatus
 from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
-from ..league import playoffs, power
+from ..league import history, playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
 from ..models import Lineup
@@ -192,12 +192,26 @@ def player_detail(player) -> dict:
     }
 
 
-def team_squad(team) -> dict:
-    """A team with its full roster. The heavy one -- fetched per team."""
+def team_squad(team, league=None) -> dict:
+    """A team with its full roster. The heavy one -- fetched per team.
+
+    With a league to read, each player also gets the two views a squad page
+    wants that a roster alone cannot answer: his last few box scores, and his
+    advanced line at checkpoints through the season. Both are derived from the
+    fixture list in `league.history`; neither is stored anywhere.
+
+    They ride on the squad rather than the bootstrap on purpose. This is the
+    same split that keeps 360 players with 81 attributes each off the first
+    paint -- a game log is only ever read on the screen that shows one club.
+    """
     chemistry = evaluate_chemistry(team, Lineup(team.starters()))
     data = team_summary(team)
     data["lineupChemistry"] = chemistry.to_dict()
     data["players"] = [player_detail(p) for p in team.players]
+    if league is not None:
+        data["gameLog"] = history.game_log(league, team.id)
+        data["advancedSeries"] = history.team_advanced_series(league, team.id)
+        data["seasons"] = [league.season]
     return data
 
 

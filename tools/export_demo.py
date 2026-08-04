@@ -88,7 +88,7 @@ def main() -> None:
     payload = bootstrap(league, minimum_games=5)
     payload["live"] = False
     payload["league"]["trackerSpeed"] = league.tracker_speed
-    payload["teams"] = [team_squad(t) for t in league.teams.values()]
+    payload["teams"] = [team_squad(t, league) for t in league.teams.values()]
     # `bootstrap` already picked the day; give every fixture on it the full
     # play-by-play, since a published page cannot fetch one later.
     day_ids = {g["id"] for g in payload["day"]["games"]}

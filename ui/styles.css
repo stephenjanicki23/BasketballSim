@@ -1326,9 +1326,51 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   color: var(--ink);
 }
 
-#squad-table tbody tr, #profile-games tbody tr { cursor: pointer; }
-#squad-table tbody tr.is-selected { background: var(--raised); }
-#squad-table tbody tr.is-selected .player-name { font-weight: 600; color: var(--ink); }
+/* Game log. A win and a loss should be separable at a glance without the
+ * colour doing the work on its own -- the letter is still there. */
+.card-note {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.log-win { color: var(--live); font-weight: 600; }
+.log-loss { color: var(--away); }
+.log-round {
+  display: block;
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ *
+ * Progression chart
+ * ------------------------------------------------------------------ */
+#chart-stat { min-width: 108px; }
+
+.chart-wrap { padding: 4px 14px 0; }
+.chart { margin: 0; }
+.chart svg { display: block; width: 100%; height: auto; }
+
+.chart-grid { stroke: var(--hairline-soft); stroke-width: 1; }
+.chart-zero { stroke: var(--hairline); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-tick {
+  fill: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart-area { fill: var(--accent); opacity: .10; stroke: none; }
+.chart-dot { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
 
 @media (max-width: 900px) {
   .squad-page { grid-template-columns: 1fr; }
