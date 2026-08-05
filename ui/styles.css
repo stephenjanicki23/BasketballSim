@@ -1806,3 +1806,170 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   .advance-btn { width: 100%; }
 }
 .off-subhead { margin: 4px 0 0; font: 600 13px/1.4 var(--sans); }
+
+/* ------------------------------------------------------------------ *
+ * MVP race
+ *
+ * Three blocks, in the order the argument runs: the board (who leads), the
+ * ballots (why the panel disagrees), the columns (a writer at length).
+ * ------------------------------------------------------------------ */
+
+.mvp-page { display: grid; gap: 26px; padding-top: 4px; }
+.mvp-section { display: grid; gap: 10px; }
+.mvp-heading { margin: 0; font: 600 15px/1.3 var(--sans); }
+
+.mvp-caveat {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mvp-board { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+
+.mvp-row {
+  display: grid;
+  grid-template-columns: 28px minmax(140px, 1.4fr) minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.mvp-row.is-leader { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+
+.mvp-rank {
+  font: 600 15px/1 var(--mono);
+  color: var(--muted);
+  text-align: center;
+}
+.mvp-row.is-leader .mvp-rank { color: var(--accent); }
+
+.mvp-who { display: grid; gap: 2px; min-width: 0; }
+.mvp-meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font: 500 10px/1.4 var(--mono);
+  color: var(--muted);
+}
+
+.mvp-share { display: grid; gap: 3px; }
+.mvp-bar {
+  display: block;
+  height: 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+  overflow: hidden;
+}
+.mvp-bar-fill { display: block; height: 100%; background: var(--accent); }
+.mvp-share-value {
+  font: 600 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.mvp-votes { display: grid; gap: 2px; text-align: right; }
+.mvp-points { font: 600 13px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.mvp-firsts { font: 500 10px/1.3 var(--mono); color: var(--muted); }
+
+/* The seven stat cells sit under the row on a narrow screen rather than
+ * squeezing the name column to nothing. */
+.mvp-stats {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--hairline-soft);
+}
+.mvp-stat { display: flex; align-items: baseline; gap: 5px; }
+.mvp-stat-label {
+  font: 600 9px/1.4 var(--mono);
+  letter-spacing: .1em;
+  color: var(--muted);
+}
+.mvp-stat-value {
+  font: 600 12px/1.3 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ballot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.ballot-card {
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 13px 15px;
+  display: grid;
+  gap: 9px;
+}
+.ballot-head { display: grid; gap: 1px; }
+.ballot-writer { font: 600 13px/1.3 var(--sans); }
+.ballot-outlet {
+  font: 500 10px/1.4 var(--mono);
+  letter-spacing: .04em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.ballot-creed {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  font-style: italic;
+}
+.ballot-reads { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--raised);
+  border: 1px solid var(--hairline-soft);
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.ballot-picks {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--hairline-soft);
+  display: grid;
+  gap: 5px;
+}
+.ballot-pick {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+}
+.ballot-place {
+  font: 600 10px/1.4 var(--mono);
+  color: var(--muted);
+  text-align: center;
+}
+.ballot-pick:first-child .ballot-place { color: var(--accent); }
+.ballot-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ballot-case {
+  font: 500 10px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .mvp-row { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .mvp-share { grid-column: 1 / -1; }
+  .ballot-grid { grid-template-columns: 1fr; }
+}

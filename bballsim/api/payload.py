@@ -31,6 +31,7 @@ from ..league.calendar import PACIFIC, GameStatus
 from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
+from .. import mvp
 from ..league import franchise, history, playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
@@ -506,6 +507,11 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
             for row in league.stats.player_table(minimum_games=minimum_games)
         ],
         "teamStats": league.stats.team_table(),
+        # The MVP race: ten ballots and what they add up to. Small enough to
+        # ship whole -- ten ballots of five is fifty rows against the four
+        # megabytes of rosters that forced the bootstrap split -- and shipping
+        # it here means the published demo carries the race too.
+        "mvp": mvp.race(league),
     })
     return payload
 

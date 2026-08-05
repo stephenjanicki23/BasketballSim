@@ -1274,6 +1274,26 @@ function statsColumns() {
 }
 
 function renderStats() {
+  // The MVP race is not a sortable grid, so it replaces the table rather than
+  // filling it. Everything below this point assumes columns and rows.
+  const isMvp = state.statsScope === "mvp";
+  const sheet = $("#stats-sheet");
+  const page = $("#mvp-page");
+  const tabs = $("#stat-tabs");
+  const note = $("#stats-note");
+  if (sheet) sheet.hidden = isMvp;
+  if (page) page.hidden = !isMvp;
+  if (tabs) tabs.hidden = isMvp;
+  if (note) note.hidden = isMvp;
+  $$("#stats-scope button").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.scope === state.statsScope);
+  });
+  if (isMvp) {
+    $("#stats-caption").textContent = "";
+    renderMvp();
+    return;
+  }
+
   const columns = statsColumns();
   const rows = [...statsRows()];
   const sortKey = state.statsSort;
@@ -1381,6 +1401,7 @@ function buildStatTabs() {
     button.onclick = () => {
       state.statsScope = button.dataset.scope;
       state.statsSort = state.statsScope === "advanced" ? "per" : "points";
+      if (state.statsScope === "mvp") state.statsSort = "points";
       state.statsDescending = true;
       renderStats();
     };
@@ -3518,4 +3539,179 @@ function offPayroll(body) {
     tbody.appendChild(tr);
   });
   appendTable(body, table);
+}
+
+/* ------------------------------------------------------------------ *
+ * MVP race
+ *
+ * Three things on one page, and the order is the argument: the board first
+ * (who is actually winning), then the ten ballots (why they disagree), then
+ * the columns (a writer making his case at length).
+ *
+ * Nothing here computes a vote. Every number on this page was tallied in
+ * `bballsim/mvp.py` and shipped in the payload; this file lays it out.
+ * ------------------------------------------------------------------ */
+
+function mvpData() {
+  return (state.data && state.data.mvp) || null;
+}
+
+function renderMvp() {
+  const page = $("#mvp-page");
+  if (!page) return;
+  page.textContent = "";
+  const data = mvpData();
+
+  if (!data) {
+    page.appendChild(el("p", "empty", "No MVP race in this payload."));
+    return;
+  }
+  if (!data.open) {
+    page.appendChild(el("p", "empty",
+      `The race opens once the league has played a little more. `
+      + `${data.gamesPlayed} of ${data.gamesScheduled} games are in.`));
+    return;
+  }
+
+  if (data.early) {
+    page.appendChild(el("p", "mvp-caveat",
+      `Provisional — only ${Math.round((data.share || 0) * 100)}% of the season `
+      + `has been played, and a panel voting this early is arguing about a `
+      + `sample. Players need ${data.minimumGames} games to be eligible.`));
+  }
+
+  renderMvpBoard(page, data);
+  renderMvpBallots(page, data);
+  renderMvpColumns(page, data);
+}
+
+/* --- the board ------------------------------------------------------ */
+
+function renderMvpBoard(page, data) {
+  const section = el("section", "mvp-section");
+  section.appendChild(el("h3", "mvp-heading", "Front runners"));
+  section.appendChild(el("p", "note",
+    `Ten writers, five names each. First place is worth ${data.ballotPoints[0]} `
+    + `points, fifth is worth ${data.ballotPoints[4]}; a unanimous winner would `
+    + `score ${data.maxPoints}.`));
+
+  const list = el("ol", "mvp-board");
+  data.contenders.forEach((c, index) => {
+    const row = el("li", "mvp-row" + (index === 0 ? " is-leader" : ""));
+    row.appendChild(el("span", "mvp-rank", String(index + 1)));
+
+    const who = el("div", "mvp-who");
+    who.appendChild(playerLink(c.name, c.playerId, c.teamId));
+    const meta = el("span", "mvp-meta");
+    meta.appendChild(teamLink(c.teamId, (node) => {
+      node.textContent = (state.teams.get(c.teamId) || {}).abbr || c.teamId;
+    }));
+    meta.appendChild(el("span", null, ` · ${c.record} · ${c.games} games`));
+    who.appendChild(meta);
+    row.appendChild(who);
+
+    // The share bar is the headline: it says how close the race is at a
+    // glance, which a points total on its own does not.
+    const share = el("div", "mvp-share");
+    const bar = el("span", "mvp-bar");
+    const fill = el("span", "mvp-bar-fill");
+    fill.style.width = `${Math.max(2, Math.round((c.share || 0) * 100))}%`;
+    bar.appendChild(fill);
+    share.appendChild(bar);
+    share.appendChild(el("span", "mvp-share-value", (c.share || 0).toFixed(3)));
+    row.appendChild(share);
+
+    const votes = el("div", "mvp-votes");
+    votes.appendChild(el("span", "mvp-points", `${c.points} pts`));
+    votes.appendChild(el("span", "mvp-firsts",
+      c.firsts ? `${c.firsts} × 1st` : `${c.appearances} of 10 ballots`));
+    row.appendChild(votes);
+
+    const stats = el("div", "mvp-stats");
+    for (const [label, value] of [
+      ["PPG", c.ppg], ["RPG", c.rpg], ["APG", c.apg],
+      ["PER", c.per], ["WS", c.ws], ["VORP", c.vorp], ["TS%", c.tsPct],
+    ]) {
+      const cell = el("span", "mvp-stat");
+      cell.appendChild(el("span", "mvp-stat-label", label));
+      // Fixed to one decimal. Python rounds to 1dp, but JSON drops a trailing
+      // zero and `String(8)` is "8" -- which put "APG 8" beside "PPG 27.2" in
+      // the same row and made the column look like two different measurements.
+      cell.appendChild(el("span", "mvp-stat-value", Number(value).toFixed(1)));
+      stats.appendChild(cell);
+    }
+    row.appendChild(stats);
+    list.appendChild(row);
+  });
+  section.appendChild(list);
+
+  const others = data.alsoReceivingVotes || [];
+  if (others.length) {
+    section.appendChild(el("p", "note",
+      "Also receiving votes: "
+      + others.map((o) => `${o.name} (${o.points})`).join(", ") + "."));
+  }
+  page.appendChild(section);
+}
+
+/* --- the ballots ---------------------------------------------------- */
+
+function renderMvpBallots(page, data) {
+  const section = el("section", "mvp-section");
+  section.appendChild(el("h3", "mvp-heading", "The panel"));
+  section.appendChild(el("p", "note",
+    "Ten voters, ten different sets of columns. They are not weightings of one "
+    + "formula — an availability voter and a per-minute voter will rank the "
+    + "same two players in opposite orders, on purpose."));
+
+  const grid = el("div", "ballot-grid");
+  data.ballots.forEach((ballot) => {
+    const card = el("article", "ballot-card");
+
+    const head = el("div", "ballot-head");
+    head.appendChild(el("span", "ballot-writer", ballot.name));
+    head.appendChild(el("span", "ballot-outlet", ballot.outlet));
+    card.appendChild(head);
+    card.appendChild(el("p", "ballot-creed", `“${ballot.creed}”`));
+
+    const chips = el("div", "ballot-reads");
+    (ballot.reads || []).forEach((r) => chips.appendChild(el("span", "chip", r)));
+    card.appendChild(chips);
+
+    const picks = el("ol", "ballot-picks");
+    ballot.picks.forEach((pick) => {
+      const item = el("li", "ballot-pick");
+      item.appendChild(el("span", "ballot-place", String(pick.rank)));
+      const name = el("span", "ballot-name");
+      name.appendChild(playerLink(pick.name, pick.playerId, pick.teamId));
+      item.appendChild(name);
+      item.appendChild(el("span", "ballot-case", pick.case));
+      picks.appendChild(item);
+    });
+    card.appendChild(picks);
+    grid.appendChild(card);
+  });
+  section.appendChild(grid);
+  page.appendChild(section);
+}
+
+/* --- the columns ---------------------------------------------------- */
+
+/* The writers' analytical pieces are written by the same detectors that fill
+ * the home page, so they arrive in the news feed. Pulled out by category here
+ * so the race page carries them too, where they belong. */
+function renderMvpColumns(page, data) {
+  const stories = (state.data.news || []).filter((s) => s.category === "MVP Column");
+  if (!stories.length) return;
+
+  const section = el("section", "mvp-section");
+  section.appendChild(el("h3", "mvp-heading", "Columns"));
+  section.appendChild(el("p", "note",
+    "Each writer arguing his own ballot. Which writers run rotates as the "
+    + "season goes on, so the whole panel comes round."));
+
+  const grid = el("div", "wire-grid");
+  stories.forEach((story, index) => grid.appendChild(storyCard(story, index === 0)));
+  section.appendChild(grid);
+  page.appendChild(section);
 }

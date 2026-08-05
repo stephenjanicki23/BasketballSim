@@ -70,6 +70,7 @@ POWER_RANKINGS = "Power Rankings"
 # `offseason_stories` rather than `write_stories`, because the summer is a
 # different feed with a different question: not "what happened last night" but
 # "what has changed about who plays for whom".
+MVP_COLUMN = "MVP Column"
 RETIREMENT = "Retirement"
 CONTRACT = "Contract"
 FREE_AGENCY = "Free Agency"
@@ -87,6 +88,10 @@ ANCHOR = {
     COACHING: 55,
     LEAGUE_NEWS: 45,
     POWER_RANKINGS: 68,
+    # A columnist arguing a case sits just under the scoring-race report it
+    # argues about -- the report is what happened, the column is one reading of
+    # it, and the page should lead with the first.
+    MVP_COLUMN: 66,
     # A career ending is the biggest story a summer produces; a role player
     # re-signing is the smallest.
     RETIREMENT: 88,
@@ -1713,6 +1718,35 @@ def mvp_race(room: Newsroom) -> list[Story]:
     )]
 
 
+def mvp_columns(room: Newsroom) -> list[Story]:
+    """The voting panel's columnists, adapted into feed stories.
+
+    A thin adapter and nothing more. The argument, the numbers and the figure
+    audit all happen in `bballsim/mvp.py`, which is where the ballots live --
+    a column is a voter explaining his own ballot, so it belongs beside the
+    ballot rather than in the newsroom's own detector list.
+    """
+    from . import mvp
+
+    stories: list[Story] = []
+    for piece in mvp.columns(room.league):
+        stories.append(Story(
+            headline=piece["headline"],
+            subheadline=piece["subheadline"],
+            category=MVP_COLUMN,
+            # A dissenting column is the more interesting read, so it outranks
+            # one that agrees with the board everybody can already see.
+            importance=held(ANCHOR[MVP_COLUMN] + (6 if piece["dissenting"] else 0)),
+            summary=piece["summary"],
+            article=piece["article"],
+            id=piece["id"],
+            team_ids=tuple(piece["teamIds"]),
+            player_ids=tuple(piece["playerIds"]),
+            figures=piece["figures"],
+        ))
+    return stories
+
+
 def coaching(room: Newsroom) -> list[Story]:
     """Who is getting the most out of a bench.
 
@@ -1930,6 +1964,9 @@ CATEGORY_LIMIT = {
     HOT_STREAK: 2,
     GAME_RECAP: 3,
     MVP_RACE: 1,
+    # Two at a time. Ten writers on the same race in one morning is a wall,
+    # not a feed, and the rotation in `mvp.columns` brings the rest round.
+    MVP_COLUMN: 2,
     COACHING: 1,
     LEAGUE_NEWS: 1,
     POWER_RANKINGS: 2,
@@ -1943,7 +1980,8 @@ CATEGORY_LIMIT = {
 # table never appear, however long the season runs. These four are the stories
 # that tell a reader where the season is rather than what happened last night,
 # and the page keeps room for them.
-RESERVED_FOR = (GAME_RECAP, POWER_RANKINGS, MVP_RACE, LEAGUE_NEWS, COACHING)
+RESERVED_FOR = (GAME_RECAP, POWER_RANKINGS, MVP_RACE, MVP_COLUMN, LEAGUE_NEWS,
+                COACHING)
 
 
 def write_stories(league, limit: int = 12) -> list[Story]:
@@ -1980,6 +2018,7 @@ def write_stories(league, limit: int = 12) -> list[Story]:
     stories.extend(streaks(room))
     stories.extend(power_moves(room))
     stories.extend(mvp_race(room))
+    stories.extend(mvp_columns(room))
     stories.extend(coaching(room))
     stories.extend(league_news(room))
 

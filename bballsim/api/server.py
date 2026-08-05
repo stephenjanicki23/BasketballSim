@@ -13,6 +13,7 @@ Endpoints
     POST /api/clock/advance {"minutes": n}  push the league clock forward
     POST /api/clock/speed   {"speed": n}    game seconds per real second
 
+    GET  /api/mvp                           the MVP race: ten ballots, one board
     GET  /api/offseason                     the whole OFFSEASON menu
     GET  /api/offseason/payrolls            every club's payroll, richest first
     POST /api/offseason/open                tick contracts, build the expiring list
@@ -238,6 +239,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                 payload["home_box"] = game.result.home_box.to_dict()
                 payload["away_box"] = game.result.away_box.to_dict()
             self._send_json(payload)
+
+        elif parts == ["mvp"]:
+            # Also in the bootstrap; here on its own so a page watching a live
+            # race can refresh the board without re-fetching the season.
+            self._send_json(views.mvp.race(league))
 
         elif parts == ["offseason"]:
             # The whole menu in one fetch. Gated on the Finals having concluded,

@@ -374,3 +374,71 @@ reasoning next to it, not a literal inside a function:
 Tests: `tests/test_contracts.py` (44) and `tests/test_franchise.py` (65).
 Several of them exist because a calibration or a full-season run failed them,
 and each of those carries a docstring saying which bug it is holding down.
+
+---
+
+## 8. The MVP race
+
+Documented here rather than in its own file because it shares the discipline:
+`bballsim/mvp.py` is another derived-on-read reading of a season.
+
+**There is no MVP formula.** A single score would look objective, be one
+formula wearing a rosette, and give a reader nothing to follow. There are ten
+voters instead, each with a stated creed and a scoring function that follows
+from it. The leaderboard is what their ballots add up to, so a player leads
+because six of ten writers put him first — not because a number said so.
+
+| Voter | Reads |
+|---|---|
+| Marlon Deeds, *The Sporting Ledger* | PPG, RPG, APG, STL, BLK |
+| Priya Raghunath, *Hardwood Numbers* | VORP, BPM |
+| Cal Berringer, *Tribune Sports* | Record, WS |
+| Nadia Oyelaran, *The Efficiency Report* | TS%, WS/48, ORtg |
+| Desmond Achebe, *Full Court Press* | DBPM, DWS, STL, BLK |
+| Ruth Kettleborough, *The Beat* | Games, WS |
+| Ike Vandermolen, *Possession Weekly* | USG%, TS%, PPG |
+| Soo-jin Park, *Per Thirty-Six* | Per-36, PER |
+| Gideon Marsh, *Possession Quarterly* | AST%, TOV%, TRB%, STL% |
+| Bettina Cavallo, *The Column* | Record, PPG, PER |
+
+These are not ten weightings of one idea. The availability voter will rank a
+sixty-eight-game superstar behind an eighty-two-game starter; the per-minute
+voter does the exact reverse. On the committed season the panel produces seven
+different first-place picks and twenty-five players receiving votes.
+
+Ballots are five deep and scored the way the real award is — 10-7-5-3-1, a
+unanimous winner scoring 100 — and ties break on first-place votes, because a
+panel disagreeing *about the winner* counts for more than broad mild support.
+
+### No voter reads a column the engine never fills
+
+The obvious tenth angle is on/off impact, and `PlayerLine.plus_minus` exists.
+It is zero for every player in every game this engine has ever simulated —
+`league/history.py` already omits the column from its game log for that reason.
+A voter whose creed was "the scoreboard when he plays" would have been ranking
+on win shares while claiming otherwise, which is worse than not having the
+angle. Gideon Marsh reads possession rates instead. Give the engine on/off
+tracking and an impact voter becomes real; a test asserts plus-minus is still
+empty so that day is noticed.
+
+### The case has to explain the ranking
+
+Each pick shows the numbers its voter actually weighs. A first version showed
+one number per voter, and several rank on a composite — so the VORP ballot read
+0.80, 0.75, 0.73, 0.79, 0.64 down the page, with fourth apparently above
+second. A column that contradicts the ranking beside it makes a working ballot
+look broken.
+
+### The columns
+
+Each writer argues his own ballot at length: his pick, his number, and why the
+obvious alternative is wrong. A dissenting column outranks an agreeing one in
+the feed, because a writer picking a fight is the more interesting read. Only
+two or three run at a time and which ones rotate with the season, so ten pieces
+on the same race never land in one morning.
+
+The newsroom's rule holds and is enforced: every figure comes off a season line
+or an advanced row and passes through `Copy`. The audit caught a real leak here
+— the summary was built from the ballot's display string, whose formatting
+never went through `Copy`, so it printed "0.80 VORP" when only "0.8" had been
+recorded.

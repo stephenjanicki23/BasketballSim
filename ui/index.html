@@ -169,14 +169,18 @@
               <button data-scope="players" class="is-active">Players</button>
               <button data-scope="teams">Teams</button>
               <button data-scope="advanced">Advanced</button>
+              <button data-scope="mvp">MVP Race</button>
             </div>
           </div>
         </div>
         <div class="stat-tabs" id="stat-tabs" role="tablist" aria-label="Sort by stat"></div>
-        <div class="sheet table-scroll">
+        <div class="sheet table-scroll" id="stats-sheet">
           <table id="stats-table"></table>
         </div>
-        <p class="note">
+        <!-- The MVP race replaces the table entirely: it is a board, ten
+             ballots and a set of columns rather than a sortable grid. -->
+        <div class="mvp-page" id="mvp-page" hidden></div>
+        <p class="note" id="stats-note">
           Per-game averages over the full 870-game season, accumulated by the league
           as each game finalises — not from the 30 games that ship with play-by-play.
           Pick a tab to sort by that stat, or click any column header; click again to
