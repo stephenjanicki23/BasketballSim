@@ -243,6 +243,10 @@ const state = {
   // what has been typed. Cleared when a deal is agreed.
   offOffers: new Map(),
   offReplies: new Map(),
+  // The one-line summary of a summer that has just been advanced. Kept
+  // separately from the phase label so re-rendering does not overwrite it and
+  // so the phase label is free to update on every render.
+  offReport: "",
 };
 
 const REDUCED_MOTION = typeof matchMedia === "function"
@@ -2962,13 +2966,14 @@ async function reloadAfterOffseason(report) {
   renderTeamDetail();
   await renderOffseasonTab();
   renderOffseason();
-  const phase = $("#offseason-phase");
-  if (phase && report) {
-    phase.textContent =
+  if (report) {
+    state.offReport =
       `${report.season} is complete. ${report.playersReSigned} players and `
       + `${report.coachesReSigned} coaches re-signed, ${report.freeAgents} reached `
       + `the market, ${report.retired} retired, ${report.drafted} drafted. `
       + `${report.seasonStarting} is ready.`;
+    const phase = $("#offseason-phase");
+    if (phase) phase.textContent = state.offReport;
   }
 }
 
@@ -2981,7 +2986,10 @@ function renderOffseason() {
     return;
   }
   if (title) title.textContent = `${data.season} Offseason`;
-  if (phase && !phase.textContent) phase.textContent = data.phaseLabel || "";
+  // Always rewritten, because the phase changes underneath it: the line was
+  // set once at boot and then never updated, so a summer with 199 expiring
+  // contracts open on screen still said "Season in progress".
+  if (phase) phase.textContent = state.offReport || data.phaseLabel || "";
   // Hidden on a published page, which has no server to advance, and once the
   // summer has already been run -- pressing it again would ask the API to
   // start an offseason for a season that has not been played.
@@ -3020,14 +3028,13 @@ function plannedPanel(key) {
   const copy = {
     freeagency: [
       "Free Agency",
-      "Players whose own club chose not to re-sign them are gathered into a "
-      + "league-wide pool, which you can see under Expected Free Agents. What "
-      + "does not exist yet is the bidding: no club, including yours, can sign "
-      + "another club's free agent.",
+      "The pool below is real: every player whose own club chose not to match "
+      + "his asking price, gathered league-wide. What does not exist yet is "
+      + "the bidding — no club, including yours, can sign another club's free "
+      + "agent.",
       "Unsigned players stay on their existing rosters and count nothing "
-      + "against payroll. The pool is built correctly every summer and saved, "
-      + "so turning it into a real signing period does not need any of this "
-      + "rebuilding.",
+      + "against payroll. The pool is built and saved every summer, so turning "
+      + "it into a real signing period does not need any of this rebuilding.",
     ],
     draft: [
       "Draft",
@@ -3230,14 +3237,18 @@ function renderNegotiationScreen(body, rows, isCoach) {
   if (!isCoach) offFilters(body);
   const shown = isCoach ? rows : applyOffFilters(rows);
 
+  // A coach has no squad role, so the sentence that explains playing time
+  // does not apply to him -- offering it anyway would describe a lever that
+  // is not in his decision.
   body.appendChild(el("p", "note", offseasonIsDone()
     ? "This summer is settled. Everything you did not agree by hand was "
       + "negotiated for you when you advanced; the outcome of each talk is "
       + "below."
     : "Offer a length and a salary. He will accept, reject, or come back with "
       + "a counter — and what he wants depends on how loyal he is, how much he "
-      + "wants paying, whether he thinks this club can win, and what his role "
-      + "would be. Anything you leave unsettled is negotiated for you when you "
+      + "wants paying, and whether he thinks this club can win"
+      + (isCoach ? ". " : ", and what his role would be. ")
+      + "Anything you leave unsettled is negotiated for you when you "
       + "advance."));
 
   const list = el("div", "negotiation-list");
