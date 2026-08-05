@@ -650,12 +650,15 @@ def coach_demand(coach, where: Situation) -> Demand:
         + (p.loyalty - TRAIT_AVERAGE) * (0.40 if where.incumbent else 0.0)
         + (where.contender - 0.5) * (p.winning_desire / TRAIT_AVERAGE) * 30.0
     )
+    # Computed once. Written twice, it is two expressions that have to agree
+    # forever -- and the sentence would quietly start describing a different
+    # number the first time either changed.
+    asked = int(max(K.COACH_MINIMUM_SALARY, value * max(0.6, factor)))
     return Demand(
         years=years,
-        salary=int(max(K.COACH_MINIMUM_SALARY, value * max(0.6, factor))),
+        salary=asked,
         interest=interest,
-        reason=f"{coach.short_name} is looking for "
-               f"{format_money(int(max(K.COACH_MINIMUM_SALARY, value * max(0.6, factor))))} "
+        reason=f"{coach.short_name} is looking for {format_money(asked)} "
                f"a year over {years} {_years(years)}.",
     )
 
