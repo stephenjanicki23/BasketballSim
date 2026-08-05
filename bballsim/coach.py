@@ -141,6 +141,11 @@ class Coach:
     seasons_coached: int = 0
     ratings: CoachRatings = None  # type: ignore[assignment]
 
+    # A `contracts.Contract`, held untyped because `contracts` prices a coach
+    # from his ratings and so imports this module. Same shape as a player's,
+    # because a signing is the same event whoever it happens to.
+    contract: object | None = None
+
     def __post_init__(self) -> None:
         if self.ratings is None:
             self.ratings = CoachRatings()

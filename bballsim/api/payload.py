@@ -21,6 +21,9 @@ Two rules keep this honest:
 from __future__ import annotations
 
 from .. import composites as C
+from .. import contracts
+from .. import negotiation
+from .. import payroll
 from ..ability import CA_MAX, CA_TIERS, scout, stars_from_rating
 from ..chemistry import evaluate as evaluate_chemistry
 from ..coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
@@ -28,7 +31,7 @@ from ..league.calendar import PACIFIC, GameStatus
 from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
-from ..league import history, playoffs, power
+from ..league import franchise, history, playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
 from ..models import Lineup
@@ -130,6 +133,9 @@ def team_summary(team) -> dict:
         "coach": team.coach.to_dict() if team.coach else None,
         "chemistry": round(team.team_chemistry, 1),
         "tactics": team.tactics.to_dict(),
+        # Summed from the contracts every time it is asked for -- see the note
+        # at the top of `bballsim/payroll.py` for why it is never stored.
+        "payroll": payroll.summary(team).to_dict(),
     }
 
 
@@ -192,6 +198,13 @@ def player_detail(player) -> dict:
         # One star rating per attribute group, so the squad page leads with a
         # summary and the 81 numbers sit behind it.
         "groupStars": group_summaries(player.ratings),
+        # What he is owed. `None` for an unsigned player, which every roster
+        # screen has to render rather than assume away.
+        "contract": player.contract.to_dict() if player.contract else None,
+        # What an open market would pay him, recomputed every time. The gap
+        # between this and his salary is the only honest read on whether a
+        # contract is good business.
+        "marketValue": contracts.market_value(player),
     }
 
 
@@ -493,5 +506,178 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
             for row in league.stats.player_table(minimum_games=minimum_games)
         ],
         "teamStats": league.stats.team_table(),
+    })
+    return payload
+
+
+# --------------------------------------------------------------------------
+# The offseason.
+#
+# One shape per screen in the OFFSEASON menu, assembled here rather than in the
+# UI for the same reason every other view is: the static demo and the live app
+# read the same JSON, and a screen built in JavaScript would only exist in one
+# of them.
+#
+# Everything below is *derived on read* from the contracts and the offseason
+# record. Nothing here is stored in this shape.
+# --------------------------------------------------------------------------
+
+def _line_for(league, player_id: str):
+    """A player's season line, or None. Used for the per-game columns."""
+    return league.stats.players.get(player_id)
+
+
+def _per_game(line, field: str) -> float:
+    if line is None or not line.games:
+        return 0.0
+    return round(getattr(line, field, 0) / line.games, 1)
+
+
+def free_agent_row(league, entry) -> dict:
+    """One row of the Expected Free Agents table.
+
+    Carries the production columns the brief asks for -- points, rebounds and
+    assists per game -- read off the season totals rather than off the snapshot
+    in the offseason record, because the record stores contract facts and the
+    stats belong to the season.
+    """
+    team = league.teams.get(entry.team_id)
+    row = entry.to_dict()
+    row["teamName"] = team.full_name if team else ""
+    row["teamAbbr"] = team.abbreviation if team else ""
+
+    if entry.is_coach:
+        coach = getattr(team, "coach", None) if team else None
+        row.update({
+            "position": "Head Coach",
+            "age": getattr(coach, "age", 0),
+            "overall": round(getattr(coach.ratings, "reputation", 0.0), 1) if coach else 0.0,
+            "ratings": coach.ratings.to_dict() if coach else {},
+            "tier": coach.tier if coach else "",
+            "specialism": coach.specialism if coach else "",
+            "marketValue": contracts.coach_market_value(coach) if coach else 0,
+        })
+        return row
+
+    player = team.player(entry.holder_id) if team else None
+    if player is None:
+        return row
+    line = _line_for(league, player.id)
+    row.update({
+        "position": player.position.value,
+        "age": player.age,
+        "overall": player.overall,
+        "stars": player.stars,
+        "tier": player.tier,
+        "ppg": _per_game(line, "points"),
+        "rpg": _per_game(line, "rebounds"),
+        "apg": _per_game(line, "assists"),
+        "games": line.games if line else 0,
+        "marketValue": contracts.market_value(player),
+        "contract": player.contract.to_dict() if player.contract else None,
+    })
+    return row
+
+
+def negotiation_row(league, entry) -> dict:
+    """One row of the Contract Negotiations table.
+
+    Adds what the negotiating screen needs on top of the free-agent row: the
+    salary he is on now, what he is asking, and how keen he is. The hidden
+    personality is **not** shipped -- a manager who could read the four traits
+    would be solving rather than negotiating.
+    """
+    row = free_agent_row(league, entry)
+    team = league.teams.get(entry.team_id)
+    if team is None:
+        return row
+
+    if entry.is_coach:
+        coach = getattr(team, "coach", None)
+        if coach is None:
+            return row
+        where = negotiation.situation(league, team, franchise.coach_placeholder(team))
+        ask = negotiation.coach_demand(coach, where)
+    else:
+        player = team.player(entry.holder_id)
+        if player is None:
+            return row
+        where = negotiation.situation(league, team, player)
+        ask = negotiation.demand(player, where)
+
+    row.update(ask.to_dict())
+    row["currentSalary"] = entry.previous_salary
+    # What the club can spend, so the screen can warn before an offer is made
+    # rather than after. Informational only -- nothing rejects an offer for
+    # breaking the tax line, because nothing enforces it yet.
+    row["payroll"] = payroll.summary(team).to_dict()
+    return row
+
+
+def offseason_view(league) -> dict:
+    """The whole OFFSEASON menu, in one round trip.
+
+    Small enough to ship whole -- a few hundred rows of contract data against
+    the four megabytes of rosters that forced the bootstrap split -- and
+    shipping it whole means every sub-screen paints from one fetch.
+    """
+    available = franchise.is_available(league)
+    state = getattr(league, "offseason", None)
+    payload = {
+        "available": available,
+        "champion": playoffs.champion(league),
+        "season": league.season,
+        "phase": franchise.Phase.SEASON.value,
+        "phaseLabel": franchise.Phase.SEASON.label,
+        "expected": [],
+        "coaches": [],
+        "pool": [],
+        "signings": [],
+        "retired": [],
+        "news": [],
+        "payrolls": payroll.league_table(league.teams.values()),
+        "money": {
+            "salaryCap": contracts.SALARY_CAP,
+            "luxuryTax": contracts.LUXURY_TAX_LINE,
+            "firstApron": contracts.FIRST_APRON,
+            "secondApron": contracts.SECOND_APRON,
+            "minimum": contracts.MINIMUM_SALARY,
+            "maxByService": [
+                {"years": years, "salary": contracts.max_salary(years)}
+                for years in (0, 7, 10)
+            ],
+        },
+        # Which menu items do something and which are declared but inert. Sent
+        # rather than hard-coded in the UI so a placeholder cannot quietly look
+        # implemented on one screen and not the other.
+        "implemented": {
+            "news": True,
+            "expected": True,
+            "negotiations": True,
+            "coaches": True,
+            "freeAgency": False,
+            "retirements": True,
+            "draft": False,
+            "trainingCamp": False,
+            "advance": True,
+        },
+    }
+    if state is None:
+        return payload
+
+    payload.update({
+        # The summer belongs to the season that *finished*, not to the one the
+        # league has since rolled into. After `advance` the league is already on
+        # next season, and reading the label off it put "2027-28 Offseason" at
+        # the top of a page reporting 2026-27's business.
+        "season": state.season or league.season,
+        "phase": state.phase.value,
+        "phaseLabel": state.phase.label,
+        "expected": [negotiation_row(league, e) for e in state.expected],
+        "coaches": [negotiation_row(league, e) for e in state.coaches_expected],
+        "pool": [free_agent_row(league, e) for e in state.pool],
+        "signings": [s.to_dict() for s in state.signings],
+        "retired": list(state.retired),
+        "news": list(state.headlines),
     })
     return payload

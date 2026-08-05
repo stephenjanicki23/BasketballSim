@@ -104,6 +104,13 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 
 button, select, input { font-family: inherit; color: inherit; }
 
+/* The `hidden` attribute has to beat the element rules below it. The UA
+ * stylesheet's `[hidden] { display: none }` loses to any author rule that sets
+ * `display` -- and `button` below sets `display: inline-flex`, so `hidden` on a
+ * button did nothing at all. That is how the Offseason tab stayed on screen
+ * through a season it is supposed to be gated out of. */
+[hidden] { display: none !important; }
+
 button {
   background: var(--raised);
   border: 1px solid var(--hairline);
@@ -1558,3 +1565,244 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* ------------------------------------------------------------------ *
+ * Offseason
+ *
+ * A menu of nine screens, three of which are declared and not implemented.
+ * Those get a `planned-panel` that says so in words, rather than an empty
+ * table -- an empty table reads as a bug and a populated one would be a lie.
+ * ------------------------------------------------------------------ */
+
+.offseason-page { display: grid; gap: var(--gap); }
+
+.offseason-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+}
+.offseason-head h2 { margin: 0 0 2px; }
+
+.advance-btn {
+  padding: 9px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 600 12px/1 var(--sans);
+  letter-spacing: .02em;
+  cursor: pointer;
+}
+.advance-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.advance-btn:disabled { opacity: .55; cursor: progress; }
+
+/* The sub-nav scrolls rather than wrapping: nine items on a phone would
+ * otherwise become three rows of buttons and push the content off-screen. */
+.offseason-nav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.off-tab {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 600 11px/1.4 var(--sans);
+  letter-spacing: .03em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.off-tab:hover { color: var(--ink-2); }
+.off-tab.is-active { color: var(--ink); border-bottom-color: var(--accent); }
+
+.offseason-body { display: grid; gap: var(--gap); }
+
+.planned-panel {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 18px 20px;
+  max-width: 62ch;
+}
+.planned-panel h3 { margin: 0 0 4px; display: inline-block; }
+.planned-panel p { margin: 10px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+.planned-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  vertical-align: 3px;
+}
+
+/* Wide tables scroll inside their own box so the page body never does.
+ * The scroll lives on a wrapper rather than on the table, because
+ * `display:block` on a table makes it shrink to its content and stop filling
+ * the page. */
+.off-scroll { overflow-x: auto; width: 100%; }
+.off-table { width: 100%; white-space: nowrap; }
+.off-table thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.off-table td.col-name, .off-table th.col-name { text-align: left; }
+.off-table .money.is-negative { color: var(--away); }
+
+.off-filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.off-filters select { max-width: 220px; }
+
+/* Interest in returning: a bar plus its label, because the label alone loses
+ * the ordering inside a band and the bar alone is unreadable. */
+.interest {
+  display: inline-block;
+  width: 54px;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  overflow: hidden;
+  vertical-align: middle;
+  margin-right: 7px;
+}
+.interest-fill { display: block; height: 100%; background: var(--accent); }
+.interest-label { font: 500 10px/1.4 var(--mono); color: var(--muted); }
+
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+}
+.pill-re-signed, .pill-under_cap { background: color-mix(in srgb, var(--live) 18%, transparent); color: var(--live); }
+.pill-free { background: color-mix(in srgb, var(--home) 20%, transparent); color: var(--home); }
+.pill-tax, .pill-first_apron, .pill-second_apron,
+.pill-below_floor { background: color-mix(in srgb, var(--away) 18%, transparent); color: var(--away); }
+
+/* ---- negotiation cards ---- */
+
+.negotiation-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.negotiation-card {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+.negotiation-card.is-signed { opacity: .72; }
+
+.negotiation-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+.negotiation-who, .negotiation-club { display: grid; gap: 2px; min-width: 0; }
+.negotiation-club { text-align: right; }
+
+.negotiation-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+.negotiation-facts dt {
+  font: 600 9px/1.5 var(--mono);
+  letter-spacing: .1em;
+  color: var(--muted);
+}
+.negotiation-facts dd {
+  margin: 0;
+  font: 600 12px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.negotiation-reason { margin: 0; font-size: 12px; color: var(--ink-2); font-style: italic; }
+
+.offer-form {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline-soft);
+}
+.offer-label {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.offer-form input[type="number"] {
+  width: 72px;
+  padding: 5px 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--ground);
+  color: var(--ink);
+  font: 500 12px/1.3 var(--mono);
+}
+.offer-form input[type="number"]:nth-of-type(2) { width: 108px; }
+.offer-readout { font: 600 12px/1.3 var(--mono); color: var(--accent); }
+
+.offer-submit {
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink);
+  font: 600 11px/1.3 var(--sans);
+  cursor: pointer;
+}
+.offer-submit:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.offer-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+.negotiation-reply {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--raised);
+  color: var(--ink-2);
+}
+.negotiation-reply.is-accept { background: color-mix(in srgb, var(--live) 14%, transparent); color: var(--ink); }
+.negotiation-reply.is-reject { background: color-mix(in srgb, var(--away) 13%, transparent); color: var(--ink); }
+
+/* Salary on the roster rail, under the position line. */
+.roster-contract {
+  font: 500 10px/1.4 var(--mono);
+  color: var(--accent);
+  letter-spacing: .02em;
+}
+
+@media (max-width: 720px) {
+  .negotiation-list { grid-template-columns: 1fr; }
+  .offseason-head { flex-direction: column; align-items: stretch; }
+  .advance-btn { width: 100%; }
+}
+.off-subhead { margin: 4px 0 0; font: 600 13px/1.4 var(--sans); }

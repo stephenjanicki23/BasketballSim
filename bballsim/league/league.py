@@ -100,6 +100,11 @@ class League:
     # Seasons that are over, oldest first. Appended by the offseason; the only
     # thing in this class that survives a new schedule being installed.
     history: list = field(default_factory=list)
+    # The summer in progress: expiring contracts, negotiations, the free agent
+    # pool. A `franchise.Offseason`, held untyped because `franchise` reads the
+    # league to build it. `None` until the Finals conclude and the OFFSEASON
+    # menu opens -- `franchise.state()` creates it on first ask.
+    offseason: object | None = None
 
     # ------------------------------------------------------------------
     # Setup

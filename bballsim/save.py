@@ -242,7 +242,68 @@ def dump_player(player: Player) -> dict:
     health = dump_health(player.health)
     if health:
         data["health"] = health
+    # What he is owed, and how he negotiates. Both omitted when absent, for the
+    # same fingerprint reason as `career` and `health` above -- a league
+    # generated before contracts existed must still digest identically.
+    if getattr(player, "contract", None) is not None:
+        data["contract"] = dump_contract(player.contract)
+    if getattr(player, "negotiation", None) is not None:
+        data["negotiation"] = player.negotiation.to_dict()
     return data
+
+
+def dump_contract(contract) -> dict | None:
+    """A `contracts.Contract`.
+
+    Not `Contract.to_dict()`: that view is for screens and carries six derived
+    fields (`expiring`, `totalValue`, `remainingValue`...) that are functions of
+    the four real ones. Writing them would put derived numbers in a save file,
+    which is exactly what this module exists not to do.
+    """
+    if contract is None:
+        return None
+    data = {
+        "years": contract.years,
+        "years_remaining": contract.years_remaining,
+        "salary": contract.salary,
+        "contract_type": contract.contract_type.value,
+    }
+    if contract.signed_season:
+        data["signed_season"] = contract.signed_season
+    # The option and clause flags are all False on every generated contract, so
+    # writing them would add four dead keys to 360 players. They are written
+    # only when one is actually set -- which today is never, and one day will
+    # not be.
+    for key in ("team_option", "player_option", "no_trade"):
+        if getattr(contract, key):
+            data[key] = True
+    if not contract.guaranteed:
+        data["guaranteed"] = False
+    return data
+
+
+def load_contract(data: dict | None):
+    from .contracts import Contract, ContractType
+
+    if not data:
+        return None
+    return Contract(
+        years=int(data.get("years", 1)),
+        years_remaining=int(data.get("years_remaining", 0)),
+        salary=int(data.get("salary", 0)),
+        contract_type=ContractType(data.get("contract_type", "standard")),
+        signed_season=data.get("signed_season", ""),
+        team_option=bool(data.get("team_option", False)),
+        player_option=bool(data.get("player_option", False)),
+        no_trade=bool(data.get("no_trade", False)),
+        guaranteed=bool(data.get("guaranteed", True)),
+    )
+
+
+def load_negotiation(data: dict | None):
+    from .negotiation import Personality
+
+    return Personality.from_dict(data) if data else None
 
 
 def dump_health(health) -> dict | None:
@@ -363,6 +424,8 @@ def load_player(data: dict) -> Player:
         injured=data.get("injured", False),
         career=load_career(data.get("career")),
         health=load_health(data.get("health")),
+        contract=load_contract(data.get("contract")),
+        negotiation=load_negotiation(data.get("negotiation")),
     )
 
 
@@ -404,6 +467,10 @@ def dump_coach(coach: Coach) -> dict:
         "ratings": {
             key: getattr(coach.ratings, key) for key in CoachRatings.attribute_names()
         },
+        # Omitted when absent, so a league saved before coaches had contracts
+        # still digests identically. Same rule as the player fields above.
+        **({"contract": dump_contract(coach.contract)}
+           if getattr(coach, "contract", None) is not None else {}),
     }
 
 
@@ -416,6 +483,7 @@ def load_coach(data: dict) -> Coach:
         nationality=data.get("nationality", "United States"),
         seasons_coached=data.get("seasons_coached", 0),
         ratings=CoachRatings.from_dict(data.get("ratings", {})),
+        contract=load_contract(data.get("contract")),
     )
 
 
@@ -932,3 +1000,152 @@ def read_history(path: Path = HISTORY_PATH) -> list:
 
 def history_exists(path: Path = HISTORY_PATH) -> bool:
     return Path(path).is_file()
+
+
+# --------------------------------------------------------------------------
+# The offseason in progress.
+#
+# A fourth file, and it needs the same justification the third one did.
+#
+# Almost everything here is a record of something that has *stopped being
+# true*. Once a player re-signs, nothing left in the league says his contract
+# was expiring; once the pool is built, nothing says who chose to leave rather
+# than who was never offered. Those are events, not derivations, and an event
+# that is not written down is gone.
+#
+# The one exception is `phase`, which is genuine state: it is where the manager
+# has got to in the summer, and reloading into the middle of a negotiation has
+# to put him back where he was rather than at the start.
+#
+# Written separately from `league.json` because it is short-lived -- it is
+# rewritten several times a summer and is empty for the rest of the year -- and
+# because a file that only exists between seasons should not be able to corrupt
+# the one that holds the players.
+# --------------------------------------------------------------------------
+
+OFFSEASON_PATH = data_dir() / "offseason.json"
+
+
+def dump_free_agent(entry) -> dict:
+    data = {
+        "id": entry.holder_id,
+        "name": entry.name,
+        "team_id": entry.team_id,
+        "previous_salary": entry.previous_salary,
+        "requested_years": entry.requested_years,
+        "requested_salary": entry.requested_salary,
+        "interest": entry.interest,
+    }
+    if entry.is_coach:
+        data["is_coach"] = True
+    if entry.resolved:
+        data["resolved"] = entry.resolved
+    return data
+
+
+def load_free_agent(data: dict):
+    from .league.franchise import FreeAgent
+
+    return FreeAgent(
+        holder_id=data["id"],
+        name=data.get("name", ""),
+        team_id=data.get("team_id", ""),
+        is_coach=bool(data.get("is_coach", False)),
+        previous_salary=int(data.get("previous_salary", 0)),
+        requested_years=int(data.get("requested_years", 0)),
+        requested_salary=int(data.get("requested_salary", 0)),
+        interest=float(data.get("interest", 50.0)),
+        resolved=data.get("resolved", ""),
+    )
+
+
+def dump_signing(signing) -> dict:
+    data = {
+        "id": signing.holder_id,
+        "name": signing.name,
+        "team_id": signing.team_id,
+        "years": signing.years,
+        "salary": signing.salary,
+    }
+    if signing.is_coach:
+        data["is_coach"] = True
+    if signing.by_manager:
+        data["by_manager"] = True
+    return data
+
+
+def load_signing(data: dict):
+    from .league.franchise import Signing
+
+    return Signing(
+        holder_id=data["id"],
+        name=data.get("name", ""),
+        team_id=data.get("team_id", ""),
+        years=int(data.get("years", 1)),
+        salary=int(data.get("salary", 0)),
+        is_coach=bool(data.get("is_coach", False)),
+        by_manager=bool(data.get("by_manager", False)),
+    )
+
+
+def dump_offseason(offseason) -> dict | None:
+    """The summer in progress. `None` when there is not one."""
+    if offseason is None or offseason.phase.value == "season":
+        return None
+    return {
+        "version": SAVE_VERSION,
+        "season": offseason.season,
+        "phase": offseason.phase.value,
+        "expected": [dump_free_agent(e) for e in offseason.expected],
+        "coaches_expected": [dump_free_agent(e) for e in offseason.coaches_expected],
+        "signings": [dump_signing(s) for s in offseason.signings],
+        "pool": [dump_free_agent(e) for e in offseason.pool],
+        "retired": list(offseason.retired),
+        "headlines": list(offseason.headlines),
+    }
+
+
+def load_offseason(data: dict | None):
+    from .league.franchise import Offseason, Phase
+
+    if not data:
+        return None
+    version = data.get("version", 0)
+    if version > SAVE_VERSION:
+        raise ValueError(
+            f"offseason file is version {version}, this build understands {SAVE_VERSION}"
+        )
+    return Offseason(
+        season=data.get("season", ""),
+        phase=Phase(data.get("phase", "season")),
+        expected=[load_free_agent(e) for e in data.get("expected", [])],
+        coaches_expected=[load_free_agent(e) for e in data.get("coaches_expected", [])],
+        signings=[load_signing(s) for s in data.get("signings", [])],
+        pool=[load_free_agent(e) for e in data.get("pool", [])],
+        retired=list(data.get("retired", [])),
+        headlines=list(data.get("headlines", [])),
+    )
+
+
+def write_offseason(path: Path, offseason, *, indent: int | None = 1) -> Path | None:
+    """Write the summer, or delete the file when there is no summer.
+
+    Deleting matters: a stale `offseason.json` from last year would reopen the
+    OFFSEASON menu in the middle of a season, with an expiring list a year out
+    of date. An absent file is the correct representation of "not in one".
+    """
+    path = Path(path)
+    payload = dump_offseason(offseason)
+    if payload is None:
+        if path.is_file():
+            path.unlink()
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_round(payload), indent=indent, sort_keys=True) + "\n")
+    return path
+
+
+def read_offseason(path: Path = OFFSEASON_PATH):
+    if not Path(path).is_file():
+        return None
+    return load_offseason(json.loads(Path(path).read_text()))

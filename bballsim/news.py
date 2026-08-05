@@ -41,6 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from .ability import ca_tier
 from .engine.rng import seed_from_string
 from .league.calendar import GameStatus
 
@@ -65,6 +66,15 @@ COACHING = "Coaching"
 LEAGUE_NEWS = "League News"
 POWER_RANKINGS = "Power Rankings"
 
+# The offseason wire. These four only ever fire between seasons, from
+# `offseason_stories` rather than `write_stories`, because the summer is a
+# different feed with a different question: not "what happened last night" but
+# "what has changed about who plays for whom".
+RETIREMENT = "Retirement"
+CONTRACT = "Contract"
+FREE_AGENCY = "Free Agency"
+COACH_MOVE = "Coaching Move"
+
 ANCHOR = {
     TRIPLE_DOUBLE: 90,
     SEASON_HIGH: 85,
@@ -77,6 +87,12 @@ ANCHOR = {
     COACHING: 55,
     LEAGUE_NEWS: 45,
     POWER_RANKINGS: 68,
+    # A career ending is the biggest story a summer produces; a role player
+    # re-signing is the smallest.
+    RETIREMENT: 88,
+    FREE_AGENCY: 74,
+    CONTRACT: 62,
+    COACH_MOVE: 58,
 }
 
 # Thresholds. Each is the point at which a line stops being a good night and
@@ -2019,4 +2035,376 @@ def write_stories(league, limit: int = 12) -> list[Story]:
             take(story)
 
     feed.sort(key=lambda s: (-s.importance, -(s.day.toordinal() if s.day else 0), s.id))
+    return feed
+
+
+# --------------------------------------------------------------------------
+# The offseason wire.
+#
+# A separate feed with a separate entry point, and the separation is the point.
+# `write_stories` answers "what happened in the games"; between seasons there
+# are no games, and the questions a manager has are about who is leaving, who
+# has been paid and who has gone home. Folding these detectors into the
+# in-season feed would put a retirement notice on the page in November.
+#
+# The rule from the top of this module still holds and is still enforced by
+# `tests/test_news.py`: every figure below comes out of a contract, a career
+# profile or a season line, and goes through `Copy` on its way to the page. A
+# salary is a number like any other.
+# --------------------------------------------------------------------------
+
+# A retirement is worth writing about at all only if the career was. Below this
+# many seasons a player leaving is a roster move, not a story, and thirty of
+# them would bury the ones that matter.
+RETIREMENT_SEASONS_FLOOR = 6
+
+# Contracts worth a headline of their own. Everything smaller is aggregated
+# into the summary story rather than given its own article.
+BIG_CONTRACT = 20_000_000
+
+# Imported by value rather than by module so the copy below reads as prose.
+# It is the same constant `contracts` declares; there is no second cap.
+from .contracts import SALARY_CAP as K_SALARY_CAP
+
+
+def money(c: Copy, amount: int) -> str:
+    """A salary, recorded so the audit can find it.
+
+    `$12.4M` prints one numeral run, `12.4`, which is what has to be recorded --
+    not the raw dollar figure, which never appears on the page. Going through
+    here rather than through `negotiation.format_money` directly is what keeps
+    a salary inside the same no-invented-numbers rule as a rebounding average.
+    """
+    if amount >= 1_000_000:
+        return f"${c.n(amount / 1_000_000, '.1f')}M"
+    # Below a million the formatter prints grouped digits, so every group has
+    # to be recorded separately: "980,000" scans as two numeral runs.
+    text = f"{amount:,}"
+    for part in text.split(","):
+        c.recorded.add(part)
+    c.recorded.add(text)
+    return f"${text}"
+
+
+def _seasons_phrase(c: Copy, seasons: int) -> str:
+    return c.plural(seasons, "season")
+
+
+def retirements(league, offseason) -> list[Story]:
+    """One article per career worth marking, from what `develop` recorded.
+
+    The rows come from `OffseasonReport.retired`, which the progression engine
+    fills in as it ages each player -- so every number here (age, seasons, the
+    CA he finished on, the peak he reached) is measured rather than narrated.
+    """
+    stories: list[Story] = []
+    rows = sorted(getattr(offseason, "retired", []),
+                  key=lambda r: -float(r.get("peakCa", 0)))
+    for row in rows:
+        seasons = int(row.get("seasons", 0))
+        if seasons < RETIREMENT_SEASONS_FLOOR:
+            continue
+        c = Copy()
+        name = row.get("name", "")
+        age = int(row.get("age", 0))
+        peak = float(row.get("peakCa", 0.0))
+        final = float(row.get("ca", 0.0))
+        team_id = row.get("teamId", "")
+        club = league.teams[team_id].name if team_id in league.teams else ""
+        story_id = f"retire-{row.get('playerId', name)}"
+
+        fell = max(0.0, peak - final)
+        headline = pick([
+            f"{name} retires after {_seasons_phrase(c, seasons)} in the league",
+            f"{name} calls it a career at {c.n(age)}",
+            f"After {_seasons_phrase(c, seasons)}, {name} steps away",
+        ], story_id)
+
+        peak_tier = ca_tier(peak).lower()
+        final_tier = ca_tier(final).lower()
+        # A player can finish level with his own peak. `peak_ca` is a running
+        # maximum and it can only run from the moment his career profile
+        # exists, which on a fresh league is the first simulated summer --
+        # `progression.implied_peak` reconstructs what it can for a career
+        # already under way, but for a veteran whose ceiling was always close
+        # to his ability there is genuinely nothing to report.
+        #
+        # The threshold is a quarter of a tier rather than zero, because "a
+        # decline of 1.2 points" over fourteen seasons is not a decline, it is
+        # a rounding error dressed as one. Asserting a fall anyway produced the
+        # worst sentence this module has written: "peaked well above where it
+        # ended", two lines above "a decline of 0.0 points".
+        declined = fell >= 3.0
+        opening = (
+            f"{name} has retired at {c.n(age)}, closing a career that ran "
+            f"{_seasons_phrase(c, seasons)}. He finishes with "
+            f"{possessive(club)} shirt the last he wore, and with "
+            + ("a body of work that peaked well above where it ended — which "
+               "is what " if declined else
+               "his ability still where it topped out, which is rarer than "
+               "the alternative after ")
+            + f"{_seasons_phrase(c, seasons)} of professional basketball "
+            + ("does to almost everybody who plays that long."
+               if declined else "and is its own kind of achievement.")
+        )
+        middle = (
+            f"He peaked at a current ability of {c.n(peak, '.1f')} on the "
+            f"scouting scale, which rates as {peak_tier}, and ended on "
+            f"{c.n(final, '.1f')} — {final_tier}."
+            + (f" That is a decline of {c.n(fell, '.1f')} points from his "
+               f"best, which is the ordinary shape of a long career rather "
+               f"than a collapse." if declined else
+               f" He was, by that measure, as good on the last day as on his "
+               f"best one.")
+            + f" The players who leave at their peak are usually the ones who "
+              f"leave early, and he did not: he stayed until the game asked "
+              f"him to stop, which is a different and harder way to finish."
+        )
+        closing = (
+            f"Clubs will now work through a summer without him on the board. "
+            f"His place on the {club} roster passes to whoever they take in "
+            f"the intake, and a rookie arriving this year will be "
+            f"{_seasons_phrase(c, seasons)} away from the career {name} has "
+            f"just completed. Most will not get there. That is the measure of "
+            f"what he did rather than any single number in the record."
+        )
+        stories.append(Story(
+            headline=headline,
+            subheadline=f"{name} leaves the game at {c.n(age)} after "
+                        f"{_seasons_phrase(c, seasons)}.",
+            category=RETIREMENT,
+            importance=held(ANCHOR[RETIREMENT] + min(8, seasons - RETIREMENT_SEASONS_FLOOR)),
+            summary=f"{name} has retired after {_seasons_phrase(c, seasons)}, "
+                    f"peaking at {c.n(peak, '.1f')} current ability.",
+            article=paragraphs(opening, middle, closing),
+            id=story_id,
+            team_ids=(team_id,) if team_id else (),
+            player_ids=(row.get("playerId", ""),) if row.get("playerId") else (),
+            figures=frozenset(c.recorded),
+        ))
+    return stories
+
+
+def contract_stories(league, offseason) -> list[Story]:
+    """The signings that were big enough to be news on their own."""
+    stories: list[Story] = []
+    signings = [s for s in getattr(offseason, "signings", [])
+                if not s.is_coach and s.salary >= BIG_CONTRACT]
+    signings.sort(key=lambda s: -s.salary)
+    for signing in signings[:6]:
+        c = Copy()
+        club = (league.teams[signing.team_id].name
+                if signing.team_id in league.teams else "")
+        story_id = f"contract-{signing.holder_id}"
+        total = signing.salary * signing.years
+
+        headline = pick([
+            f"{signing.name} re-signs with {club} on a "
+            f"{c.plural(signing.years, 'year')} deal",
+            f"{club} keep {signing.name} for {c.plural(signing.years, 'year')}",
+            f"{signing.name} stays put on {money(c, signing.salary)} a year",
+        ], story_id)
+
+        share = signing.salary / K_SALARY_CAP * 100.0
+        opening = (
+            f"{signing.name} has agreed a new contract with {club} worth "
+            f"{money(c, signing.salary)} a year over "
+            f"{c.plural(signing.years, 'season')}, a total commitment of "
+            f"{money(c, total)}. It takes up {c.n(share, '.1f')}% of the "
+            f"salary cap on its own, which is the figure that matters more "
+            f"than the total: a club is only ever spending one year at a time."
+        )
+        middle = (
+            f"The deal was struck before free agency opened, which is where "
+            f"a club's advantage over its own players lies. It gets to make "
+            f"the first offer and the only one that does not have to beat "
+            f"anybody else's, and a player weighing it up is comparing a "
+            f"known club against an open market that has not made him an "
+            f"offer yet. {club} used that advantage rather than waiting to "
+            f"find out what somebody else thought he was worth."
+        )
+        closing = (
+            f"At {money(c, signing.salary)} a season he becomes one of the "
+            f"larger items on the {club} payroll, and the "
+            f"{c.plural(signing.years, 'year')} run to the end of the deal "
+            f"without an option on either side — no club option to walk away "
+            f"early, no player option to leave. Both parties are committed "
+            f"for the full term, which is the plainest kind of contract there "
+            f"is and increasingly the rarest."
+        )
+        stories.append(Story(
+            headline=headline,
+            subheadline=f"{club} keep {signing.name} on "
+                        f"{money(c, signing.salary)} a year.",
+            category=CONTRACT,
+            importance=held(ANCHOR[CONTRACT] + min(20, signing.salary // 3_000_000)),
+            summary=f"{signing.name} signs for {c.plural(signing.years, 'season')} "
+                    f"at {money(c, signing.salary)} a year.",
+            article=paragraphs(opening, middle, closing),
+            id=story_id,
+            team_ids=(signing.team_id,),
+            player_ids=(signing.holder_id,),
+            figures=frozenset(c.recorded),
+        ))
+    return stories
+
+
+def coach_stories(league, offseason) -> list[Story]:
+    """Head coaches who signed again."""
+    stories: list[Story] = []
+    for signing in [s for s in getattr(offseason, "signings", []) if s.is_coach][:4]:
+        c = Copy()
+        club = (league.teams[signing.team_id].name
+                if signing.team_id in league.teams else "")
+        coach = getattr(league.teams.get(signing.team_id), "coach", None)
+        story_id = f"coach-deal-{signing.holder_id}"
+        tier = coach.tier if coach else ""
+        specialism = coach.specialism.lower() if coach else ""
+
+        headline = pick([
+            f"{club} extend {signing.name} for {c.plural(signing.years, 'year')}",
+            f"{signing.name} stays on the {club} bench",
+            f"{club} keep faith with {signing.name}",
+        ], story_id)
+
+        seasons_in = getattr(coach, "seasons_coached", 0) if coach else 0
+        opening = (
+            f"{club} have agreed a new deal with head coach {signing.name}, "
+            f"worth {money(c, signing.salary)} a year over "
+            f"{c.plural(signing.years, 'season')}. He has "
+            f"{_seasons_phrase(c, seasons_in)} in the job behind him, and the "
+            f"club has decided it has seen enough of them to commit to more."
+        )
+        middle = (
+            f"He is rated {tier.lower()} around the league and is known as a "
+            f"{specialism}. Coaching is worth a handful of points a game "
+            f"between the best in the league and the worst, which is small "
+            f"enough that no coach carries a bad roster on his own and large "
+            f"enough that a club does not change one lightly. The reputation "
+            f"a coach carries is not the same thing as the work he does, "
+            f"either — it lags what he is actually worth in both directions."
+        )
+        closing = (
+            f"The {c.plural(signing.years, 'year')} take him beyond the "
+            f"current cycle of the squad, which is the point of giving a "
+            f"coach term: a man on an expiring deal manages for this season "
+            f"and a man with three years left can afford to develop someone. "
+            f"At {money(c, signing.salary)} a season the deal also sits "
+            f"outside the salary cap calculation entirely — coaching pay has "
+            f"never counted against it, and it never limits a signing."
+        )
+        stories.append(Story(
+            headline=headline,
+            subheadline=f"{signing.name} signs on for "
+                        f"{c.plural(signing.years, 'more season')}.",
+            category=COACH_MOVE,
+            importance=held(ANCHOR[COACH_MOVE]),
+            summary=f"{club} re-sign {signing.name} at "
+                    f"{money(c, signing.salary)} a year.",
+            article=paragraphs(opening, middle, closing),
+            id=story_id,
+            team_ids=(signing.team_id,),
+            figures=frozenset(c.recorded),
+        ))
+    return stories
+
+
+def free_agency_wire(league, offseason) -> list[Story]:
+    """The summer in aggregate: who reached the market and who did not.
+
+    The one story that is always worth writing, because it is the only place
+    the *size* of the class gets stated. Individual signings do not add up to
+    it on the page.
+    """
+    expected = list(getattr(offseason, "expected", []))
+    if not expected:
+        return []
+    c = Copy()
+    pool = list(getattr(offseason, "pool", []))
+    signings = [s for s in getattr(offseason, "signings", []) if not s.is_coach]
+    story_id = f"wire-{getattr(offseason, 'season', '')}-{len(expected)}"
+
+    re_signed = len(signings)
+    reached = len([e for e in pool if not e.is_coach])
+    spent = sum(s.salary for s in signings)
+    biggest = max(signings, key=lambda s: s.salary, default=None)
+
+    headline = pick([
+        f"{c.plural(len(expected), 'contract')} expired across the league",
+        f"Summer business: {c.plural(re_signed, 'player')} re-signed",
+        f"{c.plural(reached, 'player')} reach the open market",
+    ], story_id)
+
+    opening = (
+        f"{c.plural(len(expected), 'player contract')} ran out at the end of "
+        f"the season. Clubs re-signed {c.n(re_signed)} of them before free "
+        f"agency opened; {c.n(reached)} went unsigned and are now available "
+        f"to the rest of the league. That split is the whole story of a "
+        f"summer in two numbers, and it is settled before a single rival "
+        f"club is allowed to make an offer."
+    )
+    middle = (
+        f"The re-signings committed {money(c, spent)} a year in new salary "
+        f"between them."
+        + (f" The largest was {biggest.name}, who agreed "
+           f"{money(c, biggest.salary)} a season over "
+           f"{c.plural(biggest.years, 'year')}." if biggest else "")
+        + f" A club's own players are always the cheapest ones it can sign: "
+          f"it makes the first offer, it makes the only offer that does not "
+          f"have to beat anybody else's, and a player who wants to stay will "
+          f"take less to do it. That is why the window before free agency is "
+          f"where most of the business gets done."
+    )
+    closing = (
+        f"The {c.plural(reached, 'player')} still without a club are the ones "
+        f"whose sides decided the asking price was more than they were worth. "
+        f"Every one of them was offered terms first, and every one of them "
+        f"turned those terms down or was let go rather than matched. Their "
+        f"old clubs keep the cap room instead, which is the trade a front "
+        f"office is really making when it declines to match: not a player "
+        f"against nothing, but a player against whoever that money signs next."
+    )
+    return [Story(
+        headline=headline,
+        subheadline=f"{c.n(re_signed)} re-signed, {c.n(reached)} reached the market.",
+        category=FREE_AGENCY,
+        importance=held(ANCHOR[FREE_AGENCY]),
+        summary=f"{c.plural(len(expected), 'contract')} expired; "
+                f"{c.n(re_signed)} were renewed.",
+        article=paragraphs(opening, middle, closing),
+        id=story_id,
+        figures=frozenset(c.recorded),
+    )]
+
+
+def offseason_stories(league, limit: int = 12) -> list[Story]:
+    """The League News page inside the OFFSEASON menu.
+
+    Ranked and capped the same way the in-season feed is, and for the same
+    reason: without a per-category ceiling a summer with nine retirements
+    prints nine retirement notices and nothing else.
+    """
+    from .league import franchise
+
+    offseason = getattr(league, "offseason", None)
+    if offseason is None:
+        return []
+
+    stories: list[Story] = []
+    stories.extend(retirements(league, offseason))
+    stories.extend(free_agency_wire(league, offseason))
+    stories.extend(contract_stories(league, offseason))
+    stories.extend(coach_stories(league, offseason))
+    stories.sort(key=lambda s: (-s.importance, s.id))
+
+    caps = {RETIREMENT: 5, CONTRACT: 4, COACH_MOVE: 2, FREE_AGENCY: 1}
+    used: dict[str, int] = {}
+    feed: list[Story] = []
+    for story in stories:
+        if len(feed) >= limit:
+            break
+        if used.get(story.category, 0) >= caps.get(story.category, 2):
+            continue
+        feed.append(story)
+        used[story.category] = used.get(story.category, 0) + 1
     return feed

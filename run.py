@@ -17,6 +17,7 @@ import argparse
 import os
 from datetime import timedelta
 
+from bballsim import contracts
 from bballsim.engine.game import GameSimulator
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
@@ -24,14 +25,17 @@ from bballsim.roster import load_teams
 from bballsim.save import (
     HISTORY_PATH,
     LEAGUE_PATH,
+    OFFSEASON_PATH,
     SEASON_PATH,
     apply_season,
     read_history,
+    read_offseason,
     read_season,
     season_exists,
     seed_data_dir,
     write_history,
     write_league,
+    write_offseason,
     write_season,
 )
 
@@ -74,6 +78,16 @@ def build_league(team_count: int = 30) -> League:
             season=league.season,
         ))
 
+    # Contracts, for a league that predates them. Idempotent: a player who
+    # already has one keeps it, so this fills in an old save exactly once and
+    # is a no-op on every boot after that.
+    contracts.generate_for_league(list(league.teams.values()), season=league.season)
+    contracts.generate_coaches_for_league(list(league.teams.values()), season=league.season)
+
+    # A summer left half-finished. Absent for most of the year, which is the
+    # correct representation of "not in one".
+    league.offseason = read_offseason()
+
     league.tick()
     return league
 
@@ -81,7 +95,7 @@ def build_league(team_count: int = 30) -> League:
 def save_season(league: League) -> None:
     """Write everything the league has changed since the last checkpoint.
 
-    Three files now, not one. The offseason ages every player and replaces the
+    Four files now, not one. The offseason ages every player and replaces the
     ones who retire, so the roster is no longer a fixed thing that only
     `tools/make_league.py` writes -- saving the season without saving the league
     would reload 2031-32 fixtures against the players of 2026.
@@ -91,6 +105,9 @@ def save_season(league: League) -> None:
                  name=league.name, season=league.season)
     if league.history:
         write_history(HISTORY_PATH, league.history)
+    # Writes the summer, or removes the file when there is not one -- a stale
+    # offseason.json would reopen the menu mid-season with a year-old list.
+    write_offseason(OFFSEASON_PATH, getattr(league, "offseason", None))
     played = sum(1 for g in league.schedule if g.status == GameStatus.FINAL)
     print(f"saved {played} played of {len(league.schedule)} fixtures "
           f"to {SEASON_PATH} (sim date {league.clock.now().date()}"

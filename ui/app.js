@@ -233,6 +233,16 @@ const state = {
   // Which attribute sections are expanded. Kept on the app rather than the
   // DOM so it survives clicking down the roster.
   openGroups: new Set(),
+  // The offseason menu: the payload, which sub-screen is open, and the filters
+  // on the two list screens.
+  offseason: null,
+  offTab: "news",
+  offFilter: "all",
+  offTeam: "",
+  // Offers in progress, keyed by player id, so switching tabs does not lose
+  // what has been typed. Cleared when a deal is agreed.
+  offOffers: new Map(),
+  offReplies: new Map(),
 };
 
 const REDUCED_MOTION = typeof matchMedia === "function"
@@ -287,6 +297,11 @@ async function boot() {
   buildStatTabs();
   renderStats();
   bindControls();
+  bindOffseason();
+  // The tab is hidden until the Finals conclude; the server decides that, so
+  // this asks rather than inferring it from the schedule.
+  await renderOffseasonTab();
+  renderOffseason();
   if (state.data.live) startLeagueRefresh();
 
   // The Games tab opens on the day's schedule. Nothing is auto-selected: the
@@ -1983,6 +1998,9 @@ async function renderTeamDetail() {
     nameWrap.appendChild(el("span", "player-name", player.name));
     nameWrap.appendChild(el("span", "roster-meta",
       `#${player.jersey} · ${player.pos}`));
+    // Salary and years remaining sit beside the overall on every roster row,
+    // which is the brief's ask -- a squad list is a payroll list too.
+    nameWrap.appendChild(el("span", "roster-contract", contractLabel(player.contract)));
     row.appendChild(nameWrap);
     const open = () => { state.playerId = player.id; renderTeamDetail(); };
     row.addEventListener("click", open);
@@ -2011,8 +2029,10 @@ function renderPlayer(team) {
   mark.appendChild(teamMark(team));
 
   $("#profile-name").textContent = player.name;
+  const pay = team.payroll;
   $("#profile-club").textContent =
-    `${team.city} ${team.name} · #${player.jersey} · ${player.pos}`;
+    `${team.city} ${team.name} · #${player.jersey} · ${player.pos}`
+    + (pay ? ` · Team payroll ${money(pay.total)} (${pay.bandLabel})` : "");
 
   // Biography, in the order a stats site leads with.
   const facts = $("#profile-facts");
@@ -2032,6 +2052,17 @@ function renderPlayer(team) {
   }
   fact(facts, "FROM", bio.background || bio.nationality);
   fact(facts, "EXPERIENCE", line && line.games ? `${line.games} games` : "—");
+  // The contract, on the profile as well as the roster row -- this is the page
+  // a manager is on when he wonders what somebody costs.
+  if (player.contract) {
+    const c = player.contract;
+    fact(facts, "SALARY", money(c.salary));
+    fact(facts, "CONTRACT",
+      `${c.yearsRemaining} of ${c.contractYears} yrs · ${c.contractTypeLabel}`);
+  } else {
+    fact(facts, "SALARY", "Unsigned");
+  }
+  if (player.marketValue) fact(facts, "MARKET VALUE", money(player.marketValue));
 
   // The four headline averages.
   const headline = $("#profile-headline");
@@ -2572,6 +2603,7 @@ function bindControls() {
       // Coming back to Games lands on the schedule rather than whichever
       // fixture happened to be open when you left.
       if (tab.dataset.view === "games") showTracker(false);
+      if (tab.dataset.view === "offseason") openOffseason();
       setView(tab.dataset.view);
     });
   });
@@ -2753,4 +2785,726 @@ function startLeagueRefresh() {
     refreshLeague({ quiet: true }).catch((error) =>
       console.warn("league refresh failed", error));
   }, LEAGUE_REFRESH_MS);
+}
+
+/* ------------------------------------------------------------------ *
+ * Offseason
+ *
+ * One payload, nine sub-screens. The tab is hidden entirely until the Finals
+ * have concluded -- the brief's one hard gate -- and the server decides that,
+ * not this file: `available` comes back on the payload rather than being
+ * inferred from whether the schedule looks finished.
+ *
+ * Three of the nine screens are placeholders. They are rendered as explicit
+ * "planned" panels that say what they will do, rather than as empty tables
+ * that look broken or, worse, as tables of invented data. Which ones are real
+ * is also read off the payload (`implemented`), so a screen cannot claim to
+ * work here while the API knows it does not.
+ * ------------------------------------------------------------------ */
+
+const OFF_TAB_KEYS = {
+  news: "news",
+  expected: "expected",
+  negotiations: "negotiations",
+  coaches: "coaches",
+  freeagency: "freeAgency",
+  retirements: "retirements",
+  draft: "draft",
+  camp: "trainingCamp",
+  payroll: "payroll",
+};
+
+function money(amount) {
+  if (amount === null || amount === undefined) return "—";
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return "—";
+  // The sign goes outside the dollar mark: "-$2.4M", not "$-2.4M".
+  const sign = value < 0 ? "-" : "";
+  const size = Math.abs(value);
+  if (size >= 1_000_000) return `${sign}$${(size / 1_000_000).toFixed(1)}M`;
+  return `${sign}$${Math.round(size).toLocaleString()}`;
+}
+
+/* A contract as one short string: "$12.4M · 3 yrs". Used on roster rows, where
+ * there is no room for a table. */
+function contractLabel(contract) {
+  if (!contract) return "Unsigned";
+  if (contract.expired) return "Expiring · unsigned";
+  const years = contract.yearsRemaining;
+  return `${money(contract.salary)} · ${years} yr${years === 1 ? "" : "s"}`;
+}
+
+async function loadOffseason(force = false) {
+  if (state.offseason && !force) return state.offseason;
+  if (!state.source.offseason) return null;
+  state.offseason = await state.source.offseason();
+  return state.offseason;
+}
+
+/* Shows or hides the tab. Called at boot and after every league refresh, so a
+ * season that ends while the app is open grows the menu without a reload. */
+/* Whether there is a summer worth showing.
+ *
+ * Two cases, and the second is why this is a function rather than a field. A
+ * summer in progress reports `available: true`. A summer that has just been
+ * *advanced* reports `available: false` -- the new season has no champion yet,
+ * which is correct -- but hiding the menu the instant you press Advance throws
+ * you out of the screen before you can read what the summer did. So a
+ * completed record with news in it counts as showable too.
+ *
+ * Every screen goes through here, because checking `available` directly in one
+ * place and this in another is exactly how the tab ended up visible with an
+ * empty body underneath it. */
+function offseasonShowable(data) {
+  if (!data) return false;
+  if (data.available) return true;
+  return data.phase === "complete" && (data.news || []).length > 0;
+}
+
+async function renderOffseasonTab() {
+  const tab = $(".nav-tab-offseason");
+  if (!tab) return;
+  const previous = state.offseason;
+  const data = await loadOffseason(true);
+
+  // The freshly-rolled season reports no summer at all, so a completed record
+  // is kept rather than overwritten.
+  if (!offseasonShowable(data) && offseasonShowable(previous)) {
+    state.offseason = previous;
+  }
+
+  const showable = offseasonShowable(state.offseason);
+  tab.hidden = !showable;
+  if (!showable && state.view === "offseason") setView("games");
+}
+
+/* Opening the summer is what ticks every contract down a year and builds the
+ * expiring list, so it happens on the first visit to the tab rather than at
+ * boot -- a manager who never opens the menu should not have his league aged
+ * behind his back. `franchise.begin` refuses a second call for the same
+ * season, so returning to the tab is free. */
+async function openOffseason() {
+  const data = state.offseason;
+  if (!data || !data.available) return;   // a finished record has nothing to open
+  if (data.phase !== "season") { renderOffseason(); return; }
+  if (!state.data.live || !state.source.command) { renderOffseason(); return; }
+  try {
+    state.offseason = await state.source.command("offseason/open");
+  } catch (error) {
+    console.warn("could not open the offseason", error);
+  }
+  renderOffseason();
+}
+
+function offImplemented(key) {
+  const flags = (state.offseason && state.offseason.implemented) || {};
+  return flags[OFF_TAB_KEYS[key]] !== false;
+}
+
+/* The only thing that changes the sub-tab. Setting `state.offTab` on its own
+ * left the button classes pointing at the old screen -- the state said News and
+ * the highlight said Contract Negotiations. */
+function setOffTab(key) {
+  state.offTab = key;
+  $$(".off-tab").forEach((t) => {
+    const active = t.dataset.off === key;
+    t.classList.toggle("is-active", active);
+    t.setAttribute("aria-selected", String(active));
+  });
+  renderOffseasonBody();
+}
+
+function bindOffseason() {
+  $$(".off-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setOffTab(tab.dataset.off));
+  });
+
+  const advance = $("#offseason-advance");
+  if (advance) {
+    advance.addEventListener("click", async () => {
+      if (!state.source.command) return;
+      advance.disabled = true;
+      advance.textContent = "Running the summer…";
+      try {
+        const result = await state.source.command("offseason/advance");
+        if (result && result.report) {
+          // Keep the finished summer -- `reloadAfterOffseason` re-fetches, and
+          // the new season reports no offseason at all.
+          state.offseason = result.offseason;
+          // Everything downstream of a summer has moved: the roster aged, the
+          // schedule was rebuilt, the standings cleared. Reload rather than
+          // patching six screens by hand.
+          await reloadAfterOffseason(result.report);
+          setOffTab("news");
+        }
+      } catch (error) {
+        console.warn("advance failed", error);
+      } finally {
+        advance.disabled = false;
+        advance.textContent = "Advance to Next Season";
+      }
+    });
+  }
+}
+
+async function reloadAfterOffseason(report) {
+  state.data = await state.source.load();
+  state.teams.forEach((team) => { team.stale = true; });
+  indexTeams(state.data.teams);
+  renderSeasonLabel();
+  renderWire();
+  renderBracket();
+  renderHonours();
+  renderPower();
+  renderSchedule();
+  renderStandings();
+  renderStats();
+  renderTeamDetail();
+  await renderOffseasonTab();
+  renderOffseason();
+  const phase = $("#offseason-phase");
+  if (phase && report) {
+    phase.textContent =
+      `${report.season} is complete. ${report.playersReSigned} players and `
+      + `${report.coachesReSigned} coaches re-signed, ${report.freeAgents} reached `
+      + `the market, ${report.retired} retired, ${report.drafted} drafted. `
+      + `${report.seasonStarting} is ready.`;
+  }
+}
+
+function renderOffseason() {
+  const data = state.offseason;
+  const title = $("#offseason-title");
+  const phase = $("#offseason-phase");
+  if (!offseasonShowable(data)) {
+    if (phase) phase.textContent = "The season is still being played.";
+    return;
+  }
+  if (title) title.textContent = `${data.season} Offseason`;
+  if (phase && !phase.textContent) phase.textContent = data.phaseLabel || "";
+  // Hidden on a published page, which has no server to advance, and once the
+  // summer has already been run -- pressing it again would ask the API to
+  // start an offseason for a season that has not been played.
+  const advance = $("#offseason-advance");
+  if (advance) advance.hidden = !state.data.live || !data.available;
+  renderOffseasonBody();
+}
+
+function renderOffseasonBody() {
+  const body = $("#offseason-body");
+  if (!body) return;
+  body.textContent = "";
+  const data = state.offseason;
+  if (!offseasonShowable(data)) {
+    body.appendChild(el("p", "note", "Available once the Finals have concluded."));
+    return;
+  }
+  if (!offImplemented(state.offTab)) {
+    body.appendChild(plannedPanel(state.offTab));
+    // Free agency has no bidding, but the pool behind it is real and built
+    // every summer. Showing it under the panel is the honest version: here is
+    // what exists, and here is what it cannot do yet.
+    if (state.offTab === "freeagency") offPool(body);
+    return;
+  }
+  const render = {
+    news: offNews, expected: offExpected, negotiations: offNegotiations,
+    coaches: offCoaches, retirements: offRetirements, payroll: offPayroll,
+  }[state.offTab];
+  if (render) render(body);
+}
+
+/* A screen that does not exist yet, said plainly. The alternative -- an empty
+ * table -- reads as a bug, and a populated one would be a lie. */
+function plannedPanel(key) {
+  const copy = {
+    freeagency: [
+      "Free Agency",
+      "Players whose own club chose not to re-sign them are gathered into a "
+      + "league-wide pool, which you can see under Expected Free Agents. What "
+      + "does not exist yet is the bidding: no club, including yours, can sign "
+      + "another club's free agent.",
+      "Unsigned players stay on their existing rosters and count nothing "
+      + "against payroll. The pool is built correctly every summer and saved, "
+      + "so turning it into a real signing period does not need any of this "
+      + "rebuilding.",
+    ],
+    draft: [
+      "Draft",
+      "The intake already runs — it happens inside Advance to Next Season, "
+      + "and every retirement is replaced by a prospect, worst club picking "
+      + "first. You can see the results on each squad afterwards.",
+      "What is planned here is the part you would take part in: a lottery, a "
+      + "board to scout, and picks you can trade. None of that exists yet.",
+    ],
+    camp: [
+      "Training Camp",
+      "Player development already happens over the summer, driven by the "
+      + "minutes each man actually played and by his coach's development "
+      + "rating. It runs automatically inside Advance to Next Season.",
+      "Training camp would be the lever that lets you influence it — who works "
+      + "on what, and at what cost in fatigue. Nothing here is wired up yet.",
+    ],
+  }[key];
+  const panel = el("div", "planned-panel");
+  panel.appendChild(el("h3", null, copy[0]));
+  panel.appendChild(el("span", "planned-badge", "Planned"));
+  copy.slice(1).forEach((para) => panel.appendChild(el("p", null, para)));
+  return panel;
+}
+
+/* --- League News ---------------------------------------------------- */
+
+function offNews(body) {
+  const stories = state.offseason.news || [];
+  if (!stories.length) {
+    body.appendChild(el("p", "note",
+      "No summer business yet. Run Advance to Next Season to play it out."));
+    return;
+  }
+  const wrap = el("div", "wire-grid");
+  stories.forEach((story, index) => wrap.appendChild(storyCard(story, index === 0)));
+  body.appendChild(wrap);
+}
+
+/* --- shared table plumbing ------------------------------------------ */
+
+function offFilters(body, { team = true } = {}) {
+  const bar = el("div", "off-filters");
+  const group = el("div", "scope-toggle");
+  [["all", "All Players"], ["G", "Guards"], ["F", "Forwards"], ["C", "Centers"]]
+    .forEach(([key, label]) => {
+      const button = el("button", state.offFilter === key ? "is-active" : null, label);
+      button.type = "button";
+      button.addEventListener("click", () => {
+        state.offFilter = key;
+        renderOffseasonBody();
+      });
+      group.appendChild(button);
+    });
+  bar.appendChild(group);
+
+  if (team) {
+    const picker = el("select");
+    picker.setAttribute("aria-label", "Filter by team");
+    const all = el("option", null, "All teams");
+    all.value = "";
+    picker.appendChild(all);
+    (state.data.teams || []).forEach((t) => {
+      const option = el("option", null, `${t.city} ${t.name}`);
+      option.value = t.id;
+      picker.appendChild(option);
+    });
+    picker.value = state.offTeam;
+    picker.addEventListener("change", () => {
+      state.offTeam = picker.value;
+      renderOffseasonBody();
+    });
+    bar.appendChild(picker);
+  }
+  body.appendChild(bar);
+}
+
+/* Positions collapse into the three the filter offers. A filter with five
+ * buttons for five positions would be a duplicate of the squad page's. */
+function positionGroup(pos) {
+  if (pos === "PG" || pos === "SG") return "G";
+  if (pos === "SF" || pos === "PF") return "F";
+  if (pos === "C") return "C";
+  return "";
+}
+
+function applyOffFilters(rows) {
+  return rows.filter((row) => {
+    if (state.offTeam && row.teamId !== state.offTeam) return false;
+    if (state.offFilter === "all") return true;
+    return positionGroup(row.position) === state.offFilter;
+  });
+}
+
+function offTable(columns) {
+  const table = el("table", "stat-table off-table");
+  const head = el("thead");
+  const row = el("tr");
+  columns.forEach(([, label, cls]) => row.appendChild(el("th", cls || null, label)));
+  head.appendChild(row);
+  table.appendChild(head);
+  table.appendChild(el("tbody"));
+  return table;
+}
+
+/* Tables go into the page through here, so every one of them gets the scroll
+ * wrapper and none of them can make the body scroll sideways. */
+function appendTable(body, table) {
+  const scroller = el("div", "off-scroll");
+  scroller.appendChild(table);
+  body.appendChild(scroller);
+}
+
+function interestCell(row) {
+  const cell = el("td");
+  const bar = el("span", "interest");
+  const fill = el("span", "interest-fill");
+  fill.style.width = `${Math.max(0, Math.min(100, row.interest || 0))}%`;
+  bar.appendChild(fill);
+  cell.appendChild(bar);
+  cell.appendChild(el("span", "interest-label", row.interestLabel || ""));
+  return cell;
+}
+
+/* --- Expected Free Agents ------------------------------------------- */
+
+function offExpected(body) {
+  const all = (state.offseason.expected || [])
+    .concat(state.offseason.coaches || []);
+  if (!all.length) {
+    body.appendChild(el("p", "note",
+      "No contracts have expired. Open the offseason to tick them down."));
+    return;
+  }
+  offFilters(body);
+
+  const rows = applyOffFilters(all);
+  const pool = new Set((state.offseason.pool || []).map((e) => e.id));
+
+  body.appendChild(el("p", "note",
+    `${rows.length} of ${all.length} shown. Sorted by overall rating. `
+    + `A club negotiates with its own players before anyone else can.`));
+
+  const table = offTable([
+    ["name", "Player", "col-name"], ["team", "Team"], ["pos", "Pos"],
+    ["age", "Age"], ["ovr", "OVR"], ["ppg", "PPG"], ["rpg", "RPG"],
+    ["apg", "APG"], ["status", "Status"], ["interest", "Interest in Returning"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    if (row.isCoach) name.appendChild(el("span", "player-name", row.name));
+    else name.appendChild(playerLink(row.name, row.id, row.teamId));
+    tr.appendChild(name);
+    const team = el("td");
+    team.appendChild(teamLink(row.teamId, (node) => {
+      node.textContent = row.teamAbbr || row.teamName || "";
+    }));
+    tr.appendChild(team);
+    tr.appendChild(el("td", null, row.position || "—"));
+    tr.appendChild(el("td", null, String(row.age ?? "—")));
+    tr.appendChild(el("td", null, row.overall != null ? String(row.overall) : "—"));
+    tr.appendChild(el("td", null, row.isCoach ? "—" : String(row.ppg ?? 0)));
+    tr.appendChild(el("td", null, row.isCoach ? "—" : String(row.rpg ?? 0)));
+    tr.appendChild(el("td", null, row.isCoach ? "—" : String(row.apg ?? 0)));
+    const status = row.resolved === "re-signed" ? "Re-signed"
+      : row.resolved === "retired" ? "Retired"
+      : pool.has(row.id) ? "Free agent" : "Contract expired";
+    const statusCell = el("td");
+    statusCell.appendChild(el("span", `pill pill-${status.split(" ")[0].toLowerCase()}`, status));
+    tr.appendChild(statusCell);
+    tr.appendChild(interestCell(row));
+    tbody.appendChild(tr);
+  });
+  appendTable(body, table);
+}
+
+/* --- Contract Negotiations ------------------------------------------ */
+
+function offNegotiations(body) {
+  renderNegotiationScreen(body, state.offseason.expected || [], false);
+}
+
+function offCoaches(body) {
+  renderNegotiationScreen(body, state.offseason.coaches || [], true);
+}
+
+function offseasonIsDone() {
+  return Boolean(state.offseason && state.offseason.phase === "complete");
+}
+
+function renderNegotiationScreen(body, rows, isCoach) {
+  if (!rows.length) {
+    body.appendChild(el("p", "note",
+      isCoach ? "No coaching contracts have expired."
+              : "No player contracts have expired."));
+    return;
+  }
+  if (!isCoach) offFilters(body);
+  const shown = isCoach ? rows : applyOffFilters(rows);
+
+  body.appendChild(el("p", "note", offseasonIsDone()
+    ? "This summer is settled. Everything you did not agree by hand was "
+      + "negotiated for you when you advanced; the outcome of each talk is "
+      + "below."
+    : "Offer a length and a salary. He will accept, reject, or come back with "
+      + "a counter — and what he wants depends on how loyal he is, how much he "
+      + "wants paying, whether he thinks this club can win, and what his role "
+      + "would be. Anything you leave unsettled is negotiated for you when you "
+      + "advance."));
+
+  const list = el("div", "negotiation-list");
+  shown.forEach((row) => list.appendChild(negotiationCard(row, isCoach)));
+  body.appendChild(list);
+}
+
+function negotiationCard(row, isCoach) {
+  const card = el("div", "negotiation-card"
+    + (row.resolved === "re-signed" ? " is-signed" : ""));
+
+  const head = el("div", "negotiation-head");
+  const who = el("div", "negotiation-who");
+  if (isCoach) who.appendChild(el("span", "player-name", row.name));
+  else who.appendChild(playerLink(row.name, row.id, row.teamId));
+  const meta = isCoach
+    ? `${row.tier || ""} · ${row.specialism || ""}`
+    : `${row.position} · ${row.age} · OVR ${row.overall}`;
+  who.appendChild(el("span", "roster-meta", meta));
+  head.appendChild(who);
+
+  const club = el("div", "negotiation-club");
+  club.appendChild(teamLink(row.teamId, (node) => {
+    node.textContent = row.teamAbbr || row.teamName || "";
+  }));
+  if (row.payroll) {
+    club.appendChild(el("span", "roster-meta",
+      `Payroll ${money(row.payroll.players)} · ${row.payroll.bandLabel}`));
+  }
+  head.appendChild(club);
+  card.appendChild(head);
+
+  const facts = el("dl", "negotiation-facts");
+  const fact = (term, value) => {
+    facts.appendChild(el("dt", null, term));
+    facts.appendChild(el("dd", null, value));
+  };
+  fact("WAS ON", money(row.currentSalary));
+  fact("WANTS", `${money(row.requestedSalary)} × ${row.requestedYears} yr`);
+  fact("MARKET", money(row.marketValue));
+  if (isCoach && row.ratings) {
+    fact("OFF/DEF", `${Math.round(row.ratings.offense)} / ${Math.round(row.ratings.defense)}`);
+    fact("DEVELOP", String(Math.round(row.ratings.development)));
+  }
+  facts.appendChild(el("dt", null, "INTEREST"));
+  const interest = el("dd");
+  interest.appendChild(el("span", "interest-label", row.interestLabel || ""));
+  facts.appendChild(interest);
+  card.appendChild(facts);
+
+  if (row.resolved === "re-signed") {
+    card.appendChild(el("p", "negotiation-reply is-accept",
+      `Signed for ${money(row.contract ? row.contract.salary : row.requestedSalary)} a year.`));
+    return card;
+  }
+  if (row.resolved === "retired") {
+    card.appendChild(el("p", "negotiation-reply", "Retired."));
+    return card;
+  }
+  // Once the summer has been advanced these talks are history, so the form
+  // comes off: an offer button that cannot do anything is worse than none.
+  if (offseasonIsDone()) {
+    card.appendChild(el("p", "negotiation-reply is-reject",
+      "Not re-signed — he reached the open market."));
+    return card;
+  }
+
+  if (row.reason) card.appendChild(el("p", "negotiation-reason", row.reason));
+
+  // The offer form. Pre-filled with what he asked for, so the fast path is one
+  // click and the interesting decision is how far below it you push.
+  const saved = state.offOffers.get(row.id) || {};
+  const form = el("div", "offer-form");
+
+  const years = el("input");
+  years.type = "number";
+  years.min = "1";
+  years.max = "5";
+  years.value = saved.years ?? row.requestedYears ?? 1;
+  years.setAttribute("aria-label", `Contract length for ${row.name}`);
+
+  const salary = el("input");
+  salary.type = "number";
+  salary.step = "100000";
+  salary.min = "0";
+  salary.value = saved.salary ?? row.requestedSalary ?? 0;
+  salary.setAttribute("aria-label", `Annual salary for ${row.name}`);
+
+  const remember = () => state.offOffers.set(row.id, {
+    years: Number(years.value), salary: Number(salary.value),
+  });
+  years.addEventListener("input", remember);
+  salary.addEventListener("input", remember);
+
+  const readout = el("span", "offer-readout", money(Number(salary.value)));
+  salary.addEventListener("input", () => {
+    readout.textContent = money(Number(salary.value));
+  });
+
+  form.appendChild(el("label", "offer-label", "Years"));
+  form.appendChild(years);
+  form.appendChild(el("label", "offer-label", "Salary"));
+  form.appendChild(salary);
+  form.appendChild(readout);
+
+  const submit = el("button", "offer-submit", "Submit Offer");
+  submit.type = "button";
+  submit.disabled = !state.data.live;
+  submit.addEventListener("click", async () => {
+    submit.disabled = true;
+    try {
+      const reply = await state.source.command("offseason/negotiate", {
+        id: row.id, years: Number(years.value), salary: Number(salary.value),
+      });
+      if (reply) {
+        state.offReplies.set(row.id, reply);
+        if (reply.verdict === "accept") {
+          state.offOffers.delete(row.id);
+          state.offseason = await state.source.offseason();
+        } else if (reply.counter) {
+          // Load his counter into the form, so "accept his number" is one
+          // more click rather than retyping it.
+          state.offOffers.set(row.id, {
+            years: reply.counter.requestedYears,
+            salary: reply.counter.requestedSalary,
+          });
+        }
+        renderOffseasonBody();
+      }
+    } catch (error) {
+      console.warn("negotiation failed", error);
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  form.appendChild(submit);
+  card.appendChild(form);
+
+  if (!state.data.live) {
+    card.appendChild(el("p", "note",
+      "Negotiating needs the running app; this is a published snapshot."));
+  }
+
+  const reply = state.offReplies.get(row.id);
+  if (reply && reply.message) {
+    card.appendChild(el("p", `negotiation-reply is-${reply.verdict}`, reply.message));
+  }
+  return card;
+}
+
+/* --- The free agent pool --------------------------------------------- */
+
+function offPool(body) {
+  const rows = state.offseason.pool || [];
+  if (!rows.length) {
+    body.appendChild(el("p", "note",
+      "The pool is empty. It fills when a club declines to re-sign one of its "
+      + "own players, which happens as you advance."));
+    return;
+  }
+  body.appendChild(el("h3", "off-subhead",
+    `${rows.length} unsigned ${rows.length === 1 ? "player" : "players"}`));
+  body.appendChild(el("p", "note",
+    "Every one of these was offered terms by his own club first and was not "
+    + "matched. They remain on their old rosters and cost nothing."));
+
+  const table = offTable([
+    ["name", "Player", "col-name"], ["team", "Last Club"], ["pos", "Pos"],
+    ["age", "Age"], ["ovr", "OVR"], ["was", "Was On"], ["wants", "Wants"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    if (row.isCoach) name.appendChild(el("span", "player-name", row.name));
+    else name.appendChild(playerLink(row.name, row.id, row.teamId));
+    tr.appendChild(name);
+    const team = el("td");
+    team.appendChild(teamLink(row.teamId, (node) => {
+      node.textContent = row.teamAbbr || row.teamName || "";
+    }));
+    tr.appendChild(team);
+    tr.appendChild(el("td", null, row.position || "—"));
+    tr.appendChild(el("td", null, String(row.age ?? "—")));
+    tr.appendChild(el("td", null, row.overall != null ? String(row.overall) : "—"));
+    tr.appendChild(el("td", null, money(row.previousSalary)));
+    tr.appendChild(el("td", null, money(row.requestedSalary)));
+    tbody.appendChild(tr);
+  });
+  appendTable(body, table);
+}
+
+/* --- Retirements ----------------------------------------------------- */
+
+function offRetirements(body) {
+  const rows = state.offseason.retired || [];
+  if (!rows.length) {
+    body.appendChild(el("p", "note",
+      "Nobody has retired yet. Retirements are processed when you advance."));
+    return;
+  }
+  body.appendChild(el("p", "note",
+    `${rows.length} ${rows.length === 1 ? "player" : "players"} ended their `
+    + `career. Who goes is decided by age and decline first, then nudged by `
+    + `career wear, rings won, how much he still played, and how far he had `
+    + `fallen from his own peak.`));
+
+  const table = offTable([
+    ["name", "Player", "col-name"], ["team", "Last Club"], ["age", "Age"],
+    ["seasons", "Seasons"], ["peak", "Peak Ability"], ["final", "Final Ability"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  [...rows].sort((a, b) => (b.peakCa || 0) - (a.peakCa || 0)).forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    name.appendChild(el("span", "player-name", row.name));
+    tr.appendChild(name);
+    const team = el("td");
+    team.appendChild(teamLink(row.teamId, (node) => {
+      node.textContent = (state.teams.get(row.teamId) || {}).abbr || "";
+    }));
+    tr.appendChild(team);
+    tr.appendChild(el("td", null, String(row.age)));
+    tr.appendChild(el("td", null, String(row.seasons)));
+    tr.appendChild(el("td", null, String(row.peakCa)));
+    tr.appendChild(el("td", null, String(row.ca)));
+    tbody.appendChild(tr);
+  });
+  appendTable(body, table);
+}
+
+/* --- Payroll --------------------------------------------------------- */
+
+function offPayroll(body) {
+  const rows = state.offseason.payrolls || [];
+  const money_ = state.offseason.money || {};
+  body.appendChild(el("p", "note",
+    `Salary cap ${money(money_.salaryCap)} · luxury tax ${money(money_.luxuryTax)} `
+    + `· minimum salary ${money(money_.minimum)}. Payroll is summed from the `
+    + `contracts every time it is read, never stored — so it moves the moment `
+    + `a deal is signed. Nothing is enforced against the cap yet.`));
+
+  const table = offTable([
+    ["team", "Team", "col-name"], ["players", "Player Salaries"],
+    ["coach", "Coach"], ["total", "Total"], ["cap", "Cap Room"],
+    ["tax", "Tax Room"], ["next", "Committed Next Year"], ["band", "Status"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    name.appendChild(teamLink(row.teamId, (node) => {
+      node.textContent = row.teamName || row.abbreviation || "";
+    }));
+    tr.appendChild(name);
+    tr.appendChild(el("td", null, money(row.players)));
+    tr.appendChild(el("td", null, money(row.coach)));
+    tr.appendChild(el("td", null, money(row.total)));
+    tr.appendChild(el("td", `money ${row.capRoom < 0 ? "is-negative" : ""}`,
+      money(row.capRoom)));
+    tr.appendChild(el("td", `money ${row.taxRoom < 0 ? "is-negative" : ""}`,
+      money(row.taxRoom)));
+    tr.appendChild(el("td", null, money(row.committedNextSeason)));
+    const band = el("td");
+    band.appendChild(el("span", `pill pill-${row.band}`, row.bandLabel));
+    tr.appendChild(band);
+    tbody.appendChild(tr);
+  });
+  appendTable(body, table);
 }

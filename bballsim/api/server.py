@@ -13,6 +13,12 @@ Endpoints
     POST /api/clock/advance {"minutes": n}  push the league clock forward
     POST /api/clock/speed   {"speed": n}    game seconds per real second
 
+    GET  /api/offseason                     the whole OFFSEASON menu
+    GET  /api/offseason/payrolls            every club's payroll, richest first
+    POST /api/offseason/open                tick contracts, build the expiring list
+    POST /api/offseason/negotiate           {"id","years","salary"} -> a response
+    POST /api/offseason/advance             run the summer and start the next season
+
 Swap this for FastAPI/Flask whenever you want; the League object is the only
 thing it touches.
 """
@@ -29,6 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from ..league import franchise
 from ..league.calendar import GameStatus
 from ..league.league import DEFAULT_TRACKER_SPEED, League
 from ..league.stats import STAT_COLUMNS
@@ -232,6 +239,15 @@ class ApiHandler(BaseHTTPRequestHandler):
                 payload["away_box"] = game.result.away_box.to_dict()
             self._send_json(payload)
 
+        elif parts == ["offseason"]:
+            # The whole menu in one fetch. Gated on the Finals having concluded,
+            # but the endpoint answers either way -- the UI needs to be told the
+            # menu is unavailable, which is different from a 404.
+            self._send_json(views.offseason_view(league))
+
+        elif parts == ["offseason", "payrolls"]:
+            self._send_json(franchise.payroll_table(league))
+
         else:
             self._send_json({"error": "unknown endpoint", "path": path}, 404)
 
@@ -272,6 +288,42 @@ class ApiHandler(BaseHTTPRequestHandler):
         elif parts == ["clock", "speed"]:
             league.tracker_speed = max(0.25, float(body.get("speed", DEFAULT_TRACKER_SPEED)))
             self._send_json({"tracker_speed": league.tracker_speed})
+
+        elif parts == ["offseason", "open"]:
+            # Opens the summer: ticks every contract down a year and builds the
+            # expiring list. Idempotent -- `franchise.begin` refuses a second
+            # call for the same season, which is what stops a double-click
+            # ageing every contract twice.
+            if not franchise.is_available(league):
+                self._send_json({"error": "the season is not over"}, 409)
+                return
+            franchise.begin(league)
+            self._send_json(views.offseason_view(league))
+
+        elif parts == ["offseason", "negotiate"]:
+            # One offer to one player or coach. Goes through exactly the
+            # negotiation service the AI uses.
+            if not franchise.is_available(league):
+                self._send_json({"error": "the season is not over"}, 409)
+                return
+            franchise.begin(league)
+            result = franchise.negotiate(
+                league,
+                str(body.get("id", "")),
+                int(body.get("years", 1)),
+                int(body.get("salary", 0)),
+            )
+            self._send_json(result, 404 if result.get("error") else 200)
+
+        elif parts == ["offseason", "advance"]:
+            # The whole pipeline, in the order `franchise.advance` documents.
+            # Anything the manager did not settle by hand is auto-resolved on
+            # the way through.
+            result = franchise.advance(league)
+            if result.get("error"):
+                self._send_json(result, 409)
+                return
+            self._send_json({"report": result, "offseason": views.offseason_view(league)})
 
         elif parts == ["clock", "skip-to-next"]:
             next_game = league.next_game_after(league.clock.now())

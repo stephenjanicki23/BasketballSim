@@ -27,6 +27,10 @@
       <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="playoffs">Playoffs</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
+      <!-- Hidden until the Finals conclude. `renderOffseason` unhides it; the
+           gate is the champion being decided, not a date. -->
+      <button class="nav-tab nav-tab-offseason" role="tab" aria-selected="false"
+              data-view="offseason" hidden>Offseason</button>
     </nav>
   </header>
 
@@ -335,6 +339,37 @@
           <p class="note" id="profile-chart-note"></p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Offseason --------------------------------------------------- -->
+  <section class="view" data-view="offseason" role="tabpanel" aria-label="Offseason" hidden>
+    <div class="offseason-page">
+      <header class="offseason-head">
+        <div>
+          <h2 id="offseason-title">Offseason</h2>
+          <p class="note" id="offseason-phase"></p>
+        </div>
+        <button type="button" id="offseason-advance" class="advance-btn">
+          Advance to Next Season
+        </button>
+      </header>
+
+      <!-- Sub-navigation. Every item in the brief is here; the ones with no
+           logic behind them carry a "Planned" badge rather than a dead page. -->
+      <nav class="offseason-nav" role="tablist" aria-label="Offseason sections">
+        <button class="off-tab is-active" role="tab" aria-selected="true" data-off="news">League News</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="expected">Expected Free Agents</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="negotiations">Contract Negotiations</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="coaches">Coach Negotiations</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="freeagency">Free Agency</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="retirements">Retirements</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="draft">Draft</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="camp">Training Camp</button>
+        <button class="off-tab" role="tab" aria-selected="false" data-off="payroll">Payroll</button>
+      </nav>
+
+      <div class="offseason-body" id="offseason-body"></div>
     </div>
   </section>
 </div>

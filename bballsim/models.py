@@ -82,6 +82,22 @@ class Player:
     # counterpart to `condition` below, which is only ever about tonight.
     health: Health = field(default_factory=Health)
 
+    # What he is owed and for how long. A `contracts.Contract`, held untyped
+    # for the same reason `career` is: `contracts` prices a player from his
+    # ability and his age, so it imports the player model rather than the other
+    # way round.
+    #
+    # `None` is a real state and not a bug -- a prospect who has not signed, a
+    # league generated before contracts existed, a free agent between deals.
+    # Everything that reads it treats absence as "no money owed" rather than
+    # raising, so a half-migrated save still renders.
+    contract: object | None = None
+
+    # How he negotiates: loyalty, money, winning, playing time. A
+    # `negotiation.Personality`, generated once from his id and his character
+    # attributes. Hidden from the roster UI the same way `hidden` is.
+    negotiation: object | None = None
+
     # Live, per-game state. Reset by the engine at tip-off.
     #
     # `condition` starts at 100 only for a player who is carrying nothing;

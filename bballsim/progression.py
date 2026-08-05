@@ -449,6 +449,35 @@ def realisation_factor(hidden, ratings: Ratings) -> float:
     return REALISATION_FLOOR + REALISATION_RANGE * share
 
 
+# How much of his peak a player has already given back, per year past his
+# prime. A profile built for a 35-year-old has to account for the fact that he
+# was better at 28 than he is now -- `peak_ca` otherwise records the day the
+# profile happened to be created as the best he ever was.
+PEAK_RECOVERY_PER_YEAR = 0.022
+PEAK_RECOVERY_CAP = 0.28
+
+
+def implied_peak(player, prime_age: float) -> float:
+    """What his ability probably topped out at, for a career already under way.
+
+    `peak_ca` is a *running maximum*, and it can only run from the moment the
+    profile exists. On a fresh league that moment is today, so a 35-year-old in
+    visible decline records his declined ability as his career best -- which
+    made every retirement report a peak identical to its final rating, and made
+    the newsroom write "a decline of 0.0 points" about a fourteen-year career.
+
+    A player before his prime has not peaked yet, so this returns what he is.
+    Past it, his peak is reconstructed from how far past it he is, capped so
+    the estimate never claims more than a tier and a bit.
+    """
+    current = player.ability.current
+    past_prime = max(0.0, player.age - prime_age)
+    if past_prime <= 0:
+        return current
+    recovered = min(PEAK_RECOVERY_CAP, past_prime * PEAK_RECOVERY_PER_YEAR)
+    return min(player.ability.potential, current * (1.0 + recovered))
+
+
 def build_profile(player, seed: str | None = None) -> CareerProfile:
     """Everything permanent about how this player will age."""
     rng = random.Random(seed_from_string(seed or f"career-{player.id}"))
@@ -461,7 +490,7 @@ def build_profile(player, seed: str | None = None) -> CareerProfile:
         arc=arc,
         realisation=realisation_factor(player.hidden, player.ratings),
         baseline_ca=player.ability.current,
-        peak_ca=player.ability.current,
+        peak_ca=implied_peak(player, prime),
     )
 
 
@@ -687,6 +716,7 @@ def develop_season(
     *,
     minutes: float = 1800.0,
     coach_development: float = 50.0,
+    championships: int = 0,
     seed: str | None = None,
 ) -> SeasonReport:
     """Advance one player by one offseason.
@@ -696,6 +726,10 @@ def develop_season(
     recomputed from the result -- so CA is always exactly what the attributes
     say it is, and the ceiling is enforced against the attribute set rather
     than against a number kept alongside it.
+
+    `championships` is what he has already won, and it only ever feeds the
+    retirement decision -- a ring makes a man likelier to stop, never better or
+    worse at basketball.
     """
     rng = random.Random(seed_from_string(
         seed or f"season-{player.id}-{profile.seasons_played}-{player.age}"))
@@ -805,7 +839,8 @@ def develop_season(
     player.age += 1
 
     # -- 5. retirement -----------------------------------------------------
-    if _should_retire(rng, player, profile):
+    if _should_retire(rng, player, profile, minutes=minutes,
+                      championships=championships):
         profile.retired = True
         report.retired = True
     return report
@@ -865,7 +900,65 @@ def _career_events(rng, player, profile: CareerProfile, deltas: dict[str, float]
                 deltas[key] *= 1.6
 
 
-def _should_retire(rng, player, profile: CareerProfile) -> bool:
+# --------------------------------------------------------------------------
+# Retirement
+#
+# Age against ability is the spine of the decision and always was. What the
+# four terms below add is the rest of what actually ends a career: a body that
+# has taken too much, a man who has already won what he set out to win, one who
+# is no longer being picked, and one whose best years are far enough behind him
+# that he can see it.
+#
+# Each is a *nudge on the probability*, never a verdict. A single factor should
+# never retire anybody on its own -- that is how you get a 32-year-old walking
+# away because he won a title -- so they are added together and applied to a
+# chance that age and ability have already set.
+# --------------------------------------------------------------------------
+
+# Career wear, 0-100 on `health.wear`. A worn-out body is the most common real
+# reason a career ends early, so it carries the most weight here.
+RETIREMENT_WEAR_SWING = 0.55
+# Rings. A man with nothing left to prove goes out on top a little sooner.
+RETIREMENT_RING_SWING = 0.10
+# Minutes last season, against a rotation player's. Being out of the rotation
+# is what tells a veteran the league has moved on.
+RETIREMENT_BENCH_SWING = 0.45
+ROTATION_MINUTES = 1200.0
+# How far below his own peak he has fallen. Decline he can feel.
+RETIREMENT_DECLINE_SWING = 0.40
+
+
+def retirement_pressure(player, profile: CareerProfile, *, minutes: float = 0.0,
+                        championships: int = 0) -> float:
+    """Everything beyond age and ability, as a multiplier on the base chance.
+
+    Returns roughly 0.5 (a fresh, still-starting, ringless veteran who wants to
+    keep going) to about 2.5 (a worn-down champion who barely played). Exposed
+    rather than inlined so the retirement screen can say *why* somebody went.
+    """
+    pressure = 1.0
+
+    wear = getattr(getattr(player, "health", None), "wear", 0.0) or 0.0
+    pressure += (wear / 100.0) * RETIREMENT_WEAR_SWING
+
+    pressure += min(3, max(0, championships)) * RETIREMENT_RING_SWING
+
+    # Minutes are last season's. A man who played a full rotation load is still
+    # wanted; one who played nothing has had the decision made for him.
+    share = min(1.0, max(0.0, minutes / ROTATION_MINUTES))
+    pressure += (1.0 - share) * RETIREMENT_BENCH_SWING
+
+    # Decline against his own peak, not against the league.
+    peak = max(profile.peak_ca, player.ability.current)
+    if peak > 0:
+        fallen = max(0.0, (peak - player.ability.current) / peak)
+        pressure += min(1.0, fallen * 2.5) * RETIREMENT_DECLINE_SWING
+
+    return max(0.35, pressure)
+
+
+def _should_retire(rng, player, profile: CareerProfile, *, minutes: float = 0.0,
+                   championships: int = 0) -> bool:
     if player.age >= HARD_RETIREMENT_AGE:
         return True
     if player.age < RETIREMENT_AGE_FLOOR:
@@ -877,9 +970,13 @@ def _should_retire(rng, player, profile: CareerProfile) -> bool:
         return True
     # Even a useful veteran walks away eventually -- but a player still well
     # clear of the line does not retire at 35 on a coin flip. The chance falls
-    # off with how much ability he has left above the threshold.
+    # off with how much ability he has left above the threshold, and is then
+    # moved by everything else a career carries.
     margin = (player.ability.current - threshold) / 60.0
-    return rng.random() < 0.10 * max(0, player.age - 34) * max(0.10, 1.0 - margin)
+    chance = 0.10 * max(0, player.age - 34) * max(0.10, 1.0 - margin)
+    chance *= retirement_pressure(player, profile, minutes=minutes,
+                                  championships=championships)
+    return rng.random() < min(0.95, chance)
 
 
 # --------------------------------------------------------------------------

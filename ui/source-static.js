@@ -37,6 +37,14 @@ window.BBALL_SOURCE = {
     return this._data.teams.find((t) => t.id === teamId) || null;
   },
 
+  /* A published page is a snapshot of one moment in one season, so it has no
+   * summer to show. Returning an explicitly unavailable menu rather than null
+   * is what keeps the OFFSEASON tab hidden on the demo instead of rendering an
+   * empty one -- the same shape the API sends mid-season. */
+  async offseason() {
+    return this._data.offseason || { available: false };
+  },
+
   // A published page has no server to talk to; the league clock is fixed.
   async command() {
     return null;

@@ -32,6 +32,18 @@ window.BBALL_SOURCE = {
     return getJSON(`/api/teams/${encodeURIComponent(teamId)}/squad`);
   },
 
+  /* The whole OFFSEASON menu in one fetch. Answers even when the season is
+   * still running -- the UI has to be told the menu is unavailable, which is
+   * a different thing from a request that failed. */
+  async offseason() {
+    try {
+      return await getJSON("/api/offseason");
+    } catch (error) {
+      console.warn("offseason fetch failed", error);
+      return null;
+    }
+  },
+
   /* Clock controls. Only the live app has these -- a published page cannot
    * advance anything -- so app.js hides the controls when `live` is false. */
   async command(path, body = {}) {

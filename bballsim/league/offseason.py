@@ -199,6 +199,47 @@ def archive(league) -> SeasonArchive:
     )
 
 
+def career_seasons(player, profile, season: str) -> int:
+    """How long he has been in the league, in seasons.
+
+    **Not `profile.seasons_played`.** That counts summers this save has
+    actually simulated, which on a fresh league is zero for a 36-year-old who
+    is supposed to have fourteen years behind him. Using it meant every
+    retirement in the first offseason read as a one-season career, and the
+    newsroom's "was this career worth writing about" floor filtered out the
+    lot.
+
+    His draft year is the real answer, and it is stored on every player. The
+    seasons this save has run are added on top for anyone drafted after it
+    began; `max` covers a player with no draft class at all.
+    """
+    drafted = getattr(getattr(player.bio, "draft", None), "year", None)
+    if drafted:
+        return max(profile.seasons_played, start_year(season) - int(drafted) + 1)
+    return max(profile.seasons_played, player.age - 21)
+
+
+def championships_by_team(league) -> dict[str, int]:
+    """Titles each club has won, from the archived seasons plus this one.
+
+    Charged to the *club*, not to the individual, and that is a real limitation
+    rather than an oversight: nothing in this project records which players were
+    on a roster in a past season, so "his rings" cannot be asked. What can be
+    asked is how much winning the club he is at has done, and a man on a
+    three-time champion has almost certainly got one. When squad history exists
+    this becomes a per-player count and nothing else has to change.
+    """
+    counts: dict[str, int] = {}
+    for archived in getattr(league, "history", []):
+        champion = getattr(archived, "champion", None)
+        if champion:
+            counts[champion] = counts.get(champion, 0) + 1
+    current = playoffs.champion(league)
+    if current:
+        counts[current] = counts.get(current, 0) + 1
+    return counts
+
+
 def develop(league, seed: str) -> tuple[OffseasonReport, dict[str, list[Player]]]:
     """Age every player a year. Returns the report and who retired, by club.
 
@@ -212,9 +253,11 @@ def develop(league, seed: str) -> tuple[OffseasonReport, dict[str, list[Player]]
         champion=playoffs.champion(league),
     )
     retirements: dict[str, list[Player]] = {}
+    rings = championships_by_team(league)
 
     for team in league.teams.values():
         coaching = team.coach.ratings.development if team.coach else 50.0
+        won = rings.get(team.id, 0)
         for player in list(team.players):
             line = league.stats.players.get(player.id)
             minutes = line.minutes if line else 0.0
@@ -226,6 +269,7 @@ def develop(league, seed: str) -> tuple[OffseasonReport, dict[str, list[Player]]
             before = player.ability.current
             result = develop_season(
                 player, profile, minutes=minutes, coach_development=coaching,
+                championships=won,
                 seed=f"{seed}-{player.id}-{profile.seasons_played}",
             )
             report.developed += 1
@@ -243,7 +287,7 @@ def develop(league, seed: str) -> tuple[OffseasonReport, dict[str, list[Player]]
                     "age": player.age,
                     "ca": round(before, 1),
                     "peakCa": round(profile.peak_ca, 1),
-                    "seasons": profile.seasons_played,
+                    "seasons": career_seasons(player, profile, league.season),
                 })
     return report, retirements
 
