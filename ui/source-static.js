@@ -45,6 +45,13 @@ window.BBALL_SOURCE = {
     return this._data.offseason || { available: false };
   },
 
+  /* A published page is one frozen moment, so there is no market activity to
+   * show and nothing to veto. Returning null keeps the screen honest about
+   * that rather than rendering an empty board. */
+  async market() {
+    return this._data.market || null;
+  },
+
   // A published page has no server to talk to; the league clock is fixed.
   async command() {
     return null;

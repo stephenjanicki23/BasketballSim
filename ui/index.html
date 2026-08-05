@@ -27,6 +27,7 @@
       <button class="nav-tab" role="tab" aria-selected="false" data-view="standings">Standings</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="playoffs">Playoffs</button>
       <button class="nav-tab" role="tab" aria-selected="false" data-view="teams">Teams</button>
+      <button class="nav-tab" role="tab" aria-selected="false" data-view="trades">Trade Block</button>
       <!-- Hidden until the Finals conclude. `renderOffseason` unhides it; the
            gate is the champion being decided, not a date. -->
       <button class="nav-tab nav-tab-offseason" role="tab" aria-selected="false"
@@ -343,6 +344,25 @@
           <p class="note" id="profile-chart-note"></p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Trade Block ------------------------------------------------- -->
+  <section class="view" data-view="trades" role="tabpanel" aria-label="Trade Block" hidden>
+    <div class="trade-page">
+      <header class="trade-head">
+        <div>
+          <h2>Trade Block</h2>
+          <p class="note" id="trade-status"></p>
+        </div>
+      </header>
+      <nav class="offseason-nav" role="tablist" aria-label="Trade sections">
+        <button class="trade-tab is-active" role="tab" aria-selected="true" data-trade="pending">Pending</button>
+        <button class="trade-tab" role="tab" aria-selected="false" data-trade="board">The Board</button>
+        <button class="trade-tab" role="tab" aria-selected="false" data-trade="log">Completed</button>
+        <button class="trade-tab" role="tab" aria-selected="false" data-trade="vetoed">Vetoed</button>
+      </nav>
+      <div id="trade-body"></div>
     </div>
   </section>
 

@@ -92,6 +92,30 @@ def extremes():
     return best, worst
 
 
+
+def a_pending_deal(lg=None):
+    """A league with at least one deal on the table, and that deal.
+
+    Walks the market date forward until an opening produces something. Which
+    two clubs go shopping is drawn from the date, so a single opening on a
+    fresh league often finds nothing -- and every market test that guarded on
+    that with `skipTest` was silently not running. Six of sixteen were skipping.
+    """
+    from datetime import timedelta
+
+    from bballsim import trade_market as TM
+
+    lg = lg or fresh()
+    now = lg.clock.now()
+    for step in range(14):
+        moment = now + timedelta(days=step * TM.MARKET_INTERVAL_DAYS)
+        TM.state(lg).last_opened = None
+        made = TM.open_market(lg, moment)
+        if made:
+            return lg, made[0], moment
+    raise AssertionError("the market never produced a deal in fourteen openings")
+
+
 # --------------------------------------------------------------------------
 # Identity
 # --------------------------------------------------------------------------
@@ -825,3 +849,227 @@ class TestDeadlineBehaviour(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --------------------------------------------------------------------------
+# The autonomous market
+# --------------------------------------------------------------------------
+
+class TestTheMarketRunsItself(unittest.TestCase):
+    """Front offices do their own business. Nobody proposes anything by hand,
+    and the only human input is a veto."""
+
+    _WOUND = None
+
+    def wound_forward(self, openings: int = 5):
+        """A league run forward far enough for the market to have done business.
+
+        Built **once** for the class. Winding the clock forward also simulates
+        every game in between -- three league days is over a hundred fixtures
+        here -- so doing it per test made this file take ten minutes.
+        """
+        from datetime import timedelta
+
+        from bballsim import trade_market as TM
+
+        if TestTheMarketRunsItself._WOUND is None:
+            lg = fresh()
+            for _ in range(openings):
+                lg.clock.advance(timedelta(days=TM.MARKET_INTERVAL_DAYS))
+                lg.tick()
+            TestTheMarketRunsItself._WOUND = (lg, TM.state(lg))
+        return TestTheMarketRunsItself._WOUND
+
+    def test_trades_happen_without_anybody_asking(self):
+        _lg, market = self.wound_forward()
+        self.assertGreater(len(market.completed), 0,
+                           "no club ever traded on its own")
+
+    def test_a_deal_waits_before_it_completes(self):
+        """The window is what makes a veto possible at all."""
+        from datetime import timedelta
+
+        from bballsim import trade_market as TM
+
+        _lg, entry, _moment = a_pending_deal()
+        self.assertEqual(entry.status, "pending")
+        self.assertEqual(entry.decide_after - entry.proposed_at,
+                         timedelta(days=TM.PENDING_DAYS))
+
+    def test_a_pending_deal_nobody_stops_goes_through(self):
+        """An override, not an approval step: a league left running trades."""
+        from datetime import timedelta
+
+        from bballsim import trade_market as TM
+
+        lg, entry, moment = a_pending_deal()
+        done = TM.settle(lg, moment + timedelta(days=TM.PENDING_DAYS + 1))
+        self.assertTrue(done)
+        self.assertEqual(entry.status, "done")
+
+    def test_a_vetoed_deal_does_not_happen(self):
+        from datetime import timedelta
+
+        from bballsim import trade_market as TM
+
+        lg, entry, moment = a_pending_deal()
+        sending = lg.teams[entry.offer.sending.team_id]
+        moving = list(entry.offer.sending.player_ids)
+
+        self.assertTrue(TM.veto(lg, entry.id)["vetoed"])
+        TM.settle(lg, moment + timedelta(days=TM.PENDING_DAYS + 1))
+        for pid in moving:
+            self.assertIsNotNone(sending.player(pid),
+                                 "a vetoed player moved anyway")
+
+    def test_a_vetoed_deal_is_not_proposed_again(self):
+        """Otherwise the button feels like it did not work."""
+        from bballsim import trade_market as TM
+
+        lg, entry, _moment = a_pending_deal()
+        TM.veto(lg, entry.id)
+        self.assertIn(entry.id, TM.state(lg).blocked)
+
+    def test_vetoing_something_that_is_not_pending_says_so(self):
+        from bballsim import trade_market as TM
+
+        lg = fresh()
+        result = TM.veto(lg, "not-a-real-trade")
+        self.assertFalse(result["vetoed"])
+        self.assertIn("error", result)
+
+    def test_an_ordinary_tick_costs_nothing(self):
+        """`tick` runs on every API request and a trade search is seconds, so
+        everything expensive has to sit behind the cadence guard."""
+        lg = fresh()
+        lg.tick()                      # opens the market once
+        start = time.time()
+        for _ in range(5):
+            lg.tick()
+        self.assertLess(time.time() - start, 1.0)
+
+    def test_the_market_only_opens_on_its_cadence(self):
+        from datetime import timedelta
+
+        from bballsim import trade_market as TM
+
+        lg = fresh()
+        now = lg.clock.now()
+        TM.open_market(lg, now)
+        self.assertFalse(TM.is_due(lg, now + timedelta(hours=12)))
+        self.assertTrue(TM.is_due(
+            lg, now + timedelta(days=TM.MARKET_INTERVAL_DAYS)))
+
+    def test_a_club_that_just_traded_waits(self):
+        from bballsim import trade_market as TM
+
+        lg, entry, moment = a_pending_deal()
+        market = TM.state(lg)
+        traded = entry.offer.sending.team_id
+        self.assertIn(traded, market.cooldowns)
+        self.assertGreater(market.cooldowns[traded], moment)
+
+    def test_every_completed_trade_carries_both_sides_reasoning(self):
+        _lg, market = self.wound_forward()
+        if not market.completed:
+            self.skipTest("no trades completed")
+        for row in market.completed:
+            self.assertEqual(len(row["sides"]), 2)
+            for side in row["sides"]:
+                self.assertTrue(side["reasoning"].strip())
+                self.assertIn("championship window", side["reasoning"])
+
+    def test_a_deal_that_became_illegal_does_not_fire(self):
+        """The league moves between agreement and settlement."""
+        from datetime import timedelta
+
+        from bballsim import trade_market as TM
+
+        lg, entry, moment = a_pending_deal()
+        # Strip the sending club down so the deal breaks the roster minimum.
+        sending = lg.teams[entry.offer.sending.team_id]
+        keep = set(entry.offer.sending.player_ids)
+        sending.players = ([p for p in sending.players if p.id in keep]
+                           + [p for p in sending.players if p.id not in keep])[:2]
+        TM.settle(lg, moment + timedelta(days=TM.PENDING_DAYS + 1))
+        self.assertEqual(entry.status, "vetoed")
+        self.assertIn("no longer legal", entry.vetoed_reason)
+
+    def test_it_is_deterministic(self):
+        from datetime import timedelta
+
+        from bballsim import trade_market as TM
+
+        first, second = fresh(), fresh()
+        for lg in (first, second):
+            lg.clock.jump_to(lg.clock.now())
+        moment = first.clock.now()
+        a = [p.id for p in TM.open_market(first, moment)]
+        b = [p.id for p in TM.open_market(second, moment)]
+        self.assertEqual(a, b)
+
+
+class TestTheMarketSurvivesARestart(unittest.TestCase):
+
+    def market(self):
+        from bballsim import trade_market as TM
+
+        lg, _entry, _moment = a_pending_deal()
+        return lg, TM.state(lg)
+
+    def test_the_log_and_pending_deals_round_trip(self):
+        import json
+
+        from bballsim import save
+
+        lg, market = self.market()
+        blob = json.loads(json.dumps(save.dump_market(market), default=str))
+        back = save.load_market(blob, lg)
+        self.assertEqual([p.id for p in back.pending],
+                         [p.id for p in market.pending])
+        self.assertEqual(len(back.completed), len(market.completed))
+        self.assertEqual(back.blocked, market.blocked)
+
+    def test_a_restored_pending_deal_points_at_the_real_picks(self):
+        """Written as coordinates and matched back, so a restored deal cannot
+        hold a stale copy of a pick that has since moved."""
+        import json
+
+        from bballsim import draft_picks, save, trades
+
+        lg = fresh()
+        pick = draft_picks.owned_by(lg, list(lg.teams)[0])[0]
+        offer = trades.Offer(
+            sending=trades.Package(list(lg.teams)[0], [], [pick]),
+            receiving=trades.Package(list(lg.teams)[1], []))
+        market = save.load_market(json.loads(json.dumps({
+            "version": 1, "last_opened": None, "cooldowns": {}, "blocked": [],
+            "completed": [], "vetoed": [],
+            "pending": [{
+                "id": "x",
+                "proposed_at": lg.clock.now().isoformat(),
+                "decide_after": lg.clock.now().isoformat(),
+                "summary": {},
+                "sending": save._dump_package(offer.sending),
+                "receiving": save._dump_package(offer.receiving),
+            }],
+        })), lg)
+        restored = market.pending[0].offer.sending.picks[0]
+        self.assertIs(restored, pick, "restored a copy rather than the pick")
+
+    def test_pick_ownership_round_trips(self):
+        from bballsim import draft_picks, save
+
+        lg = fresh()
+        ids = list(lg.teams)
+        pick = draft_picks.owned_by(lg, ids[0])[0]
+        pick.owner = ids[1]
+        rows = save.dump_pick_ownership(lg)
+        pick.owner = ids[0]
+        save.apply_pick_ownership(lg, rows)
+        self.assertEqual(pick.owner, ids[1])
+
+    def test_a_league_with_no_market_writes_nothing(self):
+        from bballsim import save, trade_market
+
+        self.assertIsNone(save.dump_market(trade_market.Market()))

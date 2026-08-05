@@ -286,26 +286,32 @@ def roster_strength(league, team) -> float:
     return clamp((mine - low) / (high - low) * 100.0)
 
 
-def timeline(league, team) -> Timeline:
-    """Which phase this club is in, right now.
+def standing(league, team) -> float:
+    """How good this club actually is, 0-1: what it has, against what it has done.
 
-    Blends where it *is* (record) with what it *has* (roster), because a club
-    that has started badly with a strong roster is not rebuilding, and one on a
-    lucky run with nothing is not a contender. Early in a season the roster
-    dominates, because fifteen games of record is noise; late on the record
-    does, because by then it is the truth.
+    Blends roster against record, because a club that has started badly with a
+    strong roster is not rebuilding and one on a lucky run with nothing is not
+    a contender. Early in a season the roster dominates -- fifteen games is
+    noise; late on the record does, because by then it is the truth.
+
+    **Both the timeline and the window read this**, and that is the point. They
+    used to disagree: the timeline blended record with roster while the window
+    scored the roster alone, so a talented club having a bad year showed as
+    "Full Rebuild, window 70" on the same row of the trade board. Two readings
+    of how good a club is have to start from the same number.
     """
     from .mvp import games_played
 
     done, scheduled = games_played(league)
     share = done / scheduled if scheduled else 0.0
-    # How much to trust the standings over the roster.
     record_weight = min(1.0, share * 2.2)
-
     strength = roster_strength(league, team) / 100.0
-    record = win_pct(league, team.id)
-    blended = record * record_weight + strength * (1.0 - record_weight)
+    return win_pct(league, team.id) * record_weight + strength * (1.0 - record_weight)
 
+
+def timeline(league, team) -> Timeline:
+    """Which of the eight phases this club is in, right now."""
+    blended = standing(league, team)
     ident = identity(team)
     # A club with no patience talks itself into contention; a patient one is
     # honest with itself sooner. Small, but it is what makes two clubs with the
@@ -462,15 +468,7 @@ def window(league, team) -> float:
     Above 80 the brief says a club should be willing to mortgage its future,
     and `trades` reads it exactly that way.
     """
-    parts = {
-        "roster": roster_strength(league, team),
-        "star_age": _star_age_score(team),
-        "star_contracts": _star_contracts_score(team),
-        "coach": _coach_score(team),
-        "flexibility": _flexibility_score(team),
-        "picks": _picks_score(league, team),
-        "conference": _conference_score(league, team),
-    }
+    parts = _window_parts(league, team)
     score = sum(parts[key] * weight for key, weight in WINDOW_WEIGHTS.items())
 
     # Urgency does not open a window, but it does change how a club behaves at
@@ -481,10 +479,11 @@ def window(league, team) -> float:
     return clamp(score)
 
 
-def window_breakdown(league, team) -> dict:
-    """The window with its parts shown, for the explanation engine and the UI."""
-    parts = {
-        "roster": roster_strength(league, team),
+def _window_parts(league, team) -> dict[str, float]:
+    return {
+        # `standing`, not raw roster strength: a club that is 25-55 does not
+        # have an open title window whatever its roster looks like on paper.
+        "roster": standing(league, team) * 100.0,
         "star_age": _star_age_score(team),
         "star_contracts": _star_contracts_score(team),
         "coach": _coach_score(team),
@@ -492,6 +491,11 @@ def window_breakdown(league, team) -> dict:
         "picks": _picks_score(league, team),
         "conference": _conference_score(league, team),
     }
+
+
+def window_breakdown(league, team) -> dict:
+    """The window with its parts shown, for the explanation engine and the UI."""
+    parts = _window_parts(league, team)
     return {
         "score": round(window(league, team), 1),
         "parts": {key: round(value, 1) for key, value in parts.items()},

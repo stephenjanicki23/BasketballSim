@@ -243,6 +243,11 @@ const state = {
   // what has been typed. Cleared when a deal is agreed.
   offOffers: new Map(),
   offReplies: new Map(),
+  // The trade market. Fetched when the Trade Block is opened, because it is a
+  // window onto activity that has already happened rather than something the
+  // first paint needs.
+  market: null,
+  tradeTab: "pending",
   // The one-line summary of a summer that has just been advanced. Kept
   // separately from the phase label so re-rendering does not overwrite it and
   // so the phase label is free to update on every render.
@@ -302,6 +307,7 @@ async function boot() {
   renderStats();
   bindControls();
   bindOffseason();
+  bindTrades();
   // The tab is hidden until the Finals conclude; the server decides that, so
   // this asks rather than inferring it from the schedule.
   await renderOffseasonTab();
@@ -2629,6 +2635,7 @@ function bindControls() {
       // fixture happened to be open when you left.
       if (tab.dataset.view === "games") showTracker(false);
       if (tab.dataset.view === "offseason") openOffseason();
+      if (tab.dataset.view === "trades") openTrades();
       setView(tab.dataset.view);
     });
   });
@@ -3714,4 +3721,248 @@ function renderMvpColumns(page, data) {
   stories.forEach((story, index) => grid.appendChild(storyCard(story, index === 0)));
   section.appendChild(grid);
   page.appendChild(section);
+}
+
+/* ------------------------------------------------------------------ *
+ * Trade Block
+ *
+ * A window onto the league, not a control surface. Front offices do their own
+ * business inside `League.tick`; by the time this screen renders, everything
+ * on it has already been decided. The one thing a manager can do is stop a
+ * pending deal, and that is deliberately an override rather than an approval
+ * step -- a pending trade nobody watches goes through.
+ * ------------------------------------------------------------------ */
+
+async function loadMarket(force = false) {
+  if (state.market && !force) return state.market;
+  if (!state.source.market) return null;
+  state.market = await state.source.market();
+  return state.market;
+}
+
+function bindTrades() {
+  $$(".trade-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setTradeTab(tab.dataset.trade));
+  });
+}
+
+function setTradeTab(key) {
+  state.tradeTab = key;
+  $$(".trade-tab").forEach((t) => {
+    const active = t.dataset.trade === key;
+    t.classList.toggle("is-active", active);
+    t.setAttribute("aria-selected", String(active));
+  });
+  renderTradeBody();
+}
+
+async function openTrades() {
+  await loadMarket(true);
+  renderTrades();
+}
+
+function renderTrades() {
+  const data = state.market;
+  const status = $("#trade-status");
+  if (status) {
+    if (!data) {
+      status.textContent = "No trade data in this payload.";
+    } else {
+      const pending = (data.pending || []).length;
+      const done = (data.completed || []).length;
+      status.textContent =
+        `Front offices are managing themselves. The market opens every `
+        + `${data.marketOpensEvery} league days; an agreed deal sits for `
+        + `${data.pendingDays} day before it completes, which is your window to `
+        + `veto it. ${done} completed, ${pending} pending.`;
+    }
+  }
+  renderTradeBody();
+}
+
+function renderTradeBody() {
+  const body = $("#trade-body");
+  if (!body) return;
+  body.textContent = "";
+  const data = state.market;
+  if (!data) {
+    body.appendChild(el("p", "empty", "Trades are only available in the running app."));
+    return;
+  }
+  ({
+    pending: tradePending, board: tradeBoard,
+    log: tradeLog, vetoed: tradeVetoed,
+  }[state.tradeTab] || tradePending)(body, data);
+}
+
+/* --- one deal, as a card ------------------------------------------- */
+
+function tradeCard(deal, { veto = false } = {}) {
+  const card = el("article", "trade-card");
+  card.appendChild(el("h3", "trade-headline", deal.headline || "Trade"));
+
+  const sides = el("div", "trade-sides");
+  (deal.sides || []).forEach((side) => {
+    const box = el("div", "trade-side");
+    const head = el("div", "trade-side-head");
+    head.appendChild(teamLink(side.teamId, (node) => {
+      node.textContent = side.name || side.abbr;
+    }));
+    head.appendChild(el("span", "roster-meta",
+      `${side.timeline} · window ${side.window}`));
+    box.appendChild(head);
+
+    const gives = el("ul", "trade-pieces");
+    (side.sends || []).forEach((p) => {
+      const row = el("li");
+      row.appendChild(playerLink(p.name, p.playerId, side.teamId));
+      row.appendChild(el("span", "trade-piece-meta",
+        `${p.position} · ${p.age} · OVR ${p.overall} · ${money(p.salary)}`));
+      gives.appendChild(row);
+    });
+    (side.sendsPicks || []).forEach((pick) => {
+      const row = el("li");
+      row.appendChild(el("span", "trade-pick", pick.label));
+      row.appendChild(el("span", "trade-piece-meta",
+        `via ${(state.teams.get(pick.originalTeam) || {}).abbr || pick.originalTeam}`));
+      gives.appendChild(row);
+    });
+    if (!gives.childNodes.length) {
+      gives.appendChild(el("li", "trade-piece-meta", "nothing"));
+    }
+    box.appendChild(el("span", "trade-label", "sends"));
+    box.appendChild(gives);
+
+    // The engine's own words. This is the whole point of the screen: you can
+    // see why each front office thought this was worth doing.
+    box.appendChild(el("p", "trade-reasoning", side.reasoning || ""));
+    sides.appendChild(box);
+  });
+  card.appendChild(sides);
+
+  const foot = el("div", "trade-foot");
+  if (deal.salarySwing) {
+    foot.appendChild(el("span", "roster-meta", `Salary swing ${deal.salarySwing}`));
+  }
+  if (deal.completedAt) {
+    foot.appendChild(el("span", "roster-meta", gameDay(deal.completedAt)));
+  }
+  if (deal.vetoedReason) {
+    foot.appendChild(el("span", "trade-vetoed", deal.vetoedReason));
+  }
+
+  if (veto && state.data.live) {
+    const button = el("button", "veto-btn", "Veto this trade");
+    button.type = "button";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "Stopping…";
+      try {
+        const result = await state.source.command("trades/veto", { id: deal.id });
+        if (result && result.market) {
+          state.market = result.market;
+          renderTrades();
+        }
+      } catch (error) {
+        console.warn("veto failed", error);
+        button.disabled = false;
+        button.textContent = "Veto this trade";
+      }
+    });
+    foot.appendChild(button);
+  }
+  card.appendChild(foot);
+  return card;
+}
+
+function gameDay(iso) {
+  try {
+    return new Date(iso).toLocaleDateString(undefined,
+      { month: "short", day: "numeric" });
+  } catch (error) {
+    return "";
+  }
+}
+
+/* --- the four screens ---------------------------------------------- */
+
+function tradePending(body, data) {
+  const rows = data.pending || [];
+  if (!rows.length) {
+    body.appendChild(el("p", "empty",
+      "Nothing on the table. Clubs go shopping every "
+      + `${data.marketOpensEvery} league days — let the clock run.`));
+    return;
+  }
+  body.appendChild(el("p", "note",
+    "These have been agreed by both front offices and will complete on their "
+    + "own. Veto one only if the logic has produced something that makes no "
+    + "sense — a vetoed deal is not proposed again."));
+  const list = el("div", "trade-list");
+  rows.forEach((deal) => list.appendChild(tradeCard(deal, { veto: true })));
+  body.appendChild(list);
+}
+
+function tradeLog(body, data) {
+  const rows = [...(data.completed || [])].reverse();
+  if (!rows.length) {
+    body.appendChild(el("p", "empty", "No trades have been completed yet."));
+    return;
+  }
+  body.appendChild(el("p", "note",
+    `${rows.length} completed. Each carries what both clubs thought at the `
+    + `time — the reasoning is generated from the same numbers that decided it.`));
+  const list = el("div", "trade-list");
+  rows.slice(0, 30).forEach((deal) => list.appendChild(tradeCard(deal)));
+  body.appendChild(list);
+}
+
+function tradeVetoed(body, data) {
+  const rows = [...(data.vetoed || [])].reverse();
+  if (!rows.length) {
+    body.appendChild(el("p", "empty", "Nothing has been vetoed."));
+    return;
+  }
+  const list = el("div", "trade-list");
+  rows.forEach((deal) => list.appendChild(tradeCard(deal)));
+  body.appendChild(list);
+}
+
+function tradeBoard(body, data) {
+  const rows = data.teams || [];
+  body.appendChild(el("p", "note",
+    "Every club by championship window. What each is short of comes from its "
+    + "rotation measured against the league; who is available is whoever the "
+    + "front office considers genuinely expendable — never an untouchable, "
+    + "never one of its three best players."));
+
+  const table = offTable([
+    ["team", "Club", "col-name"], ["timeline", "Timeline"], ["window", "Window"],
+    ["mode", "Stance"], ["needs", "Needs"], ["available", "Available"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    name.appendChild(teamLink(row.teamId, (node) => {
+      node.textContent = row.name;
+    }));
+    tr.appendChild(name);
+    tr.appendChild(el("td", null, row.timelineLabel));
+    tr.appendChild(el("td", null, String(row.window)));
+    const stance = el("td");
+    const mode = row.buying ? "Buyer" : row.selling ? "Seller" : "Undecided";
+    stance.appendChild(el("span", `pill pill-${mode.toLowerCase()}`, mode));
+    tr.appendChild(stance);
+    tr.appendChild(el("td", "trade-needs",
+      (row.needs || []).map((n) => n.replace(/_/g, " ")).join(", ")));
+    const avail = el("td", "trade-avail");
+    (row.available || []).slice(0, 3).forEach((p, index) => {
+      if (index) avail.appendChild(el("span", null, ", "));
+      avail.appendChild(playerLink(p.name, p.playerId, row.teamId));
+    });
+    tr.appendChild(avail);
+    tbody.appendChild(tr);
+  });
+  appendTable(body, table);
 }

@@ -44,6 +44,17 @@ window.BBALL_SOURCE = {
     }
   },
 
+  /* The Trade Block. Everything in it has already happened -- the market runs
+   * itself inside the league tick. */
+  async market() {
+    try {
+      return await getJSON("/api/trades/market");
+    } catch (error) {
+      console.warn("trade market fetch failed", error);
+      return null;
+    }
+  },
+
   /* Clock controls. Only the live app has these -- a published page cannot
    * advance anything -- so app.js hides the controls when `live` is false. */
   async command(path, body = {}) {

@@ -1064,6 +1064,10 @@ def execute(league, offer: Offer) -> dict:
 # How many partners and how many players per partner to look at. The search is
 # quadratic in these and every evaluation walks two rotations of composites, so
 # the caps are what keep a deadline sweep from taking a minute.
+#
+# Overridable per call, because the autonomous market in `trade_market` runs
+# inside `League.tick` -- which fires on every API request -- and needs a
+# tighter budget than a manager clicking "find me a trade" does.
 MAX_PARTNERS = 12
 MAX_TARGETS = 6
 MAX_PIECES = 5
@@ -1105,7 +1109,10 @@ def _fits_need(player, dimensions: list[str]) -> float:
     return sum(FIT_DIMENSIONS[key](player) for key in dimensions) / max(1, len(dimensions))
 
 
-def find_trades(league, team_id: str, limit: int = 5) -> list[dict]:
+def find_trades(league, team_id: str, limit: int = 5, *,
+                max_partners: int = MAX_PARTNERS,
+                max_targets: int = MAX_TARGETS,
+                max_pieces: int = MAX_PIECES) -> list[dict]:
     """Deals this club would actually propose, best first.
 
     Searches for partners holding what it needs and wanting what it can spare,
@@ -1118,7 +1125,7 @@ def find_trades(league, team_id: str, limit: int = 5) -> list[dict]:
         return []
     situation = FO.situation(league, team)
     my_needs = wanted(league, situation, team)
-    my_spare = surplus(league, situation, team)[:MAX_PIECES]
+    my_spare = surplus(league, situation, team)[:max_pieces]
     if not my_spare:
         return []
 
@@ -1129,7 +1136,7 @@ def find_trades(league, team_id: str, limit: int = 5) -> list[dict]:
     order = list(FO.Timeline)
     my_phase = order.index(situation.timeline)
     others.sort(key=lambda t: -abs(order.index(FO.timeline(league, t)) - my_phase))
-    others = others[:MAX_PARTNERS]
+    others = others[:max_partners]
 
     found: list[dict] = []
     for partner in others:
@@ -1137,7 +1144,7 @@ def find_trades(league, team_id: str, limit: int = 5) -> list[dict]:
         targets = sorted(
             (p for p in partner.players
              if not TV.untouchable(league, partner_situation, p)),
-            key=lambda p: -_fits_need(p, my_needs))[:MAX_TARGETS]
+            key=lambda p: -_fits_need(p, my_needs))[:max_targets]
 
         for target in targets:
             for piece in my_spare:

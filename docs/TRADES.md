@@ -202,3 +202,73 @@ reasoning beside it: `draft_picks.SLOT_CURVE`, `FUTURE_DISCOUNT`,
 
 68 tests in `tests/test_trades.py`. Four exist because a real run failed them,
 and each carries a docstring naming the bug it holds down.
+
+---
+
+## 10. The market runs itself
+
+`trades.py` can evaluate an offer and find one worth making. `trade_market.py`
+is what actually runs it: **nobody proposes anything by hand**. Clubs go
+shopping on their own cadence, agree deals with each other, and the manager
+watches.
+
+```
+market opens        every 3 league days
+clubs per opening   2, weighted by aggressiveness x deadline pressure
+pending window      1 league day
+cooldown            6 days after a club trades
+```
+
+**The one lever is a veto.** An agreed deal sits pending for a day before it
+completes, so if the logic has produced something absurd there is a button that
+stops it. It is deliberately an *override* rather than an approval step: a
+pending trade nobody is watching goes through. Requiring approval would mean a
+league left running quietly does nothing at all, which is the opposite of front
+offices managing themselves. A vetoed deal is remembered so the engine does not
+re-propose the identical thing at the next opening.
+
+**A pending window rather than a rollback.** Undoing a completed trade means
+restoring depth charts, pair chemistry and pick ownership that other code has
+moved on from, and a half-restored league is worse than a bad trade.
+
+**Cost control is the engineering problem.** `tick` fires on every API request
+and a full trade search is seconds per club. Everything expensive sits behind
+the cadence guard, and the market searches on a tighter budget than an
+interactive call would:
+
+```
+ordinary tick        0.001s
+market opening       0.8s
+```
+
+Settlement re-checks legality before firing, because the league moves between
+agreement and completion — a deal that is no longer legal is dropped rather
+than forced.
+
+### Timeline and window had to be reconciled
+
+The trade board showed rows like *Grandview Skyline — Full Rebuild, window
+70.5, SELLER*. The timeline blended record with roster; the window scored the
+roster alone. So a talented club having a bad year was simultaneously
+rebuilding and near contention.
+
+Both now read `front_office.standing` — one number for "how good is this club",
+roster and record blended by how much season has been played. Two readings of
+the same thing have to start from the same place. No club on a selling timeline
+now shows a window above 65.
+
+### Persistence
+
+The market is written to `data/trades.json` alongside pick ownership, because a
+pick moving *is* a trade — keeping them together means a restored league can
+never have a completed trade in its log whose picks did not move. Pending deals
+are stored as coordinates and matched back to the live `DraftPick` objects on
+load, so a restored deal cannot hold a stale copy of a pick that has since
+moved.
+
+### The screen
+
+**Trade Block** is a top-level tab with four panels: Pending (with the veto
+button), The Board (every club by window, with stance, needs and available
+players), Completed, and Vetoed. Every card carries both front offices'
+reasoning, generated from the same numbers that decided the trade.

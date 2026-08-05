@@ -15,6 +15,8 @@ Endpoints
 
     GET  /api/mvp                           the MVP race: ten ballots, one board
     GET  /api/trades/block                  every club: timeline, window, needs
+    GET  /api/trades/market                 the Trade Block: board, pending, log
+    POST /api/trades/veto   {"id": "..."}   stop a pending trade
     GET  /api/trades/<id>/office            one club's front office and roster values
     GET  /api/trades/<id>/find              deals this club would propose
     POST /api/trades/evaluate               both clubs' readings of an offer
@@ -254,6 +256,11 @@ class ApiHandler(BaseHTTPRequestHandler):
         elif parts == ["trades", "block"]:
             self._send_json(views.trade_block(league))
 
+        elif parts == ["trades", "market"]:
+            # The Trade Block screen. Everything here has already happened --
+            # the market runs itself inside `tick`.
+            self._send_json(views.trade_market_view(league))
+
         elif len(parts) == 3 and parts[0] == "trades" and parts[2] == "office":
             team = league.teams.get(parts[1])
             if team is None:
@@ -359,6 +366,18 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(result, 409)
                 return
             self._send_json({"report": result, "offseason": views.offseason_view(league)})
+
+        elif parts == ["trades", "veto"]:
+            # The only human input in the trade system, and an override rather
+            # than an approval: a pending deal nobody stops goes through.
+            from ..trade_market import veto
+
+            result = veto(league, str(body.get("id", "")),
+                          str(body.get("reason") or "vetoed by the manager"))
+            if not result.get("vetoed"):
+                self._send_json(result, 404)
+                return
+            self._send_json({**result, "market": views.trade_market_view(league)})
 
         elif parts == ["trades", "evaluate"]:
             # Both clubs' readings of one offer. Never executes anything.

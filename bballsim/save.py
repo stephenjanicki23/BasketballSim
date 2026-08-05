@@ -1149,3 +1149,149 @@ def read_offseason(path: Path = OFFSEASON_PATH):
     if not Path(path).is_file():
         return None
     return load_offseason(json.loads(Path(path).read_text()))
+
+
+# --------------------------------------------------------------------------
+# The trade market.
+#
+# Stored with the season rather than the league, because it is a record of what
+# happened *during* one: the completed log is the league's transaction history
+# and a pending deal is a thing in flight.
+#
+# Pending trades are written as *specifications* -- club ids, player ids, pick
+# coordinates -- and the live `DraftPick` objects are matched back on load.
+# Writing the pick objects themselves would put two copies of every traded pick
+# in the save, and the one in the pending deal would be the stale one.
+# --------------------------------------------------------------------------
+
+TRADES_PATH = data_dir() / "trades.json"
+
+
+def _dump_package(package) -> dict:
+    return {
+        "team_id": package.team_id,
+        "player_ids": list(package.player_ids),
+        "picks": [[p.year, p.round, p.original_team] for p in package.picks],
+    }
+
+
+def dump_market(market) -> dict | None:
+    if market is None:
+        return None
+    if not (market.pending or market.completed or market.vetoed
+            or market.last_opened):
+        return None
+    return {
+        "version": SAVE_VERSION,
+        "last_opened": market.last_opened.isoformat() if market.last_opened else None,
+        "cooldowns": {tid: moment.isoformat()
+                      for tid, moment in market.cooldowns.items()},
+        "blocked": list(market.blocked),
+        "completed": list(market.completed),
+        "vetoed": list(market.vetoed),
+        "pending": [
+            {
+                "id": entry.id,
+                "proposed_at": entry.proposed_at.isoformat(),
+                "decide_after": entry.decide_after.isoformat(),
+                "summary": entry.summary,
+                "sending": _dump_package(entry.offer.sending),
+                "receiving": _dump_package(entry.offer.receiving),
+            }
+            for entry in market.pending if entry.status == "pending"
+        ],
+    }
+
+
+def load_market(data: dict | None, league=None):
+    """Rebuild the market. `league` is needed to match pick objects back."""
+    from .trade_market import Market, PendingTrade
+    from .trades import Offer, Package
+
+    if not data:
+        return None
+    version = data.get("version", 0)
+    if version > SAVE_VERSION:
+        raise ValueError(
+            f"trade file is version {version}, this build understands {SAVE_VERSION}")
+
+    market = Market(
+        last_opened=(datetime.fromisoformat(data["last_opened"])
+                     if data.get("last_opened") else None),
+        cooldowns={tid: datetime.fromisoformat(value)
+                   for tid, value in (data.get("cooldowns") or {}).items()},
+        blocked=list(data.get("blocked", [])),
+        completed=list(data.get("completed", [])),
+        vetoed=list(data.get("vetoed", [])),
+    )
+    if league is None:
+        return market
+
+    from . import draft_picks
+
+    inventory = {(p.year, p.round, p.original_team): p
+                 for p in draft_picks.ensure(league)}
+
+    def read_package(blob: dict) -> Package:
+        picks = [inventory[tuple(coord)] for coord in blob.get("picks", [])
+                 if tuple(coord) in inventory]
+        return Package(team_id=blob.get("team_id", ""),
+                       player_ids=list(blob.get("player_ids", [])),
+                       picks=picks)
+
+    for row in data.get("pending", []):
+        market.pending.append(PendingTrade(
+            id=row["id"],
+            offer=Offer(sending=read_package(row.get("sending") or {}),
+                        receiving=read_package(row.get("receiving") or {})),
+            proposed_at=datetime.fromisoformat(row["proposed_at"]),
+            decide_after=datetime.fromisoformat(row["decide_after"]),
+            summary=row.get("summary") or {},
+        ))
+    return market
+
+
+def write_market(path: Path, market, *, indent: int | None = 1) -> Path | None:
+    """Write the market, or remove the file when there is nothing to record."""
+    path = Path(path)
+    payload = dump_market(market)
+    if payload is None:
+        if path.is_file():
+            path.unlink()
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_round(payload), indent=indent, sort_keys=True) + "\n")
+    return path
+
+
+def read_market(path: Path = TRADES_PATH, league=None):
+    if not Path(path).is_file():
+        return None
+    return load_market(json.loads(Path(path).read_text()), league)
+
+
+# Pick ownership. Small, and it has to be stored: `owner` is the only thing a
+# trade actually changes about a pick, and it is not derivable from anything.
+def dump_pick_ownership(league) -> list:
+    from . import draft_picks
+
+    return [[p.year, p.round, p.original_team, p.owner, p.protected_top, p.swap_with]
+            for p in draft_picks.ensure(league) if p.traded or p.protected_top
+            or p.swap_with]
+
+
+def apply_pick_ownership(league, rows) -> None:
+    from . import draft_picks
+
+    inventory = {(p.year, p.round, p.original_team): p
+                 for p in draft_picks.ensure(league)}
+    for row in rows or []:
+        year, round_, original, owner = row[0], row[1], row[2], row[3]
+        pick = inventory.get((year, round_, original))
+        if pick is None:
+            continue
+        pick.owner = owner
+        if len(row) > 4:
+            pick.protected_top = int(row[4] or 0)
+        if len(row) > 5:
+            pick.swap_with = row[5] or ""

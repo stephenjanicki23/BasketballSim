@@ -16,6 +16,7 @@ from ..engine.game import GameRules, GameSimulator
 from ..conferences import conference_for
 from ..models import Team
 from . import offseason, playoffs
+from .. import trade_market
 from .calendar import PACIFIC, GameStatus, ScheduledGame
 from .stats import SeasonStats
 
@@ -161,6 +162,11 @@ class League:
 
             if playoffs.advance(self):
                 moved = True
+
+            # Front offices doing their own business. Guarded inside: the
+            # market only opens on a league-day cadence, so the ordinary tick
+            # pays one datetime comparison rather than a trade search.
+            trade_market.run(self)
 
             # The season is over and the summer has passed: age everybody,
             # replace whoever retired, and put a new calendar up. Same shape as

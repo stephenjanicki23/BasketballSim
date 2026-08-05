@@ -712,6 +712,25 @@ def front_office_view(league, team) -> dict:
     return data
 
 
+def trade_market_view(league) -> dict:
+    """The Trade Block screen: the board, what is pending, and what has been done.
+
+    One fetch. The market runs itself inside `League.tick`, so by the time this
+    is asked for, everything in it has already happened -- this is a window
+    onto the league, not a control surface. The only thing the client can do is
+    veto a pending deal.
+    """
+    from .. import trade_market
+
+    market = trade_market.state(league)
+    view = trade_block(league)
+    view.update(market.to_dict())
+    view["marketOpensEvery"] = trade_market.MARKET_INTERVAL_DAYS
+    view["pendingDays"] = trade_market.PENDING_DAYS
+    view["now"] = league.clock.now().isoformat()
+    return view
+
+
 def trade_block(league) -> dict:
     """Every club at a glance -- who is buying, who is selling, and what for."""
     from .. import front_office, trades

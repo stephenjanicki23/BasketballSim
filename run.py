@@ -17,7 +17,7 @@ import argparse
 import os
 from datetime import timedelta
 
-from bballsim import contracts
+from bballsim import contracts, draft_picks
 from bballsim.engine.game import GameSimulator
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
@@ -27,14 +27,18 @@ from bballsim.save import (
     LEAGUE_PATH,
     OFFSEASON_PATH,
     SEASON_PATH,
+    TRADES_PATH,
     apply_season,
     read_history,
+    apply_pick_ownership,
+    read_market,
     read_offseason,
     read_season,
     season_exists,
     seed_data_dir,
     write_history,
     write_league,
+    write_market,
     write_offseason,
     write_season,
 )
@@ -88,6 +92,17 @@ def build_league(team_count: int = 30) -> League:
     # correct representation of "not in one".
     league.offseason = read_offseason()
 
+    # Draft picks, and who owns them after any trades. `ensure` creates the
+    # league's own inventory; the file only carries picks that have moved.
+    draft_picks.ensure(league)
+    market_blob = None
+    if TRADES_PATH.is_file():
+        import json as _json
+
+        market_blob = _json.loads(TRADES_PATH.read_text())
+        apply_pick_ownership(league, market_blob.get("pick_ownership"))
+    league.trade_market = read_market(TRADES_PATH, league)
+
     league.tick()
     return league
 
@@ -108,10 +123,35 @@ def save_season(league: League) -> None:
     # Writes the summer, or removes the file when there is not one -- a stale
     # offseason.json would reopen the menu mid-season with a year-old list.
     write_offseason(OFFSEASON_PATH, getattr(league, "offseason", None))
+    # The trade market, and which picks have changed hands.
+    _write_trades(league)
     played = sum(1 for g in league.schedule if g.status == GameStatus.FINAL)
     print(f"saved {played} played of {len(league.schedule)} fixtures "
           f"to {SEASON_PATH} (sim date {league.clock.now().date()}"
           f"{f', {len(league.history)} seasons archived' if league.history else ''})")
+
+
+def _write_trades(league: League) -> None:
+    """Write the market plus pick ownership into one file.
+
+    Ownership rides alongside the market rather than in `league.json` because
+    a pick moving *is* a trade -- keeping the two together means a restored
+    league can never have a completed trade in its log whose picks did not
+    move.
+    """
+    import json
+
+    from bballsim.save import dump_market, dump_pick_ownership
+
+    payload = dump_market(getattr(league, "trade_market", None)) or {}
+    ownership = dump_pick_ownership(league)
+    if not payload and not ownership:
+        if TRADES_PATH.is_file():
+            TRADES_PATH.unlink()
+        return
+    payload["pick_ownership"] = ownership
+    TRADES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    TRADES_PATH.write_text(json.dumps(payload, indent=1, sort_keys=True, default=str) + "\n")
 
 
 def command_serve(args: argparse.Namespace) -> None:
