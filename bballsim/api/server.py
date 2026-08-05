@@ -14,6 +14,12 @@ Endpoints
     POST /api/clock/speed   {"speed": n}    game seconds per real second
 
     GET  /api/mvp                           the MVP race: ten ballots, one board
+    GET  /api/trades/block                  every club: timeline, window, needs
+    GET  /api/trades/<id>/office            one club's front office and roster values
+    GET  /api/trades/<id>/find              deals this club would propose
+    POST /api/trades/evaluate               both clubs' readings of an offer
+    POST /api/trades/respond                one club's answer, plus a counter
+    POST /api/trades/execute                make an agreed trade
     GET  /api/offseason                     the whole OFFSEASON menu
     GET  /api/offseason/payrolls            every club's payroll, richest first
     POST /api/offseason/open                tick contracts, build the expiring list
@@ -245,6 +251,29 @@ class ApiHandler(BaseHTTPRequestHandler):
             # race can refresh the board without re-fetching the season.
             self._send_json(views.mvp.race(league))
 
+        elif parts == ["trades", "block"]:
+            self._send_json(views.trade_block(league))
+
+        elif len(parts) == 3 and parts[0] == "trades" and parts[2] == "office":
+            team = league.teams.get(parts[1])
+            if team is None:
+                self._send_json({"error": "team not found"}, 404)
+            else:
+                self._send_json(views.front_office_view(league, team))
+
+        elif len(parts) == 3 and parts[0] == "trades" and parts[2] == "find":
+            from ..trades import find_trades
+
+            if parts[1] not in league.teams:
+                self._send_json({"error": "team not found"}, 404)
+                return
+            limit = int(query.get("limit", ["5"])[0])
+            found = find_trades(league, parts[1], limit=max(1, min(10, limit)))
+            # `_offer` is the live object the search built; it does not
+            # serialise and the client does not need it.
+            self._send_json([{k: v for k, v in row.items() if k != "_offer"}
+                             for row in found])
+
         elif parts == ["offseason"]:
             # The whole menu in one fetch. Gated on the Finals having concluded,
             # but the endpoint answers either way -- the UI needs to be told the
@@ -330,6 +359,28 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(result, 409)
                 return
             self._send_json({"report": result, "offseason": views.offseason_view(league)})
+
+        elif parts == ["trades", "evaluate"]:
+            # Both clubs' readings of one offer. Never executes anything.
+            self._send_json(views.trades.assess(league, views.read_offer(league, body)))
+
+        elif parts == ["trades", "respond"]:
+            # One club's answer, with a counteroffer if it is close.
+            team_id = str(body.get("teamId", ""))
+            if team_id not in league.teams:
+                self._send_json({"error": "team not found"}, 404)
+                return
+            offer = views.read_offer(league, body)
+            self._send_json(views.trades.respond(league, team_id, offer).to_dict())
+
+        elif parts == ["trades", "execute"]:
+            offer = views.read_offer(league, body)
+            result = views.trades.assess(league, offer)
+            if not result["agreed"] and not body.get("force"):
+                self._send_json({"done": False, "reason": "both clubs must agree",
+                                 "assessment": result}, 409)
+                return
+            self._send_json(views.trades.execute(league, offer))
 
         elif parts == ["clock", "skip-to-next"]:
             next_game = league.next_game_after(league.clock.now())

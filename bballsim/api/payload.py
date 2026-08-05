@@ -24,6 +24,7 @@ from .. import composites as C
 from .. import contracts
 from .. import negotiation
 from .. import payroll
+from .. import trades
 from ..ability import CA_MAX, CA_TIERS, scout, stars_from_rating
 from ..chemistry import evaluate as evaluate_chemistry
 from ..coach import COACH_MAX, COACH_RATING_LABELS, COACH_TIERS
@@ -687,3 +688,73 @@ def offseason_view(league) -> dict:
         "news": list(state.headlines),
     })
     return payload
+
+
+# --------------------------------------------------------------------------
+# The trade engine.
+#
+# One shape per screen, assembled here for the same reason every other view is:
+# the live app and the published demo read identical JSON.
+# --------------------------------------------------------------------------
+
+def front_office_view(league, team) -> dict:
+    """One club's situation: identity, timeline, window and assets."""
+    from .. import draft_picks, front_office, trade_value
+
+    situation = front_office.situation(league, team)
+    data = situation.to_dict()
+    data["windowBreakdown"] = front_office.window_breakdown(league, team)
+    data["picks"] = draft_picks.summary(league, team.id)
+    data["roster"] = [
+        trade_value.summary(league, player, situation)
+        for player in sorted(team.players, key=lambda p: -p.ability.current)
+    ]
+    return data
+
+
+def trade_block(league) -> dict:
+    """Every club at a glance -- who is buying, who is selling, and what for."""
+    from .. import front_office, trades
+
+    rows = []
+    for team in league.teams.values():
+        situation = front_office.situation(league, team)
+        row = situation.to_dict()
+        row["abbr"] = team.abbreviation
+        row["needs"] = trades.wanted(league, situation, team)
+        row["available"] = [
+            {"playerId": p.id, "name": p.name, "position": p.position.value,
+             "age": p.age, "overall": p.overall}
+            for p in trades.surplus(league, situation, team)[:5]
+        ]
+        rows.append(row)
+    rows.sort(key=lambda r: -r["window"])
+    return {
+        "teams": rows,
+        "deadlinePressure": round(trades.deadline_pressure(league), 3),
+        "weights": dict(trades.WEIGHTS),
+    }
+
+
+def _package(league, data: dict):
+    """Read a package off a request body. Picks are matched by identity, not
+    reconstructed, so a trade always moves the league's own pick objects."""
+    from .. import draft_picks, trades
+
+    team_id = str(data.get("teamId", ""))
+    wanted_picks = {(int(p.get("year", 0)), int(p.get("round", 0)),
+                     str(p.get("originalTeam", "")))
+                    for p in data.get("picks", [])}
+    picks = [p for p in draft_picks.ensure(league)
+             if (p.year, p.round, p.original_team) in wanted_picks
+             and p.owner == team_id]
+    return trades.Package(team_id=team_id,
+                          player_ids=[str(x) for x in data.get("playerIds", [])],
+                          picks=picks)
+
+
+def read_offer(league, body: dict):
+    from .. import trades
+
+    return trades.Offer(sending=_package(league, body.get("sending") or {}),
+                        receiving=_package(league, body.get("receiving") or {}))
