@@ -40,6 +40,7 @@ are approximated from the power rankings rather than simulated. See
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 from . import composites as C
@@ -48,6 +49,7 @@ from . import draft_picks
 from . import front_office as FO
 from . import payroll
 from . import trade_value as TV
+from .lineup import POSITIONS
 from .tactics import DefensiveScheme, OffensiveScheme
 
 # --------------------------------------------------------------------------
@@ -91,6 +93,14 @@ REJECT_SCORE = -0.14
 SALARY_MATCH_SHARE = 0.75
 ROSTER_MIN = 8
 ROSTER_MAX = 17
+
+# A club may not trade away its last man at a position. Roster generation
+# builds to this, and `offseason.draft` preserves it by filling the position a
+# retirement vacated -- the trade market was the only thing in the project that
+# could break it, and it did: two simulated summers left a club with no point
+# guard at all. `Team.starters` picks the strongest *legal* five, so a squad
+# missing a position is a squad that cannot field one.
+ROSTER_MIN_PER_POSITION = 1
 
 
 @dataclass
@@ -610,10 +620,11 @@ def check_legality(league, offer: Offer) -> Legality:
 
     **This is not the real rule book.** Bird rights, the mid-level exception,
     trade exceptions and dead cap are declared in `contracts` and have no rules
-    behind them. What is enforced is: roster sizes stay inside bounds, and a
-    club over the cap must send out enough salary to take back what it is
-    taking back. That is the load-bearing 80% of real salary matching, and the
-    rest is documented as absent rather than approximated badly.
+    behind them. What is enforced is: squads stay a legal size and a legal
+    *shape*, and a club over the cap must send out enough salary to take back
+    what it is taking back. That is the load-bearing 80% of real salary
+    matching, and the rest is documented as absent rather than approximated
+    badly.
     """
     reasons: list[str] = []
     for package, other in ((offer.sending, offer.receiving),
@@ -629,6 +640,14 @@ def check_legality(league, offer: Offer) -> Legality:
             reasons.append(f"{team.abbreviation} would be left with {size} players")
         if size > ROSTER_MAX:
             reasons.append(f"{team.abbreviation} would carry {size} players")
+
+        leaving = {p.id for p in out_players}
+        after = Counter(p.position.value for p in team.players
+                        if p.id not in leaving)
+        after.update(p.position.value for p in in_players)
+        for position in POSITIONS:
+            if after[position] < ROSTER_MIN_PER_POSITION:
+                reasons.append(f"{team.abbreviation} would have no {position}")
 
         taking = salary_of(in_players)
         sending = salary_of(out_players)

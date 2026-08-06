@@ -181,6 +181,7 @@ None of this is faked, and none of it is quietly missing.
 | Asked for | Status |
 |---|---|
 | Bird rights, mid-level exception, trade exceptions, dead cap | Declared as inert fields on `Contract`. Salary matching is the simple 75% rule and says so. |
+| Roster legality beyond size and shape | Squads must stay inside 8–17 and keep at least one player at each position. Two-way contracts, hardship exceptions and the trade deadline's roster freeze are not modelled. |
 | Player trade requests | Absent. Nothing in the simulation lets a player ask for anything. |
 | Marketability, popularity, fan favourite | Thin proxy over `media_handling` and `locker_room_presence` plus stardom. No attendance, merchandise or fan sentiment exists. Weighted at the brief's 5% and no more. |
 | Playoff performance, championship experience | Absent per player. `SeasonStats` does not separate postseason, and championships are recorded per *club* — see `docs/FRANCHISE.md`. |
@@ -256,6 +257,22 @@ Both now read `front_office.standing` — one number for "how good is this club"
 roster and record blended by how much season has been played. Two readings of
 the same thing have to start from the same place. No club on a selling timeline
 now shows a window above 65.
+
+### A squad has a legal shape, not just a legal size
+
+`check_legality` enforced roster sizes and salary matching and said nothing
+about positions, so a club could trade away its last point guard. Nothing else
+in the project can do that — roster generation builds every squad with all five
+positions occupied, and `offseason.draft` fills the position a retirement
+vacated — so the market was the only thing that could break the invariant, and
+across two simulated summers it did.
+
+The symptom surfaced two systems away, in
+`test_offseason.test_an_arrival_plays_the_position_that_came_free`: a club with
+no point guard has no vacancy for the intake to fill, and `Team.starters` picks
+the strongest *legal* five, which a squad missing a position cannot supply.
+`ROSTER_MIN_PER_POSITION` is the rule; a guard-for-guard swap is unaffected,
+because the check is run on the squad as it would be *after* the deal.
 
 ### Persistence
 

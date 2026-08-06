@@ -600,6 +600,43 @@ class TestLegality(unittest.TestCase):
                         receiving=T.Package(b.id, [b.players[4].id]))
         self.assertTrue(T.check_legality(lg, offer).legal)
 
+    def test_a_club_cannot_trade_away_its_last_man_at_a_position(self):
+        """It could, and it did. Two simulated summers of the market running
+        itself left a club with no point guard, which `Team.starters` cannot
+        field a legal five from. Roster generation and `offseason.draft` both
+        keep every position occupied; the trade market was the one thing that
+        did not."""
+        lg = league()
+        ids = list(lg.teams)
+        a, b = lg.teams[ids[0]], lg.teams[ids[1]]
+        guards = [p.id for p in a.players if p.position.value == "PG"]
+        self.assertTrue(guards, "fixture has no point guard to strip")
+        keep = [p for p in b.players if p.position.value != "PG"][:len(guards)]
+        offer = T.Offer(sending=T.Package(a.id, guards),
+                        receiving=T.Package(b.id, [p.id for p in keep]))
+        legality = T.check_legality(lg, offer)
+        self.assertFalse(legality.legal)
+        self.assertTrue(any("no PG" in reason for reason in legality.reasons),
+                        legality.reasons)
+
+    def test_the_last_man_rule_does_not_block_a_like_for_like_swap(self):
+        """Sending a point guard out and taking one back leaves the shape
+        intact, so the rule must not fire on it -- a guard-for-guard trade is
+        the most ordinary deal in the sport."""
+        lg = league()
+        ids = list(lg.teams)
+        a, b = lg.teams[ids[0]], lg.teams[ids[1]]
+        for team in (a, b):
+            count = sum(1 for p in team.players if p.position.value == "PG")
+            self.assertGreaterEqual(count, 1)
+        mine = [p.id for p in a.players if p.position.value == "PG"]
+        theirs = [p.id for p in b.players if p.position.value == "PG"]
+        offer = T.Offer(sending=T.Package(a.id, mine),
+                        receiving=T.Package(b.id, theirs))
+        # Salary matching may still object; the shape must not.
+        reasons = T.check_legality(lg, offer).reasons
+        self.assertFalse([r for r in reasons if "would have no" in r], reasons)
+
 
 class TestNegotiation(unittest.TestCase):
     """*The AI should not instantly accept or reject.*"""
