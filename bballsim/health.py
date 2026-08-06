@@ -837,13 +837,35 @@ def ability_lost(player) -> float:
 # --------------------------------------------------------------------------
 
 # Current-ability points an *average* coach will let a player lose before
-# sitting him. Nine is a lot: it is most of a tier, the difference between a
-# starter and the man behind him.
-REST_AT_AVERAGE = 9.0
+# sitting him.
+#
+# **Calibrated against `projected_loss`, which is what `plan_rest` actually
+# measures.** It was 9.0, and that number came from `ability_lost` read at a
+# player's *live* condition -- mid-game, heavily drained, where losses run 7 to
+# 23. But a team-sheet decision is taken before tip-off, so `plan_rest` reads
+# `projected_loss`, which prices the condition he would *start* at. On the
+# committed league those ran 0.1 to 4.96, against a lowest reachable threshold
+# of 5.0.
+#
+# The threshold and the measurement were on different scales, so nothing could
+# cross it. The rest lever never fired once, for anybody, in any game ever
+# simulated. `tests/test_health.py` now pins the two together from both ends.
+#
+# The level is set by a second constraint as well as fatigue. Resting a man
+# does not only make him fresher, it **concentrates minutes** on whoever plays
+# instead -- and a league that rests freely posts inflated per-game averages
+# across the board. At 3.0 the mean rose from 20.3 to 21.6 minutes and the
+# number of players averaging ten rebounds went from 15 to 25, which is well
+# past where the rebounding calibration sat before fatigue existed at all.
+REST_AT_AVERAGE = 3.6
 
-# How far the rating moves it. A 100 sits a man at 5 points lost; a 0 rides him
-# until 13, which on this scale is a player who has lost a whole tier.
-REST_PER_RATING_POINT = 0.08
+# How far the rating moves it. Generated `player_management` spans about 39 to
+# 80 rather than the full 0-100, so the slope has to be steep enough to make a
+# difference across *that* range: at 0.026 the best and worst coaches in the
+# league rested four and five players respectively, which is not a rating doing
+# anything. At 0.045 the thresholds run about 1.6 to 3.5 and the same squad is
+# genuinely managed differently by different men.
+REST_PER_RATING_POINT = 0.045
 
 # Nobody is rested out of a postseason game. This is the "winning always wins"
 # clause, and it is absolute rather than weighted -- a coach who sits his best
@@ -873,9 +895,20 @@ def projected_loss(player) -> float:
         player.condition = was
 
 
+# The floor. Even the most protective coach in the league needs a player to be
+# measurably worse before sitting him, or he rests somebody every night.
+REST_THRESHOLD_FLOOR = 1.2
+
+
 def rest_threshold(management: float) -> float:
-    """Ability points a coach of this rating tolerates before sitting a man."""
-    return max(3.0, REST_AT_AVERAGE - (management - 50.0) * REST_PER_RATING_POINT)
+    """Ability points a coach of this rating tolerates before sitting a man.
+
+    Denominated in `projected_loss` -- the ability a player would be down *at
+    tip-off* -- because that is what `plan_rest` compares it against. Getting
+    those two onto the same scale is the whole point; see `REST_AT_AVERAGE`.
+    """
+    return max(REST_THRESHOLD_FLOOR,
+               REST_AT_AVERAGE - (management - 50.0) * REST_PER_RATING_POINT)
 
 
 def plan_rest(team, *, playoff: bool = False) -> set[str]:

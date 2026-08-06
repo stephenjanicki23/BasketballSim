@@ -140,6 +140,10 @@ a season's real per-game cost per rotation slot, regressed against the mean
 | 15–22 mpg | 14.1 | 26.6 | Fresh |
 | under 15 mpg | 11.7 | 16.9 | Fresh |
 
+Those are the equilibria the constants were solved *to*, with nobody rested. The
+league now settles a little under them at the top, because the coach in §5 takes
+load off the heaviest workloads before they get there.
+
 ### Bands
 
 The brief's ladder, verbatim: Fully Rested (0–15), Fresh (16–30), Slightly Tired
@@ -187,7 +191,70 @@ and the mapping is stated so nobody has to guess:
 | Reaction Time | `steals`, `blocks` | the obvious candidate, `anticipation`, is in the Basketball IQ group, and the brief says IQ does not fall. A tired man still reads the play; his hands are late |
 | Transition Defense | *(covered)* | no attribute of its own — getting back is legs, and legs are already the most heavily penalised things on the list |
 
-## 5. Wear and tear
+## 5. Who sits, and who decides
+
+Fatigue is only half a rest model. The other half is a coach willing to act on
+it, and in this league he acts on his own: nobody is asked to set a team sheet,
+so `player_management` is the rating that decides whether a tired man plays.
+
+**The trigger is not the fatigue meter.** It is `projected_loss` — how many
+current-ability points a player would be *down at tip-off*. A guard whose game
+is speed loses more of himself to the same tiredness than a centre whose game is
+strength, and CA is already this project's answer to "what is this player
+worth". A coach sits a man because the version available tonight is a materially
+worse player, not because a number reached 60.
+
+```
+threshold = 3.6 − (player_management − 50) × 0.045     floored at 1.2
+```
+
+Three guards keep it from becoming a different game:
+
+- **Never in the postseason.** Absolute, not weighted. A coach who rests his
+  best player in a playoff game to protect him for the summer is not managing,
+  and no rating should be able to produce that.
+- **Two men a night at most**, so a hard schedule cannot turn into a forfeit.
+- **Only the top eight.** No point sitting the twelfth man; he is not tired and
+  nobody notices.
+
+A manager's explicit instruction overrules all of it, including in the
+postseason — an instruction is an instruction.
+
+### The lever that never fired
+
+`plan_rest` compares `projected_loss` against `rest_threshold`, and the
+threshold had been calibrated against `ability_lost` read at a player's *live*
+mid-game condition, where losses run 7 to 23. Projected losses — read at the
+condition he would *start* at, which is the number a pre-game decision is
+actually taken on — run 0 to about 9. `REST_AT_AVERAGE` was 9.0, so the lowest
+threshold any coach in the league could reach was 5.0.
+
+**No coach rested anybody, in any game ever simulated.** Both halves were
+individually sensible; they simply were not denominated in the same thing, and
+nothing in the code showed it. `TestTheCoachActuallyRestsPeople` now pins the
+two scales together from both ends: the hardest coach in the league must have a
+threshold a real player can cross, and the softest must not sit half the league
+every night.
+
+The slope had to be steepened as well as the level lowered. Generated
+`player_management` spans about 39 to 80 rather than the full 0–100, so a
+rating only discriminates if the slope is set against *that* range — at 0.026
+the best and worst coaches in the league rested four and five men respectively
+across a whole season, which is not a rating doing anything.
+
+### Resting concentrates minutes
+
+The level is set by a second constraint as well as fatigue, and it is the one
+that stopped the number going lower. Sitting a man does not only make him
+fresher, it hands his minutes to whoever plays instead — so a league that rests
+freely posts **inflated per-game averages across the board**. At a threshold of
+3.0 the league mean rose from 20.3 to 21.6 minutes and the count of players
+averaging ten rebounds went from 15 to 25, well past where the rebounding
+calibration sat before fatigue existed at all.
+
+3.6 is the compromise, and it is not free: see the honest accounting in §9.
+
+## 6. Wear and tear
 
 ```
 wear += 0.11 × (minutes/36) × (1 + fatigue/100 × 1.6) × age × frailty
@@ -204,7 +271,7 @@ makes a manager's rest decisions echo years later rather than just next week.
 Wear sheds **14% each summer** and keeps the rest. It never clears, and what is
 left raises injury risk for the rest of a career.
 
-## 6. Injuries
+## 7. Injuries
 
 Two tiers, and the split is the brief's central demand.
 
@@ -256,7 +323,7 @@ Rolls are **seeded from the fixture and the player**, so a season replays to the
 same injuries. Everything else in this project is reproducible; an injury list
 that changed on reload would be the one thing that was not.
 
-## 7. Stored, not derived
+## 8. Stored, not derived
 
 Health is **saved with the player**, and that is a deliberate departure from how
 standings, season stats and the playoff bracket work here — all of which are
@@ -274,18 +341,27 @@ saved results back into the standings, and re-applying a night's fatigue and
 re-rolling its injuries there would age a squad by a whole season on every boot.
 Chemistry is excluded from `_record` for exactly the same reason.
 
-## 8. What a season actually produces
+## 9. What a season actually produces
 
 Measured on the last night of a full 1,230-game regular season — during the
 season, not after it, because fatigue read after two months of playoff gaps is
 a reading of a rested league.
 
-| Workload | Fatigue at tip-off | Band |
-|---|---|---|
-| 28+ mpg | 40.5 | Slightly Tired |
-| 22–28 mpg | 38.3 | Slightly Tired |
-| 15–22 mpg | 26.6 | Fresh |
-| under 15 mpg | 16.9 | Fresh |
+The bracketed figures are the same league with the rest lever inert, which is
+what it did for its whole life until §5 was fixed — so the two columns isolate
+what a coach managing his squad is worth on top of fatigue itself.
+
+| Workload | Fatigue at tip-off | With no coach resting | Band |
+|---|---|---|---|
+| 28+ mpg | 36.2 | 40.5 | Slightly Tired |
+| 22–28 mpg | 34.5 | 38.3 | Slightly Tired |
+| 15–22 mpg | 27.7 | 26.6 | Fresh |
+| under 15 mpg | 18.1 | 16.9 | Fresh |
+
+The top of the league comes down about four points and the bottom goes up about
+one, which is exactly the shape a rest lever should have: it moves load off the
+men carrying too much and onto the men carrying too little. League mean 28.7,
+max 64.5, and every band from Fully Rested to Heavy Fatigue is occupied.
 
 Those are **trough** figures: fatigue oscillates, spiking after a game and
 decaying before the next — and the amplitude is one game's load, so a starter's
@@ -294,22 +370,33 @@ game `condition` keeps falling — so a starter tips off around −1 to his
 athletic attributes and is −2 to −3 by the fourth quarter. That trajectory is
 the point. It is also, almost exactly, the brief's own worked example.
 
-Wear after one season: mean 8, max 16 — single digits for a career quantity.
-Injuries: rare, as asked; ten players are carrying one when the champion is
-decided.
+Wear after one season: mean 7.8, max 13.8 — single digits for a career quantity.
+Injuries: rare, as asked; nine players are carrying one when the champion is
+decided. On a given night eight clubs of thirty are resting somebody, thirteen
+men in all, and a season loses about 980 player-games to it.
 
-**What it cost the box score.** The league's heaviest workload went from 39.2
-minutes a night to 34.8 and the leading scorer from 28.8 points to 25.0; team
-scoring is unchanged at 108.6 against a baseline of 108.8, and the rebounding
-calibration puts 13 players over ten a game where it used to put 15. Roughly
-half of the minutes haircut is fatigue and half is the rest lever sitting
-players outright. An eighth off the best player in the league is the system
-working: fatigue is supposed to cost production, and a coach who rests his star
-is supposed to lose something for it.
+**What it cost the box score**, against the pre-fatigue baseline, with the
+inert-lever league in brackets:
 
-### Three bugs worth remembering
+| | Before fatigue | Now | Lever inert |
+|---|---|---|---|
+| team scoring | 108.8 | 108.2 | 108.6 |
+| heaviest workload | 39.2 | 35.9 | 34.8 |
+| leading scorer | 28.8 ppg | 27.0 | 25.0 |
+| players at 10+ rpg | 15 | 19 | 15 |
 
-All three behaved correctly in every part and were only visible in a full-season
+**The honest part is the last row.** Resting does not only reduce load, it
+**concentrates** it: the men who play instead absorb the minutes, and per-game
+averages inflate. Nineteen players over ten rebounds a night is four more than
+the rebounding calibration was set against — visibly a cost of this lever, not a
+neutral outcome. It is why the threshold is 3.6 and not lower; at 3.0 that row
+read 25. The trade accepted here is a rest system that visibly functions in
+exchange for slightly generous counting stats, and the alternative on offer was
+a coach rating that did nothing at all.
+
+### Four bugs worth remembering
+
+All four behaved correctly in every part and were only visible in a full-season
 measurement against a known baseline.
 
 **Rest paid in a lump.** Recovery ran once per `tick`, for the whole span the
@@ -337,11 +424,17 @@ to recovery at all. Nothing failed; the league simply recovered at one flat
 rate. Floors and caps are now written as fractions of the constant they guard,
 so they cannot outlive it.
 
-## 9. What this does not do
+**Two scales that never met.** The rest threshold was priced in one measure of
+lost ability and compared against another, so the whole coach-management lever
+was dead on arrival — see §5. The lesson is narrower than "check your units":
+both numbers were called *ability points lost*, and both were. They were read at
+different moments, and the moment was not in either name.
 
-- **No training load.** Practices, minutes restrictions and load management as
-  an explicit manager instruction are not modelled; the only lever is who plays
-  and for how long.
+## 10. What this does not do
+
+- **No training load.** Practices and phased minutes restrictions are not
+  modelled. Load management exists only as the whole-night decision in §5 —
+  a man plays or he sits, there is nothing between.
 - **No return-to-play ramp.** A major injury ends on a fixed game count with a
   fatigue floor, not a phased minutes restriction.
 - **No injury news.** The wire has no story for a player going down, though
@@ -352,8 +445,12 @@ so they cannot outlive it.
   yourself.
 - **Nobody reaches Critical Fatigue**, and that is the model self-regulating
   rather than a dead band. A tired player starts the night at a lower condition,
-  so the rotation pulls him sooner and his minutes redistribute. Getting to
-  Critical would take overriding the rotation, and there is no manager control
-  to do that — which is the largest gap between this and what the brief calls
-  "strategic rest decisions". The system responds to minutes; it does not yet
-  let you choose them.
+  so the rotation pulls him sooner and his minutes redistribute — and now the
+  coach sits him outright before it gets that far. The league tops out around 65
+  and four players a season reach Heavy Fatigue. Getting to Critical would take
+  overriding both the rotation and the coach.
+- **Rest is the coach's call, not yours.** `plan_rest` honours an explicit
+  `team.rested` instruction over its own judgement, but no screen sets one, so
+  in practice `player_management` decides. That is deliberate — the front
+  offices manage themselves here — but it does mean the brief's "strategic rest
+  decisions" are a rating's decisions rather than a manager's.

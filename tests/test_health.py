@@ -162,6 +162,92 @@ class TestTheBridge(unittest.TestCase):
         self.assertGreaterEqual(H.starting_condition(self.player), 25.0)
 
 
+class TestTheCoachActuallyRestsPeople(unittest.TestCase):
+    """The bug that made the rest lever inert.
+
+    `plan_rest` compares `projected_loss` -- what a man would be down *at
+    tip-off* -- against `rest_threshold`. The threshold had been calibrated
+    against `ability_lost` read at a player's *live* mid-game condition, where
+    losses run 7 to 23. Projected losses run 0 to about 9, and the lowest
+    threshold any coach in the league could reach was 5.0.
+
+    So no coach ever rested anybody, in any game ever simulated, and nothing in
+    the code showed it: both halves were individually sensible, they just were
+    not denominated in the same thing. These tests hold the two scales
+    together, and they are written against the ratings the league actually
+    generates rather than against 0-100, because that is where the bug lived.
+    """
+
+    def setUp(self):
+        self.league = played()
+        self.losses = sorted(H.projected_loss(p) for p in squad(self.league))
+        self.ratings = sorted(
+            (t.coach.ratings.player_management if t.coach else 50.0)
+            for t in self.league.teams.values())
+
+    def median_loss(self):
+        return self.losses[len(self.losses) // 2]
+
+    def test_the_threshold_is_denominated_in_what_plan_rest_measures(self):
+        """The one that would have caught it: the hardest coach in the league
+        has to have a threshold a real player can actually cross."""
+        hardest = H.rest_threshold(self.ratings[-1])
+        self.assertLess(hardest, self.losses[-1],
+                        "no player in the league is ever tired enough to be "
+                        "rested by anybody -- the threshold and the "
+                        "measurement are on different scales")
+
+    def test_it_is_not_so_low_that_everybody_sits(self):
+        """The other side of the same wall. A threshold under the league's
+        median projected loss would have half the league rested every night."""
+        softest = H.rest_threshold(self.ratings[0])
+        self.assertGreater(softest, self.median_loss())
+
+    def test_somebody_gets_a_night_off(self):
+        resting = {t.id: H.plan_rest(t) for t in self.league.teams.values()}
+        clubs = sum(1 for who in resting.values() if who)
+        self.assertGreater(clubs, 0, "the rest lever never fires")
+        self.assertLess(clubs, len(resting),
+                        "every club in the league is resting somebody")
+
+    def test_the_rating_changes_the_answer(self):
+        """A `player_management` rating that produced the same team sheet at
+        both ends of the league's range would not be a rating."""
+        low, high = self.ratings[0], self.ratings[-1]
+        self.assertGreater(H.rest_threshold(low), H.rest_threshold(high))
+        self.assertGreater(H.rest_threshold(low) - H.rest_threshold(high), 0.5,
+                           "the best and worst coaches in the league are "
+                           "separated by less than a rounding error")
+
+    def test_a_club_never_sits_more_than_the_cap(self):
+        for team in self.league.teams.values():
+            self.assertLessEqual(len(H.plan_rest(team)), H.MAX_RESTED_PER_GAME,
+                                 team.id)
+
+    def test_nobody_is_rested_out_of_a_playoff_game(self):
+        for team in self.league.teams.values():
+            self.assertEqual(H.plan_rest(team, playoff=True), set(), team.id)
+
+    def test_the_manager_overrules_the_coach_anywhere(self):
+        team = next(iter(self.league.teams.values()))
+        pick = team.rotation()[0]
+        team.rested = [pick.id]
+        try:
+            self.assertIn(pick.id, H.plan_rest(team))
+            self.assertIn(pick.id, H.plan_rest(team, playoff=True))
+        finally:
+            team.rested = []
+
+    def test_the_twelfth_man_is_not_worth_resting(self):
+        for team in self.league.teams.values():
+            bench = {p.id for p in team.rotation()[H.REST_MINIMUM_ROLE:]}
+            self.assertEqual(H.plan_rest(team) & bench, set(), team.id)
+
+    def test_the_floor_keeps_the_most_protective_coach_honest(self):
+        self.assertGreater(H.rest_threshold(100.0), 0.0)
+        self.assertGreaterEqual(H.rest_threshold(100.0), H.REST_THRESHOLD_FLOOR)
+
+
 class TestRestIsSpentInTheOrderItIsEarned(unittest.TestCase):
     """The bug that made the whole system do nothing.
 
