@@ -201,7 +201,7 @@ reasoning beside it: `draft_picks.SLOT_CURVE`, `FUTURE_DISCOUNT`,
 `trade_value.ABILITY_CURVE`, `POSITION_SCARCITY`, `TIMELINE_SWING`;
 `trades.BRIEF_WEIGHTS`, `ACCEPT_SCORE`, `REJECT_SCORE`, `SALARY_MATCH_SHARE`.
 
-68 tests in `tests/test_trades.py`. Four exist because a real run failed them,
+87 tests in `tests/test_trades.py`. Six exist because a real run failed them,
 and each carries a docstring naming the bug it holds down.
 
 ---
@@ -257,6 +257,29 @@ Both now read `front_office.standing` — one number for "how good is this club"
 roster and record blended by how much season has been played. Two readings of
 the same thing have to start from the same place. No club on a selling timeline
 now shows a window above 65.
+
+### A fixture that named no timeline
+
+`test_giving_away_a_star_is_rejected` built its offer from whichever club
+sorted first and asserted a flat rejection. It passed for as long as that club
+happened to sit on a contending timeline. A change three systems away — the
+coach rest lever in `docs/HEALTH.md`, which altered the closing games of the
+committed season — moved its record, its timeline went to Middle, and the
+assertion failed with nothing in the trade engine having changed.
+
+The test was wrong, not the engine. Handed its own star for the best
+salary-matching player next door, the league answers like this:
+
+| Seller's timeline | Verdict | Score |
+|---|---|---|
+| Favourite / Contender | **reject** | −0.73 to −0.88 |
+| Playoff / Play-In / Middle | counter | ≈ −0.10 |
+| Soft rebuild / Full rebuild / Tanking | **accept** | +0.05 to +0.37 |
+
+Which is the premise at the top of this document, working. "Will a club give
+away its star" has no fixed answer until you say *which* club, so the fixture
+now selects its seller by timeline and there is a companion test asserting the
+split across the whole league rather than on one hand-picked side.
 
 ### A squad has a legal shape, not just a legal size
 

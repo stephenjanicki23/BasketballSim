@@ -494,30 +494,100 @@ class TestTheScore(unittest.TestCase):
                 self.assertGreaterEqual(value, -1.0001, key)
                 self.assertLessEqual(value, 1.0001, key)
 
-    def lopsided(self):
+    def lopsided(self, selling: tuple = (FO.Timeline.FAVOURITE,
+                                         FO.Timeline.CONTENDER)):
         """A star for a much worse player, with the salary matched so the deal
         is legal -- otherwise the verdict under test is the salary rule rather
-        than the evaluation."""
+        than the evaluation.
+
+        **The selling club is chosen by timeline, not taken as whichever club
+        sorts first.** "Will a club give away its star" has no fixed answer
+        until you say which club: a contender refuses flatly, a rebuild is
+        pleased to take the salary relief, and a middling club haggles. This
+        fixture used to pin `ids[0]`, and it passed for as long as that club
+        happened to sit on a contending timeline -- then a change three systems
+        away moved its record, its timeline went to Middle, and the assertion
+        failed without anything in the trade engine having changed.
+        """
         lg = league()
         ids = list(lg.teams)
-        a, b = lg.teams[ids[0]], lg.teams[ids[1]]
-        star = max(a.players, key=lambda p: p.ability.current)
-        # The worst player whose salary still matches, so legality passes.
-        matched = [p for p in b.players
-                   if payroll.salary_of(p) >= payroll.salary_of(star) * 0.75]
-        if not matched:
-            self.skipTest("no salary-matching partner")
-        weakest = min(matched, key=lambda p: p.ability.current)
-        offer = T.Offer(sending=T.Package(a.id, [star.id]),
-                        receiving=T.Package(b.id, [weakest.id]))
-        if not T.check_legality(lg, offer).legal:
-            self.skipTest("could not build a legal lopsided offer")
-        return lg, a, b, star, weakest, offer
+        for index, tid in enumerate(ids):
+            a = lg.teams[tid]
+            if FO.situation(lg, a).timeline not in selling:
+                continue
+            b = lg.teams[ids[(index + 1) % len(ids)]]
+            star = max(a.players, key=lambda p: p.ability.current)
+            # The worst player whose salary still matches, so legality passes.
+            matched = [p for p in b.players
+                       if payroll.salary_of(p) >= payroll.salary_of(star) * 0.75]
+            if not matched:
+                continue
+            weakest = min(matched, key=lambda p: p.ability.current)
+            if weakest.ability.current >= star.ability.current:
+                continue
+            offer = T.Offer(sending=T.Package(a.id, [star.id]),
+                            receiving=T.Package(b.id, [weakest.id]))
+            if T.check_legality(lg, offer).legal:
+                return lg, a, b, star, weakest, offer
+        self.fail(f"no club on a {selling} timeline could be given a legal "
+                  f"lopsided offer")
 
-    def test_giving_away_a_star_is_rejected(self):
+    def test_a_contender_will_not_give_away_its_star(self):
         lg, a, _b, star, weakest, offer = self.lopsided()
         self.assertGreater(star.ability.current, weakest.ability.current)
         self.assertEqual(T.evaluate(lg, a.id, offer).verdict, "reject")
+
+    def test_the_timeline_decides_the_answer_league_wide(self):
+        """The other half of the claim, and the reason the fixture has to name
+        a timeline at all.
+
+        Every club is handed the same *shape* of deal -- its own best player
+        for the worst salary-matching player next door -- and the answer tracks
+        its situation rather than the ability gap. Asserted across the league
+        rather than on one hand-picked club, because one club can be made to
+        say anything.
+        """
+        lg = league()
+        ids = list(lg.teams)
+        by_timeline: dict[str, list[float]] = {}
+        verdicts: dict[str, set[str]] = {}
+        for index, tid in enumerate(ids):
+            a = lg.teams[tid]
+            b = lg.teams[ids[(index + 1) % len(ids)]]
+            star = max(a.players, key=lambda p: p.ability.current)
+            matched = [p for p in b.players
+                       if payroll.salary_of(p) >= payroll.salary_of(star) * 0.75]
+            if not matched:
+                continue
+            weakest = min(matched, key=lambda p: p.ability.current)
+            if weakest.ability.current >= star.ability.current:
+                continue
+            offer = T.Offer(sending=T.Package(a.id, [star.id]),
+                            receiving=T.Package(b.id, [weakest.id]))
+            if not T.check_legality(lg, offer).legal:
+                continue
+            result = T.evaluate(lg, a.id, offer)
+            phase = FO.situation(lg, a).timeline
+            group = ("contending" if phase in (FO.Timeline.FAVOURITE,
+                                               FO.Timeline.CONTENDER)
+                     else "rebuilding" if phase in (FO.Timeline.FULL_REBUILD,
+                                                    FO.Timeline.TANKING)
+                     else "middling")
+            by_timeline.setdefault(group, []).append(result.score)
+            verdicts.setdefault(group, set()).add(result.verdict)
+
+        for group in ("contending", "rebuilding"):
+            self.assertIn(group, by_timeline, f"no {group} club got an offer")
+
+        # A club chasing a title never entertains it.
+        self.assertEqual(verdicts["contending"], {"reject"})
+        # A club with nothing to protect sometimes does.
+        self.assertIn("accept", verdicts["rebuilding"])
+        # And the gap is not marginal.
+        contending = sum(by_timeline["contending"]) / len(by_timeline["contending"])
+        rebuilding = sum(by_timeline["rebuilding"]) / len(by_timeline["rebuilding"])
+        self.assertGreater(rebuilding - contending, 0.4,
+                           f"contending {contending:.3f} rebuilding {rebuilding:.3f}")
 
     def test_receiving_a_star_is_accepted(self):
         lg, _a, b, _star, _weakest, offer = self.lopsided()
