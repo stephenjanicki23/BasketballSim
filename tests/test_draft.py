@@ -44,6 +44,19 @@ from bballsim.save import apply_season, read_season, season_exists
 
 POSITIONS = ("PG", "SG", "SF", "PF", "C")
 
+
+# How much of the season this fixture has played. Pinned, because
+# `data/season.json` stores every fixture as *scheduled* and `tick()` therefore
+# simulates however much of the year the real wall clock has gone past -- which
+# makes a shared fixture a different league depending on the time of day, and
+# the tests on it flaky in a way that reads as a code change. `test_mvp` was
+# failing in the afternoon and passing in the morning on identical code before
+# this was understood.
+#
+# Mid-season on purpose: the preview tests below need a league with no
+# champion, because a champion is exactly what opens the real summer.
+SEASON_FRACTION = 0.6
+
 _LEAGUE: League | None = None
 
 
@@ -59,6 +72,10 @@ def league() -> League:
             apply_season(lg, read_season())
         K.generate_for_league(list(lg.teams.values()), season=lg.season)
         K.generate_coaches_for_league(list(lg.teams.values()), season=lg.season)
+        if lg.schedule:
+            tipoffs = sorted(game.tipoff_at for game in lg.schedule)
+            index = int((len(tipoffs) - 1) * SEASON_FRACTION)
+            lg.clock.jump_to(tipoffs[index] + timedelta(hours=6))
         lg.tick()
         DP.ensure(lg)
         _LEAGUE = lg

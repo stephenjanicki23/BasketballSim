@@ -26,6 +26,7 @@ from __future__ import annotations
 import re
 import sys
 import unittest
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -42,7 +43,21 @@ _LEAGUE = None
 
 
 def played_league() -> League:
-    """The committed season, which has games in it. Shared: nothing mutates it."""
+    """The committed season, played out. Shared: nothing mutates it.
+
+    **The clock is pinned, and it has to be.** `data/season.json` stores all
+    1,230 fixtures as *scheduled* -- there are no saved results -- so `tick()`
+    simulates however much of the season the real wall clock has gone past.
+    That made this fixture a different league depending on the time of day it
+    was run, and the tests on top of it flaky in a way that looked like a code
+    change every time: the panel splits two ways at a third of a season and
+    five ways at the end of one, so
+    `test_more_than_one_player_gets_a_first_place_vote` passed in the morning
+    and failed the same afternoon on identical code.
+
+    Pinned to the *end* of the season, because that is when an MVP race means
+    anything and because it is the one point that cannot drift further.
+    """
     global _LEAGUE
     if _LEAGUE is None:
         saved = load_teams()
@@ -51,6 +66,9 @@ def played_league() -> League:
             league.add_team(team)
         if season_exists():
             apply_season(league, read_season())
+        if league.schedule:
+            last = max(game.tipoff_at for game in league.schedule)
+            league.clock.jump_to(last + timedelta(hours=6))
         league.tick()
         _LEAGUE = league
     return _LEAGUE
