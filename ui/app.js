@@ -2842,6 +2842,7 @@ const OFF_TAB_KEYS = {
   freeagency: "freeAgency",
   retirements: "retirements",
   draft: "draft",
+  mock: "draft",
   camp: "trainingCamp",
   payroll: "payroll",
 };
@@ -2893,6 +2894,15 @@ function offseasonShowable(data) {
   return data.phase === "complete" && (data.news || []).length > 0;
 }
 
+/* Whether there is a live summer to run, as opposed to a preview to read.
+ * Every screen branches on this rather than on `available`, because "the
+ * machinery is open" and "there is something worth showing" are two different
+ * questions and conflating them is what hid the tab for three quarters of
+ * every season. */
+function offseasonLive(data) {
+  return offseasonShowable(data);
+}
+
 async function renderOffseasonTab() {
   const tab = $(".nav-tab-offseason");
   if (!tab) return;
@@ -2905,9 +2915,13 @@ async function renderOffseasonTab() {
     state.offseason = previous;
   }
 
-  const showable = offseasonShowable(state.offseason);
-  tab.hidden = !showable;
-  if (!showable && state.view === "offseason") setView("games");
+  // Always visible. It used to be hidden until the Finals concluded, which was
+  // the right gate for the *machinery* -- opening a summer ticks every
+  // contract down and has to happen exactly once -- and the wrong gate for the
+  // information. Who is out of contract in July and who the draft writers like
+  // are things a manager wants in January. `openOffseason` still refuses to
+  // run unless a summer is genuinely available, which is what makes this safe.
+  tab.hidden = false;
 }
 
 /* Opening the summer is what ticks every contract down a year and builds the
@@ -2917,7 +2931,17 @@ async function renderOffseasonTab() {
  * season, so returning to the tab is free. */
 async function openOffseason() {
   const data = state.offseason;
-  if (!data || !data.available) return;   // a finished record has nothing to open
+  // No summer to open. The preview still has to paint -- returning here
+  // without rendering is what left the tab showing an empty page the first
+  // time it was unhidden mid-season.
+  if (!data || !data.available) {
+    // League News is the right landing screen for a summer and the wrong one
+    // for a preview: there is no summer business to report in January. Only
+    // moved off the default, so a manager who chose a screen keeps it.
+    if (state.offTab === "news") { state.offTab = "mock"; highlightOffTab("mock"); }
+    renderOffseason();
+    return;
+  }
   if (data.phase !== "season") { renderOffseason(); return; }
   if (!state.data.live || !state.source.command) { renderOffseason(); return; }
   try {
@@ -2936,13 +2960,17 @@ function offImplemented(key) {
 /* The only thing that changes the sub-tab. Setting `state.offTab` on its own
  * left the button classes pointing at the old screen -- the state said News and
  * the highlight said Contract Negotiations. */
-function setOffTab(key) {
-  state.offTab = key;
+function highlightOffTab(key) {
   $$(".off-tab").forEach((t) => {
     const active = t.dataset.off === key;
     t.classList.toggle("is-active", active);
     t.setAttribute("aria-selected", String(active));
   });
+}
+
+function setOffTab(key) {
+  state.offTab = key;
+  highlightOffTab(key);
   renderOffseasonBody();
 }
 
@@ -3009,8 +3037,19 @@ function renderOffseason() {
   const data = state.offseason;
   const title = $("#offseason-title");
   const phase = $("#offseason-phase");
-  if (!offseasonShowable(data)) {
-    if (phase) phase.textContent = "The season is still being played.";
+  if (!offseasonLive(data)) {
+    // Preview mode. The heading has to say so, or a manager reads projected
+    // asking prices as agreed ones.
+    if (title) {
+      title.textContent = `${(data && data.season) || ""} Offseason Preview`.trim();
+    }
+    if (phase) {
+      phase.textContent = "The season is still being played — everything here "
+        + "is a projection, and nothing on these screens changes the league.";
+    }
+    const advance = $("#offseason-advance");
+    if (advance) advance.hidden = true;
+    renderOffseasonBody();
     return;
   }
   if (title) title.textContent = `${data.season} Offseason`;
@@ -3031,10 +3070,11 @@ function renderOffseasonBody() {
   if (!body) return;
   body.textContent = "";
   const data = state.offseason;
-  if (!offseasonShowable(data)) {
-    body.appendChild(el("p", "note", "Available once the Finals have concluded."));
+  if (!offseasonLive(data)) {
+    renderOffseasonPreview(body);
     return;
   }
+  if (state.offTab === "mock") { offMock(body); return; }
   if (!offImplemented(state.offTab)) {
     body.appendChild(plannedPanel(state.offTab));
     // Free agency has no bidding, but the pool behind it is real and built
@@ -3155,6 +3195,279 @@ function applyOffFilters(rows) {
     if (state.offFilter === "all") return true;
     return positionGroup(row.position) === state.offFilter;
   });
+}
+
+/* --- The preview -----------------------------------------------------
+ *
+ * What the menu shows while a season is still being played. Four of the nine
+ * sub-screens have something honest to say in January; the other five do not,
+ * and say so rather than showing an empty table.
+ *
+ * Nothing in here can write. The one dangerous call on this page is
+ * `offseason/open`, which ticks every contract down, and `openOffseason`
+ * refuses to make it unless the Finals are actually done. */
+
+const PREVIEW_TABS = {
+  mock: offMock,
+  expected: offPreviewExpected,
+  retirements: offPreviewWatch,
+  payroll: offPayroll,
+};
+
+function renderOffseasonPreview(body) {
+  const preview = (state.offseason && state.offseason.preview) || null;
+  if (!preview) {
+    body.appendChild(el("p", "note",
+      "The offseason preview is not available on this page."));
+    return;
+  }
+  const render = PREVIEW_TABS[state.offTab];
+  if (!render) {
+    body.appendChild(offPreviewClosed(state.offTab));
+    return;
+  }
+  render(body);
+}
+
+/* A screen that genuinely has nothing to say until the Finals are done, said
+ * plainly. Distinct from `plannedPanel`, which is about a feature that does
+ * not exist: these features exist and are simply not open yet. */
+function offPreviewClosed(key) {
+  const copy = {
+    news: ["League News",
+           "The wire covers the summer itself — re-signings, departures, "
+           + "retirements. None of it has happened yet."],
+    negotiations: ["Contract Negotiations",
+                   "Talks open when the Finals conclude and every contract "
+                   + "ticks down a year. Until then, see Expected Free Agents "
+                   + "for who is heading for the market."],
+    coaches: ["Coach Negotiations",
+              "Same as the players: coaching deals tick down at the end of "
+              + "the season, not during it."],
+    freeagency: ["Free Agency",
+                 "There is no market until contracts expire."],
+    camp: ["Training Camp",
+           "Development runs over the summer, inside Advance to Next Season."],
+    draft: ["Draft",
+            "The intake runs inside Advance to Next Season, worst club first, "
+            + "filling the places retirement opens. What you can read now is "
+            + "Mock Drafts — five writers on the class that will arrive."],
+  }[key] || ["Not yet", "Available once the Finals have concluded."];
+
+  const panel = el("div", "planned-panel");
+  panel.appendChild(el("h3", null, copy[0]));
+  panel.appendChild(el("span", "planned-badge", "After the Finals"));
+  panel.appendChild(el("p", null, copy[1]));
+  return panel;
+}
+
+/* Who reaches the market in July, read a season early. Deliberately a
+ * different screen from `offExpected`: that one lists contracts that *have*
+ * expired and can be negotiated, this one lists contracts that *will*, and
+ * nothing on it is actionable. */
+function offPreviewExpected(body) {
+  const preview = state.offseason.preview;
+  const rows = (preview.expiring || []).concat(preview.coaches || []);
+  if (!rows.length) {
+    body.appendChild(el("p", "note",
+      "Nobody is in the last year of a deal."));
+    return;
+  }
+  body.appendChild(el("p", "note",
+    `${rows.length} contracts run out at the end of this season — `
+    + `${preview.expiring.length} players and ${preview.coaches.length} coaches. `
+    + `Asking prices are what each would want today; a season still being `
+    + `played moves them.`));
+
+  const table = offTable([
+    ["name", "Player", "col-name"], ["team", "Team"], ["pos", "Pos"],
+    ["age", "Age"], ["ovr", "OVR"], ["now", "Current"], ["ask", "Asking"],
+    ["years", "Yrs"], ["interest", "Interest in Returning"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.slice(0, 120).forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    if (row.isCoach) name.appendChild(el("span", "player-name", row.name));
+    else name.appendChild(playerLink(row.name, row.id, row.teamId));
+    tr.appendChild(name);
+    const team = el("td");
+    team.appendChild(teamLink(row.teamId, (node) => {
+      node.textContent = row.teamAbbr || row.teamName || "";
+    }));
+    tr.appendChild(team);
+    tr.appendChild(el("td", null, row.position || "—"));
+    tr.appendChild(el("td", null, String(row.age ?? "—")));
+    tr.appendChild(el("td", null, row.overall != null ? String(row.overall) : "—"));
+    tr.appendChild(el("td", null, money(row.previousSalary)));
+    tr.appendChild(el("td", null, money(row.requestedSalary)));
+    tr.appendChild(el("td", null, String(row.requestedYears ?? "—")));
+    tr.appendChild(interestCell(row));
+    tbody.appendChild(tr);
+  });
+  appendTable(body, table);
+  if (rows.length > 120) {
+    body.appendChild(el("p", "note", `Showing the top 120 of ${rows.length}.`));
+  }
+}
+
+/* Who looks closest to the end. A watch, not a list: the decision is taken in
+ * the summer against a season that has not finished being played, so the risk
+ * is shown rather than a name being marked "retiring". */
+function offPreviewWatch(body) {
+  const rows = state.offseason.preview.watch || [];
+  if (!rows.length) {
+    body.appendChild(el("p", "note", "Nobody in the league is near the end."));
+    return;
+  }
+  body.appendChild(el("p", "note",
+    "Read off age and decline against each man's own peak. Certain means the "
+    + "ability line for his age has already been crossed; everything else is "
+    + "a chance, settled in the summer."));
+
+  const table = offTable([
+    ["name", "Player", "col-name"], ["team", "Team"], ["pos", "Pos"],
+    ["age", "Age"], ["ovr", "CA"], ["risk", "Retirement risk"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    name.appendChild(playerLink(row.name, row.playerId, row.teamId));
+    tr.appendChild(name);
+    const team = el("td");
+    team.appendChild(teamLink(row.teamId, (node) => {
+      const club = state.teams.get(row.teamId);
+      node.textContent = club ? club.abbr : row.teamId;
+    }));
+    tr.appendChild(team);
+    tr.appendChild(el("td", null, row.position || "—"));
+    tr.appendChild(el("td", null, String(row.age ?? "—")));
+    tr.appendChild(el("td", null, String(row.ca ?? "—")));
+    tr.appendChild(el("td", null, row.risk >= 1
+      ? "Certain" : `${Math.round(row.risk * 100)}%`));
+    tbody.appendChild(tr);
+  });
+  appendTable(body, table);
+}
+
+/* --- Mock drafts ------------------------------------------------------ */
+
+function offMock(body) {
+  const data = (state.offseason && state.offseason.preview
+                && state.offseason.preview.mock) || null;
+  if (!data || !data.boards || !data.boards.length) {
+    body.appendChild(el("p", "note", "No mock drafts have been published."));
+    return;
+  }
+
+  body.appendChild(el("p", "note",
+    `${data.classLabel} ${data.year} class. Published ${data.publishedLabel}; `
+    + `next boards ${data.nextLabel}. ${data.note}`));
+
+  // The consensus first, because it is the summary of the five and reads as
+  // the headline. Labelled as a summary rather than a sixth opinion.
+  const top = el("section", "mock-section");
+  top.appendChild(el("h3", null, "Consensus board"));
+  top.appendChild(el("p", "note",
+    "Average slot across the five writers. Not a sixth opinion — a summary of "
+    + "the other five."));
+  const table = offTable([
+    ["avg", "Avg"], ["name", "Player", "col-name"], ["pos", "Pos"],
+    ["age", "Age"], ["ca", "CA"], ["pot", "Potential"],
+    ["high", "High"], ["low", "Low"], ["boards", "Boards"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  (data.consensus || []).slice(0, 30).forEach((row) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, String(row.average)));
+    tr.appendChild(el("td", "col-name", row.name));
+    tr.appendChild(el("td", null, row.position));
+    tr.appendChild(el("td", null, String(row.age)));
+    tr.appendChild(el("td", null, String(row.ca)));
+    tr.appendChild(el("td", null, String(row.potential)));
+    tr.appendChild(el("td", null, String(row.high)));
+    tr.appendChild(el("td", null, String(row.low)));
+    tr.appendChild(el("td", null, `${row.boards}/5`));
+    tbody.appendChild(tr);
+  });
+  appendTable(top, table);
+  body.appendChild(top);
+
+  if ((data.splits || []).length) {
+    const splits = el("section", "mock-section");
+    splits.appendChild(el("h3", null, "Where they disagree"));
+    splits.appendChild(el("p", "note",
+      "The widest gaps between the highest and lowest slot a writer gave the "
+      + "same player. The most interesting rows on the page."));
+    const list = el("div", "mock-splits");
+    data.splits.forEach((row) => {
+      const card = el("div", "mock-split");
+      card.appendChild(el("strong", null, `${row.name} · ${row.position}`));
+      card.appendChild(el("span", "note",
+        `as high as ${row.high}, as low as ${row.low}`));
+      list.appendChild(card);
+    });
+    splits.appendChild(list);
+    body.appendChild(splits);
+  }
+
+  data.boards.forEach((entry) => offMockBoard(body, entry));
+}
+
+function offMockBoard(body, entry) {
+  const writer = entry.writer || {};
+  const section = el("section", "mock-section");
+  const head = el("header", "mock-head");
+  head.appendChild(el("h3", null, `${writer.name} — ${writer.outlet}`));
+  head.appendChild(el("p", "mock-creed", writer.creed || ""));
+  // `ballot-reads` rather than a new class: it is the same flex-wrap row of
+  // chips the MVP ballots use, and a second name for it would drift.
+  const chips = el("div", "ballot-reads");
+  (writer.reads || []).forEach((read) => chips.appendChild(el("span", "chip", read)));
+  head.appendChild(chips);
+  section.appendChild(head);
+
+  if (entry.note) {
+    const piece = el("article", "mock-note");
+    piece.appendChild(el("h4", null, entry.note.headline));
+    (entry.note.body || []).forEach((para) => piece.appendChild(el("p", null, para)));
+    section.appendChild(piece);
+  }
+
+  const table = offTable([
+    ["slot", "#"], ["team", "Team"], ["name", "Player", "col-name"],
+    ["pos", "Pos"], ["age", "Age"], ["ca", "CA"], ["pot", "Potential"],
+    ["rank", "Board"], ["reach", "Reach"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  (entry.picks || []).forEach((pick) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, String(pick.slot)));
+    const team = el("td");
+    team.appendChild(teamLink(pick.teamId, (node) => {
+      const club = state.teams.get(pick.teamId);
+      node.textContent = club ? club.abbr : pick.teamId;
+    }));
+    if (pick.viaTeamId) {
+      const via = state.teams.get(pick.viaTeamId);
+      team.appendChild(el("span", "note", ` via ${via ? via.abbr : pick.viaTeamId}`));
+    }
+    tr.appendChild(team);
+    tr.appendChild(el("td", "col-name", pick.name));
+    tr.appendChild(el("td", null, pick.position));
+    tr.appendChild(el("td", null, String(pick.age)));
+    tr.appendChild(el("td", null, String(pick.ca)));
+    tr.appendChild(el("td", null, String(pick.potential)));
+    tr.appendChild(el("td", null, String(pick.boardRank)));
+    // Positive means he went earlier than the board has him -- a reach. Shown
+    // signed, because the direction is the whole point of the column.
+    tr.appendChild(el("td", null, pick.reach > 0 ? `+${pick.reach}`
+      : String(pick.reach)));
+    tbody.appendChild(tr);
+  });
+  appendTable(section, table);
+  body.appendChild(section);
 }
 
 function offTable(columns) {

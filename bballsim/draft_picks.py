@@ -299,8 +299,7 @@ def ensure(league) -> list[DraftPick]:
     existing = getattr(league, "draft_picks", None)
     if existing:
         return existing
-    year = _start_year(getattr(league, "season", ""))
-    made = generate(list(league.teams), year)
+    made = generate(list(league.teams), current_year(league))
     league.draft_picks = made
     return made
 
@@ -312,8 +311,21 @@ def _start_year(season: str) -> int:
         return 2026
 
 
+# A draft is named for the year it is *held*, which is the spring after the
+# season that decides its order: the 2026-27 season ends in the 2027 draft.
+#
+# This module used to number picks off the season's opening year, so it called
+# that draft "2026 Rd 1" while `offseason.draft` -- the code that actually runs
+# it -- generated its class under 2027. Two names for one draft, and it cost
+# nothing while no object was keyed on the year. `draft_class.board(year)` is
+# keyed on it: the mismatch meant the sixty players the mock drafts named were
+# not the sixty who would arrive.
+DRAFT_YEAR_OFFSET = 1
+
+
 def current_year(league) -> int:
-    return _start_year(getattr(league, "season", ""))
+    """The year of the next draft -- the one this season's table decides."""
+    return _start_year(getattr(league, "season", "")) + DRAFT_YEAR_OFFSET
 
 
 def owned_by(league, team_id: str) -> list[DraftPick]:

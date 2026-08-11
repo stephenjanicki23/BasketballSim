@@ -957,26 +957,51 @@ def retirement_pressure(player, profile: CareerProfile, *, minutes: float = 0.0,
     return max(0.35, pressure)
 
 
-def _should_retire(rng, player, profile: CareerProfile, *, minutes: float = 0.0,
-                   championships: int = 0) -> bool:
+def retirement_risk(player, profile: CareerProfile | None = None, *,
+                    minutes: float = 0.0, championships: int = 0) -> float:
+    """The chance this man's career ends at the next summer, 0.0 to 1.0.
+
+    The whole decision except the coin toss, so the retirement watch on the
+    OFFSEASON preview and the summer that actually retires people are reading
+    one function rather than two that agree until somebody edits one. Certain
+    outcomes come back as 1.0: past the hard age, or below the ability line for
+    his age, there is no toss to make.
+
+    `profile` is optional because a screen has one for everybody who has played
+    a season and not for a rookie; without it the career-shape terms in
+    `retirement_pressure` fall back to the player's own peak.
+    """
     if player.age >= HARD_RETIREMENT_AGE:
-        return True
+        return 1.0
     if player.age < RETIREMENT_AGE_FLOOR:
         # Only a collapse ends a career early.
-        return player.ability.current < 45.0 and player.age > 27
-    # Past the floor, the decision is ability against age.
+        return 1.0 if (player.ability.current < 45.0 and player.age > 27) else 0.0
     threshold = RETIREMENT_CA + 4.5 * (player.age - RETIREMENT_AGE_FLOOR)
     if player.ability.current < threshold:
-        return True
+        return 1.0
     # Even a useful veteran walks away eventually -- but a player still well
     # clear of the line does not retire at 35 on a coin flip. The chance falls
     # off with how much ability he has left above the threshold, and is then
     # moved by everything else a career carries.
     margin = (player.ability.current - threshold) / 60.0
     chance = 0.10 * max(0, player.age - 34) * max(0.10, 1.0 - margin)
-    chance *= retirement_pressure(player, profile, minutes=minutes,
-                                  championships=championships)
-    return rng.random() < min(0.95, chance)
+    if profile is None:
+        profile = getattr(player, "career", None)
+    if profile is not None:
+        chance *= retirement_pressure(player, profile, minutes=minutes,
+                                      championships=championships)
+    return min(0.95, chance)
+
+
+def _should_retire(rng, player, profile: CareerProfile, *, minutes: float = 0.0,
+                   championships: int = 0) -> bool:
+    chance = retirement_risk(player, profile, minutes=minutes,
+                             championships=championships)
+    if chance >= 1.0:
+        return True
+    if chance <= 0.0:
+        return False
+    return rng.random() < chance
 
 
 # --------------------------------------------------------------------------

@@ -48,6 +48,7 @@ from enum import Enum
 from .. import contracts as K
 from .. import negotiation as N
 from .. import payroll
+from .. import progression
 from . import playoffs
 
 
@@ -513,6 +514,94 @@ def apply_retirements(league, retired: list[dict]) -> list[dict]:
 
 def payroll_table(league) -> list[dict]:
     return payroll.league_table(league.teams.values())
+
+
+# --------------------------------------------------------------------------
+# The preview
+#
+# Everything below runs *during* a season and must not change anything. The
+# OFFSEASON menu is now visible year-round, and the one rule that makes that
+# safe is that nothing on the preview may tick a contract down: `begin` is what
+# ages the league, it is meant to happen exactly once, and a screen that could
+# trigger it by being looked at would age a league behind the manager's back.
+#
+# So these read the same facts the summer will read, a season early, and none
+# of them writes.
+# --------------------------------------------------------------------------
+
+def projected_expiring(league) -> tuple[list[FreeAgent], list[FreeAgent]]:
+    """Who *will* reach the market when this season ends.
+
+    `collect_expiring` reads `contract.expired`, which is only true after
+    `tick_contracts` has run -- so during a season it correctly returns
+    nobody, and a preview built on it would be an empty page. A deal with one
+    year left is a deal that expires this summer, and that is knowable now.
+
+    The asking prices are the same `negotiation` figures the summer will use.
+    They can still move, because a player's situation and his season move them,
+    and the screen says so rather than presenting them as agreed.
+    """
+    players: list[FreeAgent] = []
+    coaches: list[FreeAgent] = []
+
+    for team in league.teams.values():
+        for player in team.players:
+            contract = getattr(player, "contract", None)
+            if contract is None or contract.years_remaining > 1:
+                continue
+            where = N.situation(league, team, player)
+            ask = N.demand(player, where)
+            players.append(FreeAgent(
+                holder_id=player.id, name=player.name, team_id=team.id,
+                previous_salary=contract.salary,
+                requested_years=ask.years, requested_salary=ask.salary,
+                interest=ask.interest,
+            ))
+        coach = getattr(team, "coach", None)
+        contract = getattr(coach, "contract", None) if coach else None
+        if coach is not None and contract is not None and contract.years_remaining <= 1:
+            where = N.situation(league, team, coach_placeholder(team))
+            ask = N.coach_demand(coach, where)
+            coaches.append(FreeAgent(
+                holder_id=coach.id, name=coach.name, team_id=team.id,
+                is_coach=True, previous_salary=contract.salary,
+                requested_years=ask.years, requested_salary=ask.salary,
+                interest=ask.interest,
+            ))
+
+    lookup = {p.id: p for team in league.teams.values() for p in team.players}
+    players.sort(key=lambda e: -lookup[e.holder_id].ability.current
+                 if e.holder_id in lookup else 0.0)
+    coaches.sort(key=lambda e: -e.requested_salary)
+    return players, coaches
+
+
+def retirement_watch(league, limit: int = 12) -> list[dict]:
+    """Who looks closest to the end, most likely first.
+
+    A *watch*, not a list of retirements. `progression.develop_season` decides
+    who is finished, and it decides it in the summer against a season that has
+    not finished being played -- so nothing here can be more than a reading of
+    age and decline. Presented that way, with the risk shown rather than a name
+    marked "retiring".
+    """
+    rows = []
+    for team in league.teams.values():
+        for player in team.players:
+            risk = progression.retirement_risk(player)
+            if risk <= 0.0:
+                continue
+            rows.append({
+                "playerId": player.id,
+                "name": player.name,
+                "teamId": team.id,
+                "position": player.position.value,
+                "age": player.age,
+                "ca": round(player.ability.current, 1),
+                "risk": round(risk, 3),
+            })
+    rows.sort(key=lambda row: (-row["risk"], row["playerId"]))
+    return rows[:limit]
 
 
 # --------------------------------------------------------------------------

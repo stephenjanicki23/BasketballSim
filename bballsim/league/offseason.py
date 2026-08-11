@@ -35,14 +35,15 @@ it.
 
 from __future__ import annotations
 
+import copy
 import random
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta, timezone
 
-from .. import health
-from ..models import Player
+from .. import draft_class, draft_picks, health, prospects
+from ..models import Player, Position
+from ..names import FIRST_NAMES, SURNAMES
 from ..progression import build_profile, develop_season
-from ..prospects import intake
 from ..engine.rng import seed_from_string
 from . import playoffs
 from .calendar import PACIFIC, GameStatus, build_daily_schedule
@@ -296,14 +297,28 @@ def draft(league, retirements: dict[str, list[Player]], report: OffseasonReport,
           seed: str) -> None:
     """Fill every hole a retirement left, worst club picking first.
 
-    The order is the whole point of a draft: the intake is built as a ladder,
-    best prospect first, and it is handed out in reverse order of the table that
-    just finished. A club that lost sixty games gets the first name on the
-    board.
+    The order is the whole point of a draft: names come off a board that was
+    ranked best-first months ago, and they are handed out in reverse order of
+    the table that just finished. A club that lost sixty games gets the first
+    name it can use.
 
-    Positions are drawn from the vacancies themselves -- a club that lost two
-    centres drafts two centres -- because a squad has to stay legal for
-    `Team.starters()`, which picks the strongest *legal* five.
+    **The board is declared in advance** -- `draft_class.board(year)` -- rather
+    than invented here. It used to be invented here, sized to the vacancies and
+    with a position per hole, which kept squads legal and made a draft
+    impossible to write about before it happened: there was no class, only a
+    function that would produce one. Mock drafts need the names to exist in
+    February, and a mock draft of players who will not be the players who
+    arrive is worse than none.
+
+    Positions are still respected, because a squad has to stay legal for
+    `Team.starters()`. A club replacing a centre takes the **best centre left
+    on the board**, not the best player left on it. That is a real cost of
+    drafting for need and it is why the five mock drafters disagree.
+
+    A class can run out at a position -- sixty names is not sixty of each -- so
+    a club with a hole nobody on the board can fill signs an undrafted man
+    generated on the spot. Rare, reported honestly as an undrafted signing
+    rather than dressed up as a pick.
     """
     vacancies = sum(len(v) for v in retirements.values())
     if not vacancies:
@@ -323,14 +338,16 @@ def draft(league, retirements: dict[str, list[Player]], report: OffseasonReport,
 
     rng = random.Random(seed_from_string(f"{seed}-intake"))
     season = next_label(league.season)
+    # Which draft this is, asked of the one module that owns the answer. Both
+    # this and `mock_draft` used to work it out for themselves and disagreed by
+    # a year, which meant the board the writers mocked was not the board the
+    # clubs drafted from. See `draft_picks.DRAFT_YEAR_OFFSET`.
+    year = draft_picks.current_year(league)
     taken_names = {p.name for team in league.teams.values() for p in team.players}
-    class_ = intake(
-        rng,
-        size=len(picks),
-        season_start_year=start_year(season),
+    class_ = sign_from_board(
+        rng, year=year,
         positions=[departing.position for _team_id, departing in picks],
         taken_names=taken_names,
-        id_prefix=f"D{start_year(season)}",
     )
 
     for (team_id, departing), arrival in zip(picks, class_):
@@ -354,7 +371,73 @@ def draft(league, retirements: dict[str, list[Player]], report: OffseasonReport,
             "ca": round(arrival.ability.current, 1),
             "potential": round(arrival.ability.potential, 1),
             "replaces": departing.name,
+            "boardRank": getattr(arrival, "board_rank", None),
+            "undrafted": getattr(arrival, "board_rank", None) is None,
         })
+
+
+def sign_from_board(rng, *, year: int, positions: list[Position],
+                    taken_names: set[str]) -> list[Player]:
+    """Take one man off the declared board for each vacancy, in order.
+
+    Returns **copies**. `draft_class.board` memoises and hands the same objects
+    to every caller, including the mock drafts that named them last Wednesday;
+    a club that mutated one -- and signing sets a jersey, a career profile and
+    eventually a contract -- would be editing the board itself.
+
+    Each signing records `board_rank`, the slot he occupied, so a report can say
+    a club took the fourth-ranked prospect with the eleventh pick. That gap is
+    the interesting number in any draft and it only exists because the board
+    existed first.
+    """
+    taken: set[str] = set()
+    signed: list[Player] = []
+    for position in positions:
+        prospect = draft_class.best_available(year, taken, position.value)
+        if prospect is None:
+            # Nobody left at the position. An undrafted free agent, made now,
+            # at the bottom of what a draft produces -- he is the man a club
+            # signs because it must field five, not a prospect anyone rated.
+            arrival = prospects.make_prospect(
+                rng,
+                player_id=f"U{year}-{len(signed) + 1:02d}",
+                jersey=0,
+                position=position,
+                target_ca=prospects.TAIL_CA,
+                season_start_year=year,
+                first_name=rng.choice(FIRST_NAMES),
+                last_name=rng.choice(SURNAMES),
+                rank=1.0,
+                draft_size=draft_class.BOARD_SIZE,
+                pick=None,
+            )
+            arrival.board_rank = None
+        else:
+            taken.add(prospect.id)
+            arrival = copy.deepcopy(prospect)
+            arrival.board_rank = draft_class.board(year).index(prospect) + 1
+        arrival.last_name = _unique_surname(arrival, taken_names)
+        taken_names.add(arrival.name)
+        signed.append(arrival)
+    return signed
+
+
+def _unique_surname(player, taken: set[str]) -> str:
+    """A board name that clashes with a live player gets a numeral.
+
+    The board is generated from the year alone so that it reads the same to
+    everybody, which means it cannot check any particular league's roster --
+    see `draft_class._name`. This is where that debt is paid, at the one moment
+    a duplicate could actually confuse a box score. `name` is derived from the
+    two halves, so the numeral goes on the surname.
+    """
+    if player.name not in taken:
+        return player.last_name
+    for numeral in ("II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"):
+        candidate = f"{player.last_name} {numeral}"
+        if f"{player.first_name} {candidate}" not in taken:
+            return candidate
+    return player.last_name
 
 
 def games_per_team(league) -> int:

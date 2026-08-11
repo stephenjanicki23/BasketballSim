@@ -1647,6 +1647,51 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   vertical-align: 3px;
 }
 
+/* --- Mock drafts -----------------------------------------------------
+ *
+ * Five boards on one page is a lot of table, so each writer gets a titled
+ * section with their creed and their piece above it. The reader is meant to
+ * scan the consensus, read the splits, then go looking for the one writer
+ * they disagree with. */
+.mock-section {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+}
+.mock-head { display: grid; gap: 6px; }
+.mock-head h3 { margin: 0; }
+.mock-creed {
+  margin: 0;
+  max-width: 70ch;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.6;
+}
+.mock-note { max-width: 72ch; }
+.mock-note h4 { margin: 0 0 8px; font-size: 15px; }
+.mock-note p {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.mock-splits {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.mock-split {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
 /* Wide tables scroll inside their own box so the page body never does.
  * The scroll lives on a wrapper rather than on the table, because
  * `display:block` on a table makes it shrink to its content and stop filling

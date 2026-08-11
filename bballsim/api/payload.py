@@ -32,6 +32,7 @@ from ..league.calendar import PACIFIC, GameStatus
 from ..logos import logo_for
 from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
+from .. import mock_draft
 from .. import mvp
 from ..league import franchise, history, playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
@@ -621,6 +622,29 @@ def negotiation_row(league, entry) -> dict:
     return row
 
 
+def offseason_preview(league) -> dict:
+    """What the OFFSEASON menu shows while the season is still being played.
+
+    The menu used to be hidden until the Finals concluded, which was the right
+    gate for the machinery -- opening a summer ticks every contract down and
+    must happen once -- and the wrong gate for the *information*. Who is out of
+    contract in July, who is near the end, what every club owes, and who the
+    draft writers like are all knowable in January and are exactly what a
+    manager wants to know in January.
+
+    So the tab is always there and this is what fills it. Nothing here mutates
+    the league: it is derived on read like the standings.
+    """
+    expiring, coaches = franchise.projected_expiring(league)
+    return {
+        "season": league.season,
+        "expiring": [free_agent_row(league, e) for e in expiring],
+        "coaches": [free_agent_row(league, e) for e in coaches],
+        "watch": franchise.retirement_watch(league),
+        "mock": mock_draft.edition(league),
+    }
+
+
 def offseason_view(league) -> dict:
     """The whole OFFSEASON menu, in one round trip.
 
@@ -664,10 +688,17 @@ def offseason_view(league) -> dict:
             "coaches": True,
             "freeAgency": False,
             "retirements": True,
-            "draft": False,
+            # The mock drafts are real and the board behind them is the board
+            # clubs will actually pick from. Taking part in the draft is not.
+            # The screen says which is which.
+            "draft": True,
             "trainingCamp": False,
             "advance": True,
         },
+        # Everything a mid-season visitor can be shown honestly, none of which
+        # writes anything. See `franchise.projected_expiring` for why this is
+        # not simply the summer's own lists a few months early.
+        "preview": offseason_preview(league),
     }
     if state is None:
         return payload

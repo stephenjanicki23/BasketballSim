@@ -605,7 +605,7 @@ def column_for(league, ballot: "Ballot", board: list["Contender"]) -> dict | Non
     dissenting = mine["player_id"] != leader.player_id
 
     headline = pick([
-        f"{voter.name} on why {player_name} leads his ballot",
+        f"{voter.name} on why {player_name} leads the ballot",
         f"The case for {player_name}, by the numbers that matter",
         f"{possessive(voter.outlet)} ballot: {player_name} first",
     ], story_id)
