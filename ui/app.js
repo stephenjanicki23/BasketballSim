@@ -2842,7 +2842,7 @@ const OFF_TAB_KEYS = {
   freeagency: "freeAgency",
   retirements: "retirements",
   draft: "draft",
-  mock: "draft",
+  mock: "mockDraft",
   camp: "trainingCamp",
   payroll: "payroll",
 };
@@ -3074,7 +3074,6 @@ function renderOffseasonBody() {
     renderOffseasonPreview(body);
     return;
   }
-  if (state.offTab === "mock") { offMock(body); return; }
   if (!offImplemented(state.offTab)) {
     body.appendChild(plannedPanel(state.offTab));
     // Free agency has no bidding, but the pool behind it is real and built
@@ -3086,6 +3085,9 @@ function renderOffseasonBody() {
   const render = {
     news: offNews, expected: offExpected, negotiations: offNegotiations,
     coaches: offCoaches, retirements: offRetirements, payroll: offPayroll,
+    // The mocks keep running through a summer: the class is the class, and
+    // the writers have opinions about it right up until it is drafted.
+    mock: offMock,
   }[state.offTab];
   if (render) render(body);
 }
@@ -3107,10 +3109,12 @@ function plannedPanel(key) {
     draft: [
       "Draft",
       "The intake already runs — it happens inside Advance to Next Season, "
-      + "and every retirement is replaced by a prospect, worst club picking "
-      + "first. You can see the results on each squad afterwards.",
+      + "and every retirement is replaced by a prospect off the declared "
+      + "board, worst club picking first. You can see the results on each "
+      + "squad afterwards, and the board itself under Mock Drafts.",
       "What is planned here is the part you would take part in: a lottery, a "
-      + "board to scout, and picks you can trade. None of that exists yet.",
+      + "board to scout, and picks you can use yourself. None of that exists "
+      + "yet.",
     ],
     camp: [
       "Training Camp",

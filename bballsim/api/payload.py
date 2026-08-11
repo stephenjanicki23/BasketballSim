@@ -688,10 +688,14 @@ def offseason_view(league) -> dict:
             "coaches": True,
             "freeAgency": False,
             "retirements": True,
-            # The mock drafts are real and the board behind them is the board
-            # clubs will actually pick from. Taking part in the draft is not.
-            # The screen says which is which.
-            "draft": True,
+            # Two flags, because these are two different screens and one flag
+            # covering both made the Draft screen claim to be implemented on
+            # the strength of the Mock Drafts one. Taking part in a draft --
+            # a lottery, a board to scout, picks to trade -- does not exist.
+            # The mock drafts do, and the board behind them is the board clubs
+            # will actually pick from.
+            "draft": False,
+            "mockDraft": True,
             "trainingCamp": False,
             "advance": True,
         },

@@ -518,6 +518,14 @@ class TestThePreviewChangesNothing(unittest.TestCase):
         self.assertFalse(view["available"], "fixture already has a champion")
         self.assertEqual(self.fingerprint(lg), before)
 
+    def test_the_mocks_get_their_own_implemented_flag(self):
+        """One flag covering both screens made the Draft screen claim to be
+        implemented on the strength of the Mock Drafts one. Taking part in a
+        draft still does not exist; the mocks do."""
+        flags = payload.offseason_view(league())["implemented"]
+        self.assertFalse(flags["draft"])
+        self.assertTrue(flags["mockDraft"])
+
     def test_the_preview_is_there_even_with_no_summer(self):
         view = payload.offseason_view(league())
         self.assertIn("preview", view)
