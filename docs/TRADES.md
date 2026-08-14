@@ -269,6 +269,21 @@ roster and record blended by how much season has been played. Two readings of
 the same thing have to start from the same place. No club on a selling timeline
 now shows a window above 65.
 
+**They still are not interchangeable, and nothing may treat them as if they
+were.** Sharing a starting point stopped the contradictory rows; it did not
+make the two numbers the same number, because they answer different questions.
+`timeline` is how good a club is *now*, blending record with roster. `window`
+is how good it can be *for a title*, and roster strength is only 38% of it.
+
+The measured consequence: **the lowest-window club in the league can be a
+Championship Contender** — a good record carrying a mediocre roster, cap sheet
+and age profile. A test fixture that picked "the rebuild" by taking the minimum
+window was therefore handing a contender to every test that asked whether a
+prospect is worth more to a rebuilding club, and those tests had been passing
+on the coincidence. Pick a rebuild by `timeline.selling`; pick a title chance
+by `window`. `test_the_window_is_not_a_stand_in_for_the_timeline` holds the
+shortcut down.
+
 ### A fixture that named no timeline
 
 `test_giving_away_a_star_is_rejected` built its offer from whichever club

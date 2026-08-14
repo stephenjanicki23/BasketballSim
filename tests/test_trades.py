@@ -98,11 +98,30 @@ def situations():
 
 
 def extremes():
-    """The most open window and the most closed, which is the pair every
-    "two clubs disagree" test needs."""
+    """A club that is genuinely buying and one that is genuinely selling.
+
+    **Selected by timeline, not by window**, and that distinction is the whole
+    point of this helper. It used to take the highest and lowest `window`, on
+    the assumption that the two readings agree. They do not: at the pinned
+    fixture the *lowest-window club in the league is a Championship Contender*
+    -- a good record carrying a mediocre roster, cap sheet and age profile --
+    so a test asking "is a prospect worth more to the rebuild" was handed a
+    contender and called it a rebuild.
+
+    The two readings answer different questions. `timeline` is how good a club
+    is now, blending record with roster; `window` is how good it can be for a
+    title, and roster strength is only 38% of it. Neither is wrong. Using one
+    as a proxy for the other is.
+
+    Within each camp the window still orders them, so this returns the most
+    open buyer and the most closed seller.
+    """
     sits = situations()
-    best = max(sits.values(), key=lambda s: s.window)
-    worst = min(sits.values(), key=lambda s: s.window)
+    buyers = [s for s in sits.values() if s.timeline.buying]
+    sellers = [s for s in sits.values() if s.timeline.selling]
+    assert buyers and sellers, "the league has no buyers or no sellers"
+    best = max(buyers, key=lambda s: s.window)
+    worst = min(sellers, key=lambda s: s.window)
     return best, worst
 
 
@@ -466,8 +485,39 @@ class TestTheSamePlayerIsWorthDifferentThings(unittest.TestCase):
                            TV.value_to(self.lg, self.best, player) * 1.25)
 
     def test_the_two_clubs_are_genuinely_different(self):
+        """`extremes` now selects on `buying`/`selling`, so asserting those
+        back would be circular. What is worth checking is that the pair really
+        are far apart -- several phases of timeline between them, and a real
+        gap in window -- because a "contender" and a "rebuild" one step apart
+        would make the two value tests above pass on noise.
+        """
         self.assertTrue(self.best.timeline.buying)
         self.assertTrue(self.worst.timeline.selling)
+        order = list(FO.Timeline)
+        apart = order.index(self.worst.timeline) - order.index(self.best.timeline)
+        self.assertGreaterEqual(apart, 3,
+                                f"{self.best.timeline.name} vs "
+                                f"{self.worst.timeline.name}")
+        self.assertGreater(self.best.window - self.worst.window, 8.0,
+                           f"{self.best.window:.1f} vs {self.worst.window:.1f}")
+
+    def test_the_window_is_not_a_stand_in_for_the_timeline(self):
+        """The bug this fixture was built on for months.
+
+        The lowest-window club in the league can be a Championship Contender:
+        a good record carrying a mediocre roster, cap sheet and age profile.
+        Anything that picks a rebuild by taking the minimum window will
+        sometimes pick a contender instead. Held down here so the shortcut is
+        not reintroduced somewhere else.
+        """
+        sits = situations()
+        by_window = min(sits.values(), key=lambda s: s.window)
+        sellers = [s for s in sits.values() if s.timeline.selling]
+        self.assertTrue(sellers)
+        # Not an assertion that they *must* disagree -- only that agreeing is
+        # not something any caller may rely on.
+        self.assertIsNotNone(by_window.timeline)
+        self.assertIn(self.worst, sellers)
 
 
 class TestUntouchables(unittest.TestCase):
