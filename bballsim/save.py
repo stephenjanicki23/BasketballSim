@@ -104,6 +104,16 @@ SEASON_PATH = data_dir() / "season.json"
 # from these totals. Nothing derived is written here.
 HISTORY_PATH = data_dir() / "history.json"
 
+# The single-game record book, and the *only* other thing in this project
+# written to disk because it cannot be derived.
+#
+# A box score lives on its `ScheduledGame`; `offseason.reschedule` replaces the
+# calendar every summer; the archive above keeps season totals and no game
+# lines. So the night somebody scored 61 is unrecoverable once the season
+# rolls -- not expensive to rebuild, impossible. Season records are not in
+# here: they come off the archives on read, like everything else.
+RECORDS_PATH = data_dir() / "records.json"
+
 
 def schedule_fingerprint(games) -> str:
     """A digest of *which fixtures exist*, ignoring anything played.
@@ -999,6 +1009,77 @@ def read_history(path: Path = HISTORY_PATH) -> list:
 
 
 def history_exists(path: Path = HISTORY_PATH) -> bool:
+    return Path(path).is_file()
+
+
+# --------------------------------------------------------------------------
+# The record book. See `RECORDS_PATH` for why this is stored at all.
+# --------------------------------------------------------------------------
+
+def dump_records(book) -> dict:
+    return {
+        "version": 1,
+        "games": {
+            key: [
+                {
+                    "value": mark.value,
+                    "holderId": mark.holder_id,
+                    "name": mark.name,
+                    "teamId": mark.team_id,
+                    "season": mark.season,
+                    "gameId": mark.game_id,
+                    "opponentId": mark.opponent_id,
+                    "playedOn": mark.played_on,
+                    "stage": mark.stage,
+                    "detail": mark.detail,
+                }
+                for mark in marks
+            ]
+            for key, marks in book.games.items()
+        },
+    }
+
+
+def load_records(data: dict):
+    from .records import Book, Mark
+
+    book = Book()
+    for key, marks in (data.get("games") or {}).items():
+        book.games[key] = [
+            Mark(
+                value=float(entry.get("value") or 0.0),
+                holder_id=entry.get("holderId") or "",
+                name=entry.get("name") or "",
+                team_id=entry.get("teamId") or "",
+                season=entry.get("season") or "",
+                game_id=entry.get("gameId") or "",
+                opponent_id=entry.get("opponentId") or "",
+                played_on=entry.get("playedOn") or "",
+                stage=entry.get("stage") or "",
+                detail=entry.get("detail") or "",
+            )
+            for entry in marks
+        ]
+    return book
+
+
+def write_records(path: Path, book, *, indent: int | None = 1) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _round(dump_records(book))
+    path.write_text(json.dumps(payload, indent=indent, sort_keys=True) + "\n")
+    return path
+
+
+def read_records(path: Path = RECORDS_PATH):
+    from .records import Book
+
+    if not Path(path).is_file():
+        return Book()
+    return load_records(json.loads(Path(path).read_text()))
+
+
+def records_exist(path: Path = RECORDS_PATH) -> bool:
     return Path(path).is_file()
 
 

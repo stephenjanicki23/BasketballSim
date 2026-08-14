@@ -44,6 +44,17 @@ window.BBALL_SOURCE = {
     }
   },
 
+  /* The record book. Not in the bootstrap: it is a page most visits never
+   * open, and its season half walks every archived season. */
+  async records() {
+    try {
+      return await getJSON("/api/records");
+    } catch (error) {
+      console.warn("records fetch failed", error);
+      return null;
+    }
+  },
+
   /* The Trade Block. Everything in it has already happened -- the market runs
    * itself inside the league tick. */
   async market() {

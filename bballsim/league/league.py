@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from ..chemistry import drift_after_game
 from .. import health
+from .. import records
 from ..engine.game import GameRules, GameSimulator
 from ..conferences import conference_for
 from ..models import Team
@@ -228,6 +229,14 @@ class League:
             return
 
         self._record(game)
+
+        # The record book. Unlike health and chemistry below, this one is safe
+        # anywhere: every mark carries its game id and offering the same game
+        # twice replaces rather than duplicates, so a restored season cannot
+        # inflate a career night. Placed here rather than in `_record` so the
+        # postseason counts -- `_record` skips playoff games because seeding is
+        # read off the standings, and none of that applies to a record book.
+        records.observe(self, game)
 
         # What the game did to the players. Deliberately *not* in `_record`,
         # for the same reason chemistry is not: a season restored from disk

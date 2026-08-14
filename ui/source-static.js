@@ -45,6 +45,13 @@ window.BBALL_SOURCE = {
     return this._data.offseason || { available: false };
   },
 
+  /* Baked in if the export carried it. Null rather than an empty book, so the
+   * screen can say "not in this export" instead of "no records exist" -- those
+   * are different statements and only one of them is true. */
+  async records() {
+    return this._data.records || null;
+  },
+
   /* A published page is one frozen moment, so there is no market activity to
    * show and nothing to veto. Returning null keeps the screen honest about
    * that rather than rendering an empty board. */

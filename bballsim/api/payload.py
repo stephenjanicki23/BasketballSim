@@ -34,6 +34,7 @@ from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
 from .. import mock_draft
 from .. import mvp
+from .. import records
 from ..league import franchise, history, playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
@@ -620,6 +621,26 @@ def negotiation_row(league, entry) -> dict:
     # breaking the tax line, because nothing enforces it yet.
     row["payroll"] = payroll.summary(team).to_dict()
     return row
+
+
+def records_view(league) -> dict:
+    """The record book, with club names filled in.
+
+    `records.py` deals in ids because it is written to disk and a club can be
+    renamed; the display names are added here, where every other view adds
+    them, so a stored mark never carries a stale one.
+    """
+    data = records.book(league)
+    clubs = {tid: team.abbreviation for tid, team in league.teams.items()}
+    full = {tid: team.full_name for tid, team in league.teams.items()}
+    for half in ("game", "season"):
+        for scope in ("players", "teams"):
+            for section in data[half][scope]:
+                for mark in section["marks"]:
+                    mark["teamAbbr"] = clubs.get(mark["teamId"], "")
+                    mark["teamName"] = full.get(mark["teamId"], "")
+                    mark["opponentAbbr"] = clubs.get(mark["opponentId"], "")
+    return data
 
 
 def offseason_preview(league) -> dict:

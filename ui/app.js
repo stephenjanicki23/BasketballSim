@@ -236,6 +236,11 @@ const state = {
   // The offseason menu: the payload, which sub-screen is open, and the filters
   // on the two list screens.
   offseason: null,
+  // The record book: null until first opened, then the payload, or the string
+  // "missing" for a page whose source has no book. Three states rather than
+  // two, because "not loaded" and "no records exist" must not read alike.
+  records: null,
+  recordsHalf: "game",
   offTab: "news",
   offFilter: "all",
   offTeam: "",
@@ -1280,23 +1285,33 @@ function statsColumns() {
 }
 
 function renderStats() {
-  // The MVP race is not a sortable grid, so it replaces the table rather than
+  // Two of the scopes are not sortable grids -- the MVP race is ballots and a
+  // board, the record book is lists -- so they replace the table rather than
   // filling it. Everything below this point assumes columns and rows.
   const isMvp = state.statsScope === "mvp";
+  const isRecords = state.statsScope === "records";
+  const isGrid = !isMvp && !isRecords;
   const sheet = $("#stats-sheet");
   const page = $("#mvp-page");
+  const records = $("#records-page");
   const tabs = $("#stat-tabs");
   const note = $("#stats-note");
-  if (sheet) sheet.hidden = isMvp;
+  if (sheet) sheet.hidden = !isGrid;
   if (page) page.hidden = !isMvp;
-  if (tabs) tabs.hidden = isMvp;
-  if (note) note.hidden = isMvp;
+  if (records) records.hidden = !isRecords;
+  if (tabs) tabs.hidden = !isGrid;
+  if (note) note.hidden = !isGrid;
   $$("#stats-scope button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.scope === state.statsScope);
   });
   if (isMvp) {
     $("#stats-caption").textContent = "";
     renderMvp();
+    return;
+  }
+  if (isRecords) {
+    $("#stats-caption").textContent = "";
+    renderRecords();
     return;
   }
 
@@ -3878,6 +3893,127 @@ function offPayroll(body) {
 
 function mvpData() {
   return (state.data && state.data.mvp) || null;
+}
+
+/* --- The record book -------------------------------------------------
+ *
+ * Two halves that look alike and are built oppositely: season records are
+ * derived from the archives on every read, single-game marks are stored
+ * because a box score cannot be recovered once a calendar is replaced. The
+ * screen says so rather than leaving the reader to wonder why one half can
+ * reach back further than the other. */
+
+function renderRecords() {
+  const page = $("#records-page");
+  if (!page) return;
+  page.textContent = "";
+
+  if (!state.records) {
+    page.appendChild(el("p", "empty", "Loading the record book…"));
+    loadRecords();
+    return;
+  }
+  if (state.records === "missing") {
+    page.appendChild(el("p", "empty", "No record book in this payload."));
+    return;
+  }
+
+  const data = state.records;
+  const head = el("div", "records-head");
+  const toggle = el("div", "scope-toggle records-toggle");
+  [["game", "Single Game"], ["season", "Season"]].forEach(([key, label]) => {
+    const button = el("button", key === state.recordsHalf ? "is-active" : null, label);
+    button.addEventListener("click", () => {
+      state.recordsHalf = key;
+      renderRecords();
+    });
+    toggle.appendChild(button);
+  });
+  head.appendChild(toggle);
+  page.appendChild(head);
+
+  page.appendChild(el("p", "note", data.note || ""));
+  if ((data.seasons || []).length) {
+    page.appendChild(el("p", "note",
+      `Seasons on record: ${data.seasons.join(", ")}. Top ${data.depth} in each `
+      + `list.`));
+  }
+
+  const half = data[state.recordsHalf] || {};
+  recordGroup(page, "Players", half.players || []);
+  recordGroup(page, "Teams", half.teams || []);
+}
+
+async function loadRecords() {
+  if (!state.source.records) { state.records = "missing"; renderRecords(); return; }
+  try {
+    state.records = (await state.source.records()) || "missing";
+  } catch (error) {
+    console.warn("could not load the record book", error);
+    state.records = "missing";
+  }
+  if (state.view === "stats" && state.statsScope === "records") renderRecords();
+}
+
+function recordGroup(page, title, sections) {
+  if (!sections.length) return;
+  const wrap = el("section", "records-group");
+  wrap.appendChild(el("h3", null, title));
+  const grid = el("div", "records-grid");
+  sections.forEach((section) => grid.appendChild(recordCard(section)));
+  wrap.appendChild(grid);
+  page.appendChild(wrap);
+}
+
+function recordCard(section) {
+  const card = el("div", "record-card");
+  card.appendChild(el("h4", null, section.label));
+  if (!section.marks.length) {
+    // "Nothing on record" and "nobody has played enough of the season to
+    // qualify" are different statements, and a third of the way through a
+    // year only the second is true. Saying the first reads as a bug.
+    card.appendChild(el("p", "note", section.minimumGames
+      ? `Needs ${section.minimumGames} games played. Nobody qualifies yet.`
+      : "Nothing on record yet."));
+    return card;
+  }
+  const list = el("ol", "record-list");
+  section.marks.forEach((mark, index) => {
+    const item = el("li", "record-row");
+    item.appendChild(el("span", "record-rank", String(index + 1)));
+    item.appendChild(el("span", "record-value", formatRecordValue(mark.value)));
+
+    const who = el("span", "record-who");
+    if (mark.holderId && mark.gameId && !mark.gameId.includes(":")) {
+      // A player mark from a real game links to the player.
+      who.appendChild(playerLink(mark.name, mark.holderId, mark.teamId));
+    } else {
+      who.appendChild(el("span", "player-name", mark.name || mark.holderId));
+    }
+    item.appendChild(who);
+
+    const when = el("span", "record-when");
+    const bits = [];
+    if (mark.teamAbbr && mark.teamAbbr !== mark.name) bits.push(mark.teamAbbr);
+    if (mark.opponentAbbr) bits.push(`vs ${mark.opponentAbbr}`);
+    if (mark.season) bits.push(mark.season);
+    if (mark.stage) bits.push(mark.stage);
+    when.textContent = bits.join(" · ");
+    item.appendChild(when);
+
+    if (mark.detail) item.appendChild(el("span", "record-detail", mark.detail));
+    list.appendChild(item);
+  });
+  card.appendChild(list);
+  return card;
+}
+
+/* Whole numbers stay whole. A record of "48.0 points" reads as a rounding
+ * artefact; "27.9 points per game" needs the decimal. */
+function formatRecordValue(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return Number.isInteger(number) ? String(number) : number.toFixed(1);
 }
 
 function renderMvp() {

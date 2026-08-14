@@ -1859,6 +1859,68 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
  * ballots (why the panel disagrees), the columns (a writer at length).
  * ------------------------------------------------------------------ */
 
+/* --- The record book -------------------------------------------------
+ *
+ * A grid of small lists rather than one wide table: nine categories of ten
+ * names is 90 rows, and as a single sortable sheet that is a data dump. Cards
+ * let a reader go straight to the one record they came for. */
+.records-page { display: grid; gap: 22px; padding-top: 4px; }
+/* A full-width line of 13px prose across 1400px is unreadable; the caveat is
+ * the one bit of this page somebody has to actually read. */
+.records-page > .note { margin: 0; max-width: 86ch; line-height: 1.6; }
+.records-head { display: flex; justify-content: flex-start; }
+.records-toggle { display: inline-flex; }
+.records-group { display: grid; gap: 10px; }
+.records-group h3 { margin: 0; font: 600 15px/1.3 var(--sans); }
+.records-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.record-card {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.record-card h4 {
+  margin: 0;
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.record-row {
+  display: grid;
+  grid-template-columns: 18px 46px 1fr;
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 3px 0;
+  border-top: 1px solid var(--hairline-soft);
+}
+.record-row:first-child { border-top: 0; }
+.record-rank { font: 600 10px/1.6 var(--mono); color: var(--muted); }
+.record-value { font: 600 14px/1.3 var(--mono); }
+.record-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The context lines sit under the name, indented past rank and value so the
+ * numbers stay in one column down the card. */
+.record-when, .record-detail {
+  grid-column: 3;
+  font-size: 11px;
+  color: var(--muted);
+}
+.record-detail { color: var(--ink-2); }
+
 .mvp-page { display: grid; gap: 26px; padding-top: 4px; }
 .mvp-section { display: grid; gap: 10px; }
 .mvp-heading { margin: 0; font: 600 15px/1.3 var(--sans); }

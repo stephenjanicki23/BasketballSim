@@ -17,7 +17,7 @@ import argparse
 import os
 from datetime import timedelta
 
-from bballsim import contracts, draft_picks
+from bballsim import contracts, draft_picks, records
 from bballsim.engine.game import GameSimulator
 from bballsim.league import League, build_round_robin
 from bballsim.league.calendar import GameStatus
@@ -26,6 +26,7 @@ from bballsim.save import (
     HISTORY_PATH,
     LEAGUE_PATH,
     OFFSEASON_PATH,
+    RECORDS_PATH,
     SEASON_PATH,
     TRADES_PATH,
     apply_season,
@@ -33,6 +34,7 @@ from bballsim.save import (
     apply_pick_ownership,
     read_market,
     read_offseason,
+    read_records,
     read_season,
     season_exists,
     seed_data_dir,
@@ -40,6 +42,7 @@ from bballsim.save import (
     write_league,
     write_market,
     write_offseason,
+    write_records,
     write_season,
 )
 
@@ -67,6 +70,12 @@ def build_league(team_count: int = 30) -> League:
     # written after an offseason is a league several years along and its
     # `season.json` is the calendar it built for itself.
     league.history = read_history()
+
+    # The single-game record book. Read before the season below, so that marks
+    # from calendars that no longer exist are in place before this year's games
+    # are offered to it -- those are the ones that cannot be recovered any
+    # other way.
+    league.records = read_records()
 
     if season_exists():
         # Fixtures, results played so far, and the sim date you left on.
@@ -103,6 +112,14 @@ def build_league(team_count: int = 30) -> League:
         apply_pick_ownership(league, market_blob.get("pick_ownership"))
     league.trade_market = read_market(TRADES_PATH, league)
 
+    # Every finished game on the current calendar, offered to the book. Needed
+    # because a restored season is folded back through `League._record` rather
+    # than `_finalize`, so nothing on reload reaches the record book on its own
+    # -- and because a save that predates the book would otherwise show an
+    # empty page for a season it has already played. Idempotent, so this is a
+    # no-op once the marks are in.
+    records.backfill(league)
+
     league.tick()
     return league
 
@@ -120,6 +137,12 @@ def save_season(league: League) -> None:
                  name=league.name, season=league.season)
     if league.history:
         write_history(HISTORY_PATH, league.history)
+    # The single-game record book. Written every time, because unlike the
+    # archive it accumulates during a season rather than at the end of one --
+    # and unlike everything else here it cannot be rebuilt from what is saved.
+    book = getattr(league, "records", None)
+    if book is not None and book.games:
+        write_records(RECORDS_PATH, book)
     # Writes the summer, or removes the file when there is not one -- a stale
     # offseason.json would reopen the menu mid-season with a year-old list.
     write_offseason(OFFSEASON_PATH, getattr(league, "offseason", None))

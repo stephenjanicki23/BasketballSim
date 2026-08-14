@@ -14,6 +14,7 @@ Endpoints
     POST /api/clock/speed   {"speed": n}    game seconds per real second
 
     GET  /api/mvp                           the MVP race: ten ballots, one board
+    GET  /api/records                       the record book: single game and season
     GET  /api/trades/block                  every club: timeline, window, needs
     GET  /api/trades/market                 the Trade Block: board, pending, log
     POST /api/trades/veto   {"id": "..."}   stop a pending trade
@@ -252,6 +253,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             # Also in the bootstrap; here on its own so a page watching a live
             # race can refresh the board without re-fetching the season.
             self._send_json(views.mvp.race(league))
+
+        elif parts == ["records"]:
+            # Not in the bootstrap. The book is a page most visits never open,
+            # and the season half of it walks every archived season, so it is
+            # fetched when it is looked at.
+            self._send_json(views.records_view(league))
 
         elif parts == ["trades", "block"]:
             self._send_json(views.trade_block(league))
