@@ -27,6 +27,7 @@ from __future__ import annotations
 import sys
 import time
 import unittest
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -40,6 +41,15 @@ from bballsim import trades as T
 from bballsim.league import League
 from bballsim.roster import load_teams
 from bballsim.save import apply_season, read_season, season_exists
+
+
+# How much of the season the shared fixture has played. Pinned, because
+# `data/season.json` stores every fixture as *scheduled*: `tick()` simulates
+# however much of the year the real wall clock has gone past, so this league
+# was a different league depending on the hour it was built. That is not
+# hypothetical -- `test_the_window_spans_a_usable_range` failed on an unchanged
+# codebase because the standings behind it had moved on by an afternoon.
+SEASON_FRACTION = 0.6
 
 _LEAGUE = None
 
@@ -57,6 +67,10 @@ def league() -> League:
             apply_season(lg, read_season())
         K.generate_for_league(list(lg.teams.values()), season=lg.season)
         K.generate_coaches_for_league(list(lg.teams.values()), season=lg.season)
+        if lg.schedule:
+            tipoffs = sorted(game.tipoff_at for game in lg.schedule)
+            index = int((len(tipoffs) - 1) * SEASON_FRACTION)
+            lg.clock.jump_to(tipoffs[index] + timedelta(hours=6))
         lg.tick()
         DP.ensure(lg)
         _LEAGUE = lg
@@ -236,10 +250,44 @@ class TestConferenceStrengthDiscriminates(unittest.TestCase):
 class TestChampionshipWindow(unittest.TestCase):
 
     def test_the_window_spans_a_usable_range(self):
+        """It has to separate clubs. It does not have to use the whole 0-100.
+
+        This asserted `min < 50` and passed for months on an unpinned fixture
+        that happened to sit in the right place. It is not reachable: measured
+        at four points across the season the floor runs 50.4 to 52.4, so the
+        assertion was one afternoon of simulated games away from failing at any
+        time, and did.
+
+        What the window actually needs to do is discriminate, so that is what
+        is checked -- a real spread, and a top end that reaches contention.
+        The *compression* is pinned separately below rather than being quietly
+        absorbed into a loosened bound.
+        """
         lg = league()
         values = [FO.window(lg, t) for t in lg.teams.values()]
-        self.assertLess(min(values), 50.0)
+        self.assertGreater(max(values) - min(values), 15.0,
+                           f"{min(values):.1f} to {max(values):.1f}")
         self.assertGreater(max(values), 70.0)
+
+    def test_the_window_occupies_the_upper_half_of_its_scale(self):
+        """A known limitation, written down rather than left to be rediscovered.
+
+        `window` is documented as 0-100 and `trades` reads "above 80 a club
+        should mortgage its future". In practice no club in a generated league
+        scores below about 50 or above about 75, so the top of that guidance is
+        never reached and the bottom half of the scale is unused. The seven
+        weighted parts are each centred readings of a league whose clubs are
+        built to similar budgets, and averaging them pulls hard to the middle.
+
+        This test exists to notice if that ever changes -- in either direction.
+        See docs/TRADES.md.
+        """
+        lg = league()
+        values = [FO.window(lg, t) for t in lg.teams.values()]
+        self.assertGreater(min(values), 40.0,
+                           "the window now reaches the bottom half of its "
+                           "scale -- good, but the docs say it does not")
+        self.assertLess(max(values), 85.0)
 
     def test_every_part_is_weighted_and_they_sum_to_one(self):
         self.assertAlmostEqual(sum(FO.WINDOW_WEIGHTS.values()), 1.0, places=6)

@@ -71,6 +71,17 @@ Above 80 the brief says a club should mortgage its future, and `trades` reads
 it that way — but *smoothly from 60*, so a club at 79 is not a different animal
 from one at 81.
 
+**In practice the window only occupies about 50 to 75.** No club in a generated
+league scores below the middle of the scale or reaches the 80 the brief names,
+so the top of that guidance is never actually triggered. Seven weighted parts,
+each a centred reading of a league whose clubs are built to similar budgets,
+average hard toward the middle — the same force that made
+[roster strength](#two-calibration-failures-worth-recording) useless as an
+absolute, one level up. It is recorded here and pinned by
+`test_the_window_occupies_the_upper_half_of_its_scale` rather than left to be
+rediscovered; the smooth read from 60 is what keeps the engine working in spite
+of it.
+
 ### Two calibration failures worth recording
 
 **Roster strength has to be relative.** An absolute score put all thirty clubs
