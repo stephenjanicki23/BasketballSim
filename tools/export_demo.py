@@ -26,8 +26,12 @@ from bballsim.api.payload import (
     bootstrap,
     game_detail,
     game_preview,
+    offseason_view,
+    records_view,
     team_squad,
+    trade_market_view,
 )
+from bballsim import contracts, draft_picks
 from bballsim.league import League, build_round_robin
 from bballsim.league import offseason
 from bballsim.league.calendar import GameStatus
@@ -62,6 +66,15 @@ def build_season(team_count: int = 30) -> League:
             days_between_rounds=1,
             season=league.season,
         ))
+
+    # What `run.py` does on load, and for the same reason: a league without
+    # contracts has no payroll and no expiring list, and one without a pick
+    # inventory has no trade market and no draft order. Generated before the
+    # seasons are played so the screens that read them are populated by the
+    # time the export takes its snapshot.
+    contracts.generate_for_league(list(league.teams.values()), season=league.season)
+    contracts.generate_coaches_for_league(list(league.teams.values()), season=league.season)
+    draft_picks.ensure(league)
 
     play_seasons(league, SEASONS)
     return league
@@ -118,6 +131,16 @@ def main() -> None:
         export_game(g, league) for g in finals if g.id in day_ids
     ]
     detailed_ids = day_ids
+
+    # The screens that are not in the bootstrap. Each has its own endpoint in
+    # the live app, and `source-static.js` reads them off the payload by these
+    # names -- so a screen missing here is a tab that renders empty on the
+    # published page while working perfectly in the app. That is exactly what
+    # happened: the demo went several features stale without anything failing,
+    # because nothing checks that the export covers every screen.
+    payload["offseason"] = offseason_view(league)
+    payload["market"] = trade_market_view(league)
+    payload["records"] = records_view(league)
 
     raw = json.dumps(payload, separators=(",", ":")).encode()
     packed = base64.b64encode(gzip.compress(raw, 9)).decode()
