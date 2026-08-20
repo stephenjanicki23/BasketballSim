@@ -163,7 +163,14 @@ select {
 .wordmark h1 { font-size: 15px; }
 .wordmark .label { letter-spacing: .16em; }
 
-.nav { display: flex; gap: 2px; margin-left: auto; }
+/* Wraps, and has to. Eight tabs are 537px of buttons; in a 390px phone
+ * viewport an unwrapped row forced the whole page 165px wider than the screen,
+ * which pushed the right-hand end of every card off it -- including the last
+ * button in the Stats toggle, so a feature that was shipped and working simply
+ * could not be reached. Wrapping rather than scrolling on purpose: a scroller
+ * hides tabs behind a gesture nobody knows to make, which is the same failure
+ * one step quieter. */
+.nav { display: flex; flex-wrap: wrap; gap: 2px; margin-left: auto; }
 .nav-tab {
   background: none;
   border: 1px solid transparent;
@@ -429,7 +436,21 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 
 /* ---------------- stats ---------------- */
 .stats-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.scope-toggle { display: inline-flex; border: 1px solid var(--hairline); border-radius: 7px; overflow: hidden; }
+/* `overflow: hidden` here is what clips the segment corners to the rounded
+ * border -- but it also silently *ate* buttons whenever the row could not fit,
+ * with no indication anything was missing. Horizontal scroll instead: the
+ * corners still clip, and a row too wide for its container can be reached. */
+.scope-toggle {
+  display: inline-flex;
+  max-width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.scope-toggle::-webkit-scrollbar { display: none; }
+.scope-toggle button { flex: 0 0 auto; white-space: nowrap; }
 .scope-toggle button {
   border: none;
   border-radius: 0;
@@ -1015,6 +1036,39 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 .back-to-schedule {
   margin: 12px 0 0 14px;
   align-self: flex-start;
+}
+
+/* Phones. The controls in a card head compete with its title for room, and
+ * losing that fight silently is how a button ends up off-screen. Below this
+ * width they get their own line at full width instead. */
+@media (max-width: 720px) {
+  .card-head { flex-wrap: wrap; }
+  .stats-controls { width: 100%; justify-content: flex-start; }
+
+  /* The segmented control becomes a wrapping row of pills. Scrolling it was
+   * the first fix and it was not good enough: five scopes need 368px and a
+   * phone gives the card about 330, so the last one still sat off the edge
+   * behind a sideways swipe nobody would think to try. Wrapping is the only
+   * version where every scope is simply *visible*. Matches the `.stat-tab`
+   * pills directly below it, so the page does not gain a second idiom. */
+  .scope-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 4px;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+  .scope-toggle button {
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    padding: 5px 12px;
+    background: var(--raised);
+  }
+  .scope-toggle button.is-active { border-color: var(--accent); }
+
+  .records-head { width: 100%; }
 }
 
 @media (max-width: 720px) {
