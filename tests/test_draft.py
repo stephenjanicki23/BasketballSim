@@ -362,9 +362,22 @@ class TestFiveWritersDisagree(unittest.TestCase):
         self.assertEqual(ranks, sorted(ranks))
         self.assertTrue(all(p["reach"] == 0 for p in picks))
 
+    def abilities(self, picks, limit=10):
+        """The true ratings of a writer's first ten picks.
+
+        Read off `draft_class.board`, not off the picks, because the picks no
+        longer carry ability or potential -- the page must not print them, or
+        the draft stops being a surprise. The *test* still needs the truth to
+        check the philosophies apart, and going to the board for it is the
+        honest way to get it.
+        """
+        board = {p.id: p for p in DC.board(DP.current_year(self.league))}
+        return [board[p["playerId"]].ability for p in picks[:limit]]
+
     def test_the_upside_writer_takes_more_potential_than_the_floor_writer(self):
         def ceiling(picks):
-            return sum(p["potential"] for p in picks[:10]) / 10
+            got = self.abilities(picks)
+            return sum(a.potential for a in got) / len(got)
         self.assertGreater(ceiling(self.boards["upside"]),
                            ceiling(self.boards["floor"]))
 
@@ -372,8 +385,22 @@ class TestFiveWritersDisagree(unittest.TestCase):
         """The exact inverse, which is what makes them two philosophies rather
         than one with noise on it."""
         def now(picks):
-            return sum(p["ca"] for p in picks[:10]) / 10
+            got = self.abilities(picks)
+            return sum(a.current for a in got) / len(got)
         self.assertGreater(now(self.boards["floor"]), now(self.boards["upside"]))
+
+    def test_no_board_publishes_an_ability_or_a_potential(self):
+        """The point of hiding them: how a prospect turns out is the draft's
+        entire entertainment, and it is given away by printing the answer next
+        to his name. Stripped from the payload rather than hidden in the UI,
+        so it does not survive a devtools tab."""
+        for writer_id, picks in self.boards.items():
+            for pick in picks:
+                self.assertNotIn("ca", pick, writer_id)
+                self.assertNotIn("potential", pick, writer_id)
+        for row in MD.consensus(self.league):
+            self.assertNotIn("ca", row)
+            self.assertNotIn("potential", row)
 
     def test_a_mock_is_the_same_twice(self):
         again = MD.mock(self.league, MD.PANEL[2])

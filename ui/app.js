@@ -3383,6 +3383,12 @@ function offMock(body) {
   body.appendChild(el("p", "note",
     `${data.classLabel} ${data.year} class. Published ${data.publishedLabel}; `
     + `next boards ${data.nextLabel}. ${data.note}`));
+  // Said out loud, because a missing column reads as a bug and this one is a
+  // decision: how a prospect turns out is the entertainment.
+  body.appendChild(el("p", "note",
+    "No ability or potential ratings here — who these players become is meant "
+    + "to be found out. Board rank is where the consensus has them today, "
+    + "which is not the same question."));
 
   // The consensus first, because it is the summary of the five and reads as
   // the headline. Labelled as a summary rather than a sixth opinion.
@@ -3393,8 +3399,7 @@ function offMock(body) {
     + "the other five."));
   const table = offTable([
     ["avg", "Avg"], ["name", "Player", "col-name"], ["pos", "Pos"],
-    ["age", "Age"], ["ca", "CA"], ["pot", "Potential"],
-    ["high", "High"], ["low", "Low"], ["boards", "Boards"],
+    ["age", "Age"], ["high", "High"], ["low", "Low"], ["boards", "Boards"],
   ]);
   const tbody = table.querySelector("tbody");
   (data.consensus || []).slice(0, 30).forEach((row) => {
@@ -3403,8 +3408,6 @@ function offMock(body) {
     tr.appendChild(el("td", "col-name", row.name));
     tr.appendChild(el("td", null, row.position));
     tr.appendChild(el("td", null, String(row.age)));
-    tr.appendChild(el("td", null, String(row.ca)));
-    tr.appendChild(el("td", null, String(row.potential)));
     tr.appendChild(el("td", null, String(row.high)));
     tr.appendChild(el("td", null, String(row.low)));
     tr.appendChild(el("td", null, `${row.boards}/5`));
@@ -3456,8 +3459,7 @@ function offMockBoard(body, entry) {
 
   const table = offTable([
     ["slot", "#"], ["team", "Team"], ["name", "Player", "col-name"],
-    ["pos", "Pos"], ["age", "Age"], ["ca", "CA"], ["pot", "Potential"],
-    ["rank", "Board"], ["reach", "Reach"],
+    ["pos", "Pos"], ["age", "Age"], ["rank", "Board"], ["reach", "Reach"],
   ]);
   const tbody = table.querySelector("tbody");
   (entry.picks || []).forEach((pick) => {
@@ -3476,8 +3478,6 @@ function offMockBoard(body, entry) {
     tr.appendChild(el("td", "col-name", pick.name));
     tr.appendChild(el("td", null, pick.position));
     tr.appendChild(el("td", null, String(pick.age)));
-    tr.appendChild(el("td", null, String(pick.ca)));
-    tr.appendChild(el("td", null, String(pick.potential)));
     tr.appendChild(el("td", null, String(pick.boardRank)));
     // Positive means he went earlier than the board has him -- a reach. Shown
     // signed, because the direction is the whole point of the column.

@@ -35,6 +35,20 @@ order -- the conventional shape -- and `unfilled_note` says plainly that some
 of those picks will not be used. Better a stated limit than a quietly short
 board.
 
+**No ability numbers reach the page.** A prospect's current ability and his
+ceiling are what the draft is *for* -- finding out who turns into something is
+the whole entertainment, and printing the answer beside his name gives it away
+before a single game is played. The writers read those numbers; the reader does
+not get them, and they are stripped from the payload rather than merely hidden
+in the UI, because a surprise one browser tab away is not a surprise.
+
+What is published is what a real mock draft publishes: who, where, position,
+age, and where the consensus has him. **Board rank does not leak the answer.**
+The board is ordered by current ability, and potential is drawn separately --
+in one class the top three ceilings ran 191, 158, 143, and in another 182, 186,
+178, second higher than first. Knowing a man is ranked fourth tells you what he
+is now, which is precisely the thing that turns out not to matter.
+
 **Derived, never stored.** Every board is rebuilt from the standings and the
 class each time it is asked for, like the MVP race and the trade block.
 """
@@ -354,8 +368,6 @@ def mock(league, writer: Writer) -> list[dict]:
             "age": choice.age,
             "boardRank": ranks[choice.id],
             "reach": ranks[choice.id] - row["slot"],
-            "ca": round(choice.ability.current, 1),
-            "potential": round(choice.ability.potential, 1),
         })
     return picks
 
@@ -383,8 +395,6 @@ def consensus(league) -> list[dict]:
             "name": prospect.name,
             "position": prospect.position.value,
             "age": prospect.age,
-            "ca": round(prospect.ability.current, 1),
-            "potential": round(prospect.ability.potential, 1),
             "average": round(sum(places) / len(places), 1),
             "high": min(places),
             "low": max(places),

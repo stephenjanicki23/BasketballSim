@@ -130,6 +130,28 @@ analytics                 16 / 30                22
 The need writer drafting for need 22 times against the board writer's 16 is the
 evidence the philosophy is doing something.
 
+### No ability numbers reach the page
+
+A prospect's current ability and his ceiling are what the draft is *for*.
+Finding out who turns into something is the entertainment; printing the answer
+beside his name gives it away before he has played a game. So the boards
+publish what a real mock draft publishes — who, where, position, age, and where
+the consensus has him — and nothing else.
+
+**Stripped from the payload, not hidden in the UI.** A surprise one devtools
+tab away is not a surprise, and the published demo bakes the same JSON into the
+page. `test_no_board_publishes_an_ability_or_a_potential` holds it down.
+
+**Board rank does not leak the answer**, which is what makes this work rather
+than merely conceal. The board is ordered by *current* ability and potential is
+drawn separately: in one class the top three ceilings ran 191, 158, 143, and in
+another 182, 186, 178 — second higher than first. Knowing a man is ranked
+fourth tells you what he is now, which is precisely the thing that turns out
+not to matter.
+
+The tests still need the truth to tell the five philosophies apart, and they
+read it off `draft_class.board` directly rather than off the picks.
+
 ### Wednesdays and Sundays at midnight
 
 An edition is the most recent Wednesday-or-Sunday midnight at or before the
