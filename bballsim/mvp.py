@@ -255,16 +255,28 @@ MAX_BALLOT_POINTS = BALLOT_POINTS[0] * len(PANEL)
 # --------------------------------------------------------------------------
 
 def _candidate_rows(league, minimum_games: int) -> list[dict]:
+    """Every qualifying player in the live season, ready to be voted on."""
+    return rows_from(league.stats, league.standings_table(), minimum_games)
+
+
+def rows_from(stats, standings_rows, minimum_games: int) -> list[dict]:
     """Every qualifying player, with his basic and advanced lines merged.
 
     One row per player carrying both, because a voter should not have to know
     which table a column came from -- and because half of them read from both.
+
+    Takes totals and a table rather than a league, so **an archived season can
+    be voted on by the same ten writers as the live one**. `accolades` needs to
+    ask who would have won MVP in 2027-28, and the only honest way to answer is
+    to run the actual panel over that season's actual totals. A second scoring
+    path written for history would drift from this one the first time a voter
+    was edited.
     """
-    advanced = {row["player_id"]: row for row in advanced_table(league.stats)}
-    standings = {row["team_id"]: row for row in league.standings_table()}
+    advanced = {row["player_id"]: row for row in advanced_table(stats)}
+    standings = {row["team_id"]: row for row in standings_rows}
 
     rows: list[dict] = []
-    for line in league.stats.players.values():
+    for line in stats.players.values():
         if line.games < minimum_games:
             continue
         row = dict(advanced.get(line.player_id) or {})

@@ -540,13 +540,15 @@ tbody tr.is-on-court td { background: color-mix(in srgb, var(--accent) 7%, trans
 }
 .roster-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  /* 34px, because the first column is now a face rather than a 26px crest. */
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--hairline-soft);
   cursor: pointer;
 }
+.roster-row .portrait { width: 34px; height: 34px; }
 .roster-row:hover { background: var(--raised); }
 .roster-row.is-selected { background: var(--raised); box-shadow: inset 3px 0 0 var(--accent); }
 .roster-row.is-starter .player-name { font-weight: 600; }
@@ -1342,6 +1344,55 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
 
 .squad-main { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 
+/* --- Portraits -------------------------------------------------------
+ * Circular, and sized by where they appear: 44px in a roster row, 96px on a
+ * profile. The SVG is drawn to read at the smaller of the two. */
+.portrait {
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.portrait svg { display: block; width: 100%; height: 100%; }
+.portrait.is-large { width: 96px; height: 96px; }
+
+/* --- The trophy shelf ------------------------------------------------ */
+.accolade-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+.accolade {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--raised);
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+/* Majors carry the accent so a championship does not sit at the same weight
+ * as a games-played milestone. */
+.accolade-major {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+.accolade-icon { display: inline-flex; width: 13px; height: 13px; }
+.accolade-icon svg { width: 100%; height: 100%; fill: currentColor; }
+.accolade-major .accolade-icon { color: var(--accent); }
+.accolade-count { font: 600 10px/1 var(--mono); opacity: .8; }
+.accolade-empty { font-size: 11px; color: var(--muted); }
+
 .player-head {
   background: var(--panel);
   border: 1px solid var(--hairline);
@@ -1349,7 +1400,7 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   box-shadow: var(--shadow);
   padding: 16px 18px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   gap: 18px;
   align-items: center;
 }
@@ -1438,6 +1489,7 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   .switcher { position: static; }
   .switcher .roster-list { max-height: 240px; }
   .player-head { grid-template-columns: auto minmax(0, 1fr); }
+  .player-head-mark { display: none; }   /* the crest is already in the club line */
   .player-head-facts, .player-head-season { grid-column: 1 / -1; text-align: left; }
   .head-stat-row { justify-content: flex-start; }
 }

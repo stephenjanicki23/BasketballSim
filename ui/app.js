@@ -541,6 +541,175 @@ const GLYPHS = {
 
 /* Build a club's crest. The glyph strings are our own constants above, so
  * assembling them into markup introduces nothing a user supplied. */
+/* --- Portraits --------------------------------------------------------
+ *
+ * A drawn face per player, assembled from parts. The *choices* -- skin, hair,
+ * beard, kit -- are made in `bballsim/portraits.py` and arrive on the payload;
+ * the path data lives here, next to the thing that renders it, exactly as the
+ * club crests do.
+ *
+ * Built to read at 44px, which is where it is usually seen. That rules out
+ * detail: the features are big simple shapes with strong value contrast,
+ * because anything finer turns to mud in a roster row. The 128px version on a
+ * profile is the same drawing with more room. */
+
+function shade(hex, amount) {
+  const n = parseInt((hex || "#888888").slice(1), 16);
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(((n >> 16) & 255) * (1 + amount));
+  const g = clamp(((n >> 8) & 255) * (1 + amount));
+  const b = clamp((n & 255) * (1 + amount));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
+/* Jawlines, widest to narrowest. The head is one path so the silhouette stays
+ * clean -- a head built from a circle plus a chin shows its seams. */
+const JAWS = [
+  "M50 18c14 0 22 10 22 24 0 15-9 30-22 30S28 57 28 42c0-14 8-24 22-24z",
+  "M50 18c13 0 21 10 21 23 0 16-8 31-21 31s-21-15-21-31c0-13 8-23 21-23z",
+  "M50 18c15 0 23 11 23 25 0 13-10 27-23 27S27 56 27 43c0-14 8-25 23-25z",
+];
+
+const BROWS = [
+  "M38 39h9v3h-9zM53 39h9v3h-9z",                        // straight
+  "M38 40l9-2 .6 3-9 2zM62 40l-9-2-.6 3 9 2z",           // angled in
+  "M38 38q4.5-3 9 0l-.5 3q-4-2.5-8 0z" + "M62 38q-4.5-3-9 0l.5 3q4-2.5 8 0z",
+];
+
+const EYES = [
+  "M42.5 47a3 3 0 1 0 .1 0zM57.5 47a3 3 0 1 0 .1 0z",    // round
+  "M39 47h7v3h-7zM54 47h7v3h-7z",                        // narrow
+  "M42.5 46.4a3.1 2.6 0 1 0 .1 0zM57.5 46.4a3.1 2.6 0 1 0 .1 0z",
+];
+
+const NOSES = [
+  "M50 48l-3 9h6z",
+  "M50 49l-2.5 8h5z",
+  "M50 47l-3.5 10h7z",
+];
+
+/* Cuts. Each is drawn to sit on the head path above, so they can be swapped
+ * without redrawing the skull. */
+const CUTS = {
+  bald: "",
+  buzz: "M50 16c14 0 22 10 22 23 0 2-.5 3-1 3-1-9-8-15-21-15s-20 6-21 15c-.5 0-1-1-1-3 0-13 8-23 22-23z",
+  short: "M50 15c14 0 23 10 23 24 0 3-1 5-1.5 5-1-11-8-17-21.5-17s-20.5 6-21.5 17C28 47 27 45 27 42c0-14 9-27 23-27z",
+  fade: "M50 15c14 0 23 10 23 24 0 3-1 4-1.5 4-1-10-8-16-21.5-16-6 0-11 1-14 3 1-4 3-7 6-9-4 1-7 3-9 6 1-7 8-12 17-12z",
+  afro: "M50 10c16 0 26 10 26 22 0 6-3 10-5 11-1-12-9-19-21-19s-20 7-21 19c-2-1-5-5-5-11 0-12 10-22 26-22z",
+  curls: "M50 12c15 0 24 10 24 22 0 4-1 7-2 8-2-3-2-7-5-8 1 3 1 6-1 8-2-9-8-14-16-14s-14 5-16 14c-2-2-2-5-1-8-3 1-3 5-5 8-1-1-2-4-2-8 0-12 9-22 24-22z",
+  // A cap with strips falling at the *sides*. Two earlier attempts hung them
+  // down the middle -- first as triangles, then as rounded bars -- and both
+  // times the result was a row of teeth across the player's forehead, because
+  // the crown ends around y40 and the face starts immediately below it.
+  braids: "M50 14c14 0 23 9 23 22 0 3-.5 5-1 6H28c-.5-1-1-3-1-6 0-13 9-22 23-22z"
+        + "M27.5 40h4v14a2 2 0 0 1-4 0zM33 41h3.6v11a1.8 1.8 0 0 1-3.6 0z"
+        + "M68.5 40h4v14a2 2 0 0 1-4 0zM63.4 41H67v11a1.8 1.8 0 0 1-3.6 0z",
+  topknot: "M50 15c13 0 22 9 22 22 0 3-1 5-1.5 5-1-11-8-16-20.5-16s-19.5 5-20.5 16C29 42 28 40 28 37c0-13 9-22 22-22z"
+         + "M50 7a6 6 0 1 1 0 12 6 6 0 0 1 0-12z",
+};
+
+/* Beards. `stubble` is the same shape as a short beard at low opacity, which
+ * is what stubble actually is. */
+const BEARDS = {
+  none: "",
+  // Stubble is a short beard at low opacity, which is what stubble is.
+  stubble: "M50 73c-11 0-18-8-19-20 6 5 13 7 19 7s13-2 19-7c-1 12-8 20-19 20z",
+  moustache: "M42 57q8-4 16 0-2 4-8 4t-8-4z",
+  goatee: "M46 65.5h8q-.6 7-4 7.8t-4-7.8z",
+  short_beard: "M50 73c-11 0-18-8-19-20 6 5 13 7 19 7s13-2 19-7c-1 12-8 20-19 20z",
+  full_beard: "M50 76c-13 0-21-9-22-24 7 6 15 8 22 8s15-2 22-8c-1 15-9 24-22 24z"
+            + "M42 55q8-4 16 0-2 4-8 4t-8-4z",
+};
+
+/* Beards that sit over the mouth. Only these change the mouth colour: on a
+ * goatee or a moustache the mouth is still on bare skin, and darkening it
+ * there rubbed the mouth out entirely. */
+const COVERS_MOUTH = new Set(["short_beard", "full_beard", "stubble"]);
+
+function portraitSVG(face, title) {
+  if (!face) return "";
+  const skin = face.skin;
+  const shadow = shade(skin, -0.16);
+  const jaw = JAWS[face.jaw % JAWS.length];
+  const cut = CUTS[face.style] || "";
+  const beard = BEARDS[face.beard] || "";
+  const stubble = face.beard === "stubble";
+  const mouthInk = COVERS_MOUTH.has(face.beard)
+    ? shade(face.hair, -0.45) : shade(skin, -0.34);
+
+  return `<svg viewBox="0 0 100 100" role="img" aria-label="${title || ""}" focusable="false">`
+    + `<defs><clipPath id="pc"><circle cx="50" cy="50" r="50"/></clipPath></defs>`
+    + `<g clip-path="url(#pc)">`
+    // Backdrop and kit.
+    + `<rect width="100" height="100" fill="${face.kit}"/>`
+    + `<rect y="0" width="100" height="52" fill="${shade(face.kit, 0.18)}"/>`
+    // Shoulders, with the trim colour as a collar.
+    + `<path d="M50 74c16 0 30 9 33 26H17c3-17 17-26 33-26z" fill="${face.kit}"/>`
+    + `<path d="M50 74c16 0 30 9 33 26H17c3-17 17-26 33-26z" fill="none" `
+    + `stroke="${face.trim}" stroke-width="2.5"/>`
+    + `<path d="M43 75q7 7 14 0l-3-3q-4 3-8 0z" fill="${face.trim}"/>`
+    // Neck, then head.
+    + `<path d="M42 62h16v14H42z" fill="${shadow}"/>`
+    + `<path d="${jaw}" fill="${skin}"/>`
+    // Ears.
+    + `<ellipse cx="28.6" cy="47" rx="2.8" ry="4.2" fill="${skin}"/>`
+    + `<ellipse cx="71.4" cy="47" rx="2.8" ry="4.2" fill="${skin}"/>`
+    // Features.
+    // Beard first, so the mouth can be drawn on top of it and still read.
+    // Drawn the other way round, a full beard swallowed the mouth entirely and
+    // every bearded player looked expressionless.
+    + (beard ? `<path d="${beard}" fill="${face.hair}" `
+             + `opacity="${stubble ? 0.35 : 1}"/>` : "")
+    + `<path d="${NOSES[face.nose % NOSES.length]}" fill="${shadow}"/>`
+    + `<path d="${EYES[face.eyes % EYES.length]}" fill="#221A14"/>`
+    + `<path d="${BROWS[face.brow % BROWS.length]}" fill="${shade(face.hair, -0.1)}"/>`
+    + `<path d="M44 62q6 4 12 0" fill="none" `
+    + `stroke="${mouthInk}" `
+    + `stroke-width="2" stroke-linecap="round"/>`
+    + (cut ? `<path d="${cut}" fill="${face.hair}"/>` : "")
+    + (face.headband
+        ? `<path d="M28 38q22-9 44 0l-1.5 5q-21-8-41 0z" fill="${face.trim}"/>` : "")
+    + `</g></svg>`;
+}
+
+function portraitMark(face, name, className) {
+  const node = el("span", `portrait${className ? " " + className : ""}`);
+  node.innerHTML = portraitSVG(face, name);
+  return node;
+}
+
+/* --- Accolade icons ---------------------------------------------------
+ *
+ * One glyph per honour, on a 24-unit grid. Bold silhouettes for the same
+ * reason the club crests are: these are 18px on a profile and anything
+ * detailed turns to mud. Each is a single filled path so it takes the colour
+ * of its badge without a second rule. */
+const ACCOLADE_ICONS = {
+  // Championship — a trophy with handles and a plinth.
+  trophy: '<path d="M7 2h10v2h3v3a4 4 0 0 1-4 4h-.4A5 5 0 0 1 13 14.9V18h3v2H8v-2h3v-3.1A5 5 0 0 1 8.4 11H8a4 4 0 0 1-4-4V4h3zm10 4v3a2 2 0 0 0 2-2V6zm-10 0H5v1a2 2 0 0 0 2 2z"/>',
+  // MVP — a crown.
+  crown: '<path d="M3 8l4 3 5-7 5 7 4-3-2 11H5zM5 20h14v2H5z"/>',
+  // All-League — a five-point star.
+  star: '<path d="M12 2l3 6.5 7 .9-5.1 4.8 1.3 7L12 17.9 5.8 21.2l1.3-7L2 9.4l7-.9z"/>',
+  // Finals appearance — a hanging banner.
+  banner: '<path d="M5 2h14v15l-7 5-7-5zm2 2v11.9l5 3.6 5-3.6V4z"/>',
+  // League record — a plaque.
+  plaque: '<path d="M4 3h16v14H4zm2 2v10h12V5zM8 19h8v2H8z"/><path d="M7 7h10v2H7zm0 4h7v2H7z" fill="none"/>',
+  // Career milestone — a medal on a ribbon.
+  milestone: '<path d="M8 2l3 6H7L4 2zm8 0l3 0-3 6h-4zM12 9a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm0 3.2l1.3 2.7 3 .4-2.2 2.1.5 3-2.6-1.4-2.6 1.4.5-3-2.2-2.1 3-.4z"/>',
+  // Scoring title — a ball through a net.
+  scoring_title: '<path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2.2a7.8 7.8 0 0 0-5 1.9c1.6 1.7 2.7 4 2.9 6.5h-6a7.8 7.8 0 0 0 1.4 3.9c1-3 3.8-5.2 7.2-5.2 1 0 2 .2 2.9.6a7.8 7.8 0 0 0-.9-3.2 10 10 0 0 1-2.5-4.5zm2.1.5a7.9 7.9 0 0 1 2 2.9 8 8 0 0 0-2-2.9z"/>',
+  // Rebounding title — a backboard and rim.
+  rebounding_title: '<path d="M3 3h18v10H3zm2 2v6h14V5zM8 13h8v2a4 4 0 0 1-8 0zm2 2a2 2 0 0 0 4 0z"/>',
+  // Assists title — one arrow feeding another.
+  assists_title: '<path d="M3 11h9V8l6 4-6 4v-3H3zM19 4h2v16h-2z"/>',
+};
+
+function accoladeIcon(name) {
+  const glyph = ACCOLADE_ICONS[name] || ACCOLADE_ICONS.star;
+  return `<svg viewBox="0 0 24 24" role="presentation" focusable="false">${glyph}</svg>`;
+}
+
 function crestSVG(logo, title) {
   const glyph = (GLYPHS[logo.glyph] || GLYPHS.shield)
     .replaceAll("{{P}}", logo.primary)
@@ -2039,7 +2208,9 @@ async function renderTeamDetail() {
     const row = el("li", "roster-row" + (player.id === state.playerId ? " is-selected" : ""));
     row.tabIndex = 0;
     row.setAttribute("role", "button");
-    row.appendChild(teamMark(team));
+    // The face rather than the crest: every row on this list is the same club,
+    // so a column of identical crests carried no information at all.
+    row.appendChild(portraitMark(player.portrait, player.name));
     const nameWrap = el("span", "roster-name");
     nameWrap.appendChild(el("span", "player-name", player.name));
     nameWrap.appendChild(el("span", "roster-meta",
@@ -2073,6 +2244,13 @@ function renderPlayer(team) {
   const mark = $("#profile-mark");
   mark.textContent = "";
   mark.appendChild(teamMark(team));
+
+  const portrait = $("#profile-portrait");
+  if (portrait) {
+    portrait.textContent = "";
+    portrait.appendChild(portraitMark(player.portrait, player.name, "is-large"));
+  }
+  renderAccolades(player);
 
   $("#profile-name").textContent = player.name;
   const pay = team.payroll;
@@ -2269,6 +2447,38 @@ const GAME_LOG_COLUMNS = [
 
 function shooting(made, attempted) {
   return `${made}-${attempted}`;
+}
+
+/* The trophy shelf.
+ *
+ * Deliberately empty for most players in most leagues: a first season has no
+ * champions and no MVPs, and a shelf that always had something on it would be
+ * participation ribbons rather than honours. Majors get a full badge, minors a
+ * chip, and a repeated honour carries its count rather than repeating itself. */
+function renderAccolades(player) {
+  const shelf = $("#profile-accolades");
+  if (!shelf) return;
+  shelf.textContent = "";
+  const won = player.accolades || [];
+  if (!won.length) {
+    shelf.appendChild(el("span", "accolade-empty", "No honours yet"));
+    return;
+  }
+  for (const award of won) {
+    const badge = el("span", `accolade accolade-${award.tier}`);
+    badge.title = award.detail
+      ? `${award.label} — ${award.detail}` : award.label;
+    const icon = el("span", "accolade-icon");
+    icon.innerHTML = accoladeIcon(award.icon);
+    badge.appendChild(icon);
+    badge.appendChild(el("span", "accolade-label", award.label));
+    // A count only when there is more than one; "Champion x1" reads worse
+    // than "Champion".
+    if (award.count > 1) {
+      badge.appendChild(el("span", "accolade-count", `\u00d7${award.count}`));
+    }
+    shelf.appendChild(badge);
+  }
 }
 
 function renderPlayerGames(player, team) {

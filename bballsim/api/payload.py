@@ -34,7 +34,9 @@ from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
 from .. import mock_draft
 from .. import mvp
+from .. import portraits
 from .. import records
+from .. import accolades
 from ..league import franchise, history, playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
@@ -230,6 +232,14 @@ def team_squad(team, league=None) -> dict:
     # Standing manager instructions: who this club is holding out.
     data["rested"] = list(team.rested)
     data["players"] = [player_detail(p) for p in team.players]
+    # The portrait needs the club (its crest colours are the kit) and the
+    # honours need the league (they are read out of the archives), so both are
+    # added here rather than inside `player_detail`, which has neither.
+    for player, row in zip(team.players, data["players"]):
+        row["portrait"] = portraits.features(player, team)
+        row["accolades"] = accolades.for_player(league, player) if league else []
+        if league is not None:
+            row["career"] = accolades.career_totals(league, player.id)
     if league is not None:
         data["gameLog"] = history.game_log(league, team.id)
         # Two shapes for one chart, because they answer different questions.
