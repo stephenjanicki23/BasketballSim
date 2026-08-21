@@ -32,7 +32,7 @@ from bballsim.league.advanced import advanced_table
 from bballsim.league.calendar import GameStatus, build_daily_schedule
 from bballsim.league.league import League
 from bballsim.roster import load_teams
-from bballsim import save
+from bballsim import save, trades
 
 _CACHE: dict[tuple, League] = {}
 
@@ -147,9 +147,33 @@ class TestWhatTheSummerDid(unittest.TestCase):
                                  player.id)
         self.assertGreater(checked, 300)
 
-    def test_every_club_still_fields_twelve(self):
+    def test_nobody_vanished_over_the_summer(self):
+        """The invariant the summer actually provides: `offseason.draft` is
+        one-in-one-out, so every hole a retirement left is filled and the
+        league's headcount is exactly what it started with.
+
+        This used to assert that *each club* still had exactly twelve, and that
+        was a stronger claim than anything guarantees. The trade market may
+        legally make a two-for-one -- `trades.ROSTER_MIN` is 8 and `ROSTER_MAX`
+        is 17 -- and when it does, one club sits at 11 and its partner at 13.
+        A run of this fixture produced exactly that, `chg` at 11 and `cfc` at
+        13, with the league total untouched: a player moved, which is the
+        market working, not a hole the draft failed to fill.
+
+        It failed only sometimes because `LeagueClock.now()` is real time plus
+        an offset, so the sim clock keeps running *during* a tick while `tick`
+        re-reads it on every pass. The market opens on a sim-day cadence, so
+        how many times it opens depends on how fast the machine ran -- four
+        identical runs of this fixture made 36, 39, 38 and 41 trades. Nothing
+        here is unseeded; the clock is."""
+        total = sum(len(t.players) for t in self.league.teams.values())
+        self.assertEqual(total, 12 * len(self.league.teams))
+
+    def test_every_club_is_still_a_squad(self):
+        """Bounded by the rule that actually bounds it."""
         for team in self.league.teams.values():
-            self.assertEqual(len(team.players), 12, team.id)
+            self.assertGreaterEqual(len(team.players), trades.ROSTER_MIN, team.id)
+            self.assertLessEqual(len(team.players), trades.ROSTER_MAX, team.id)
 
     def test_every_club_can_still_field_a_legal_five(self):
         for team in self.league.teams.values():
