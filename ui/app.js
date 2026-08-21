@@ -3934,7 +3934,7 @@ function prospectCard(row, index) {
     const link = playerLink(comp.name, comp.playerId, comp.teamId,
                             "prospect-comp-name");
     foot.appendChild(link);
-    const where = comp.current
+    const where = comp.active
       ? `${comp.position} · ${comp.teamId}`
       : `${comp.position} · ${comp.season}`;
     foot.appendChild(el("span", "prospect-comp-where", where));

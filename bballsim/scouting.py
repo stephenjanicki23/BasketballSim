@@ -86,9 +86,16 @@ NEIGHBOURS = {"guard": ("guard", "wing"), "wing": ("wing", "guard", "big"),
               "big": ("big", "wing")}
 
 # A season short enough that its shape is noise. Same argument as the record
-# book's rate qualifier and the All-Star ballot's games floor.
-COMP_MINIMUM_GAMES = 20
-COMP_MINIMUM_SHOTS = 100
+# book's rate qualifier and the All-Star ballot's games floor -- and, like
+# those, a *share* of what has been played rather than a fixed count.
+#
+# It was a flat 20 games and 100 shots first, which is a qualifier that only
+# works in April. In November nobody has played twenty games, so the pool came
+# back empty and every prospect on the board read "nobody in the league closely
+# enough" -- for the two months of the year the draft preview is most worth
+# reading.
+COMP_GAMES_SHARE = 0.30
+COMP_SHOTS_PER_GAME = 5.0
 
 # How far apart two styles can be and still be called a comp. Distance is in
 # percentile space over four axes, so the worst possible is 2.0.
@@ -142,7 +149,7 @@ def comp_axes_from_style(style: Style) -> dict[str, float]:
     }
 
 
-def comp_axes_from_line(line) -> dict[str, float] | None:
+def comp_axes_from_line(line, minimum_games: int = 1) -> dict[str, float] | None:
     """The same four axes for a man whose record is his statistics.
 
     `rim` is the free-throw rate, which is the standard reading of how much of
@@ -150,8 +157,9 @@ def comp_axes_from_line(line) -> dict[str, float] | None:
     where a shot was taken from inside the arc, but it does record who gets hit
     while taking it.
     """
+    games = float(getattr(line, "games", 0) or 0)
     fga = float(getattr(line, "fga", 0) or 0)
-    if fga < COMP_MINIMUM_SHOTS or getattr(line, "games", 0) < COMP_MINIMUM_GAMES:
+    if games < max(1, minimum_games) or fga / max(1.0, games) < COMP_SHOTS_PER_GAME:
         return None
     assists = float(getattr(line, "assists", 0) or 0)
     oreb = float(getattr(line, "offensive_rebounds", 0) or 0)
@@ -192,8 +200,9 @@ def league_pool(league) -> list[dict]:
     pool: list[dict] = []
     seen: set[str] = set()
 
-    def offer(line, season: str, club: str, current: bool) -> None:
-        axes = comp_axes_from_line(line)
+    def offer(line, season: str, club: str, active: bool,
+              minimum: int) -> None:
+        axes = comp_axes_from_line(line, minimum)
         if axes is None:
             return
         key = f"{line.player_id}:{season}"
@@ -203,16 +212,30 @@ def league_pool(league) -> list[dict]:
         pool.append({
             "playerId": line.player_id, "name": line.name,
             "position": getattr(line, "position", "") or "",
-            "teamId": club, "season": season, "current": current, "axes": axes,
+            "teamId": club, "season": season, "active": active, "axes": axes,
         })
 
     clubs = {tid: team.abbreviation for tid, team in league.teams.items()}
     for line in league.stats.players.values():
-        offer(line, league.season, clubs.get(line.team_id, ""), True)
+        offer(line, league.season, clubs.get(line.team_id, ""), True,
+              _minimum_games(league.stats))
     for archive in getattr(league, "history", []) or []:
+        minimum = _minimum_games(archive.stats)
         for line in archive.stats.players.values():
-            offer(line, archive.season, clubs.get(line.team_id, ""), False)
+            offer(line, archive.season, clubs.get(line.team_id, ""), False,
+                  minimum)
     return _percentiles(pool)
+
+
+def _minimum_games(stats) -> int:
+    """A share of however long that season turned out to be.
+
+    Read off the season's own leader rather than the schedule, because an
+    archive has no schedule left -- its fixtures were retired when the next
+    year's calendar went up.
+    """
+    longest = max((line.games for line in stats.players.values()), default=0)
+    return max(1, int(longest * COMP_GAMES_SHARE))
 
 
 def class_pool(year: int) -> list[dict]:
@@ -269,7 +292,10 @@ def comp_for(prospect, year: int, pool: list[dict],
     return {
         "playerId": best["playerId"], "name": best["name"],
         "position": best["position"], "teamId": best["teamId"],
-        "season": best["season"], "current": best["current"],
+        # Named `active` rather than `current`: this says he is still in
+        # the league, and "current" in a file about hiding *current
+        # ability* is a word that should not appear at all.
+        "season": best["season"], "active": best["active"],
         "fit": round(1.0 - min(1.0, best_gap), 3),
     }
 
