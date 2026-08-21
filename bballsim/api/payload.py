@@ -36,6 +36,7 @@ from .. import mock_draft
 from .. import mvp
 from .. import portraits
 from .. import records
+from .. import scouting
 from .. import accolades
 from .. import allstar
 from ..league import franchise, history, playoffs, power
@@ -749,6 +750,11 @@ def offseason_preview(league) -> dict:
         "coaches": [free_agent_row(league, e) for e in coaches],
         "watch": franchise.retirement_watch(league),
         "mock": mock_draft.edition(league),
+        # The declared class, carded. Sits beside the mocks rather than inside
+        # them because a card is about the player and a mock is about the
+        # order -- the writers disagree about where he goes, not about what he
+        # is.
+        "prospects": scouting.cards(league),
     }
 
 
@@ -803,6 +809,7 @@ def offseason_view(league) -> dict:
             # will actually pick from.
             "draft": False,
             "mockDraft": True,
+            "prospects": True,
             "trainingCamp": False,
             "advance": True,
         },

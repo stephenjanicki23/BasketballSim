@@ -2469,7 +2469,109 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
 .allstar-line { color: var(--muted); width: 100%; }
 .allstar-board td.allstar-name { width: 100%; }
 
+/* --- Draft prospect cards ---------------------------------------------
+ *
+ * A card that shows a face, a frame and a shape — and no numbers a reader
+ * could add up into a rating, which is the whole constraint the page is
+ * built under. */
+
+.prospect-filter { display: inline-flex; margin-bottom: 4px; }
+.prospect-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.prospect-card {
+  /* Column flex rather than grid so the comp can be pushed to the bottom:
+     cards in a row are different heights and a footer floating mid-card
+     against its neighbour's reads as broken alignment. */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+}
+.prospect-head { display: flex; align-items: center; gap: 12px; }
+.prospect-face {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--raised);
+}
+.prospect-face svg { width: 100%; height: 100%; display: block; }
+.prospect-who { display: grid; gap: 2px; min-width: 0; }
+.prospect-who h4 { margin: 0; font: 600 15px/1.2 var(--sans); }
+.prospect-line { margin: 0; font: 500 11px/1.4 var(--mono); color: var(--muted); }
+.prospect-archetype {
+  justify-self: start;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.prospect-from {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.prospect-summary { margin: 0; font-size: 12.5px; line-height: 1.55; }
+
+.prospect-bars { display: grid; gap: 5px; }
+.prospect-bar {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.prospect-bar-label {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.prospect-bar-track {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--raised);
+  overflow: hidden;
+}
+.prospect-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.prospect-comp {
+  margin-top: auto;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+.prospect-comp-label {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.prospect-comp-name { font: 600 13px/1.2 var(--sans); }
+.prospect-comp-where { font: 500 10px/1.4 var(--mono); color: var(--muted); }
+.prospect-comp-none { font-size: 12px; color: var(--muted); font-style: italic; }
+
 @media (max-width: 720px) {
+  .prospect-grid { grid-template-columns: 1fr; }
   .trade-sides { grid-template-columns: 1fr; }
   .veto-btn { width: 100%; margin-left: 0; }
   /* The per-game line is the first thing to go: it is a convenience, and the

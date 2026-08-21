@@ -246,6 +246,8 @@ const state = {
   // change while voting is open -- see `loadAllStar`.
   allstar: null,
   allstarConference: null,
+  // Which position the Prospects board is filtered to. "All" until asked.
+  prospectPos: "All",
   // Which Teams sub-screen is open, and the squad it is showing. The squad is
   // held so a sub-screen can re-render on a tab click without refetching.
   squadTab: "squad",
@@ -3298,6 +3300,7 @@ const OFF_TAB_KEYS = {
   retirements: "retirements",
   draft: "draft",
   mock: "mockDraft",
+  prospects: "prospects",
   camp: "trainingCamp",
   payroll: "payroll",
 };
@@ -3543,6 +3546,7 @@ function renderOffseasonBody() {
     // The mocks keep running through a summer: the class is the class, and
     // the writers have opinions about it right up until it is drafted.
     mock: offMock,
+    prospects: offProspects,
   }[state.offTab];
   if (render) render(body);
 }
@@ -3668,6 +3672,10 @@ function applyOffFilters(rows) {
 
 const PREVIEW_TABS = {
   mock: offMock,
+  // Knowable in January for exactly the reason the mocks are: the class is
+  // declared in advance, so there is a board to scout months before anyone
+  // picks from it.
+  prospects: offProspects,
   expected: offPreviewExpected,
   retirements: offPreviewWatch,
   payroll: offPayroll,
@@ -3808,6 +3816,134 @@ function offPreviewWatch(body) {
     tbody.appendChild(tr);
   });
   appendTable(body, table);
+}
+
+/* --- Prospect cards ---------------------------------------------------
+ *
+ * What is missing from these cards is the point of them. No ability, no
+ * ceiling, no ratings — the draft is worth watching because nobody knows yet,
+ * and a page that answered the question would be spoiling its own story.
+ *
+ * The style bars are shares of a prospect's own tendencies, which is what
+ * makes them safe to draw: they say what he does, not how much or how well.
+ * Bars are deliberately unlabelled by number for the same reason a percentage
+ * would invite the reader to add them up into a rating. */
+
+const STYLE_BARS = [
+  ["three_point_rate", "Range"],
+  ["rim_rate", "Rim"],
+  ["post_up_rate", "Post"],
+  ["pass_first", "Passing"],
+  ["crash_glass", "Glass"],
+];
+
+const PROSPECT_FILTERS = ["All", "PG", "SG", "SF", "PF", "C"];
+
+/* What a full bar means. A fixed scale, not each card's own peak: scaling to
+ * the biggest share on the card made every prospect's largest habit fill the
+ * track, which reads as "he does this constantly" and makes two cards
+ * impossible to compare. Five shares sum to one, so 0.45 is close to the top
+ * of what any single one reaches — over six classes only 0.6% of shares pass
+ * it, and those clip rather than distort everything below them. */
+const STYLE_BAR_FULL = 0.45;
+
+function offProspects(body) {
+  const data = (state.offseason && state.offseason.preview
+                && state.offseason.preview.prospects) || null;
+  if (!data || !(data.prospects || []).length) {
+    body.appendChild(el("p", "note", "No draft class has been declared."));
+    return;
+  }
+
+  body.appendChild(el("p", "note",
+    `${data.classLabel} ${data.year} class — ${data.prospects.length} declared. `
+    + data.note));
+
+  const filter = el("div", "scope-toggle prospect-filter");
+  PROSPECT_FILTERS.forEach((key) => {
+    const active = (state.prospectPos || "All") === key;
+    const button = el("button", active ? "is-active" : null, key);
+    button.addEventListener("click", () => {
+      state.prospectPos = key;
+      renderOffseason();
+    });
+    filter.appendChild(button);
+  });
+  body.appendChild(filter);
+
+  const want = state.prospectPos || "All";
+  const rows = data.prospects.filter(
+    (row) => want === "All" || row.position === want);
+  if (!rows.length) {
+    body.appendChild(el("p", "note", `No ${want}s in this class.`));
+    return;
+  }
+  const grid = el("div", "prospect-grid");
+  rows.forEach((row, index) => grid.appendChild(prospectCard(row, index)));
+  body.appendChild(grid);
+}
+
+function prospectCard(row, index) {
+  const card = el("article", "prospect-card");
+
+  const head = el("header", "prospect-head");
+  const face = el("div", "prospect-face");
+  face.innerHTML = portraitSVG(row.portrait || {});
+  head.appendChild(face);
+
+  const who = el("div", "prospect-who");
+  who.appendChild(el("h4", null, row.name));
+  who.appendChild(el("p", "prospect-line",
+    `${row.position} · ${row.age} · ${row.height} · ${row.weight} lbs`));
+  if (row.archetype) {
+    who.appendChild(el("span", "prospect-archetype", row.archetype));
+  }
+  head.appendChild(who);
+  card.appendChild(head);
+
+  // "Nigeria national program · Nigeria" -- the background often already names
+  // the country, and repeating it reads as a rendering fault.
+  const from = [row.background];
+  if (row.nationality && !(row.background || "").includes(row.nationality)) {
+    from.push(row.nationality);
+  }
+  const origin = from.filter(Boolean).join(" · ");
+  if (origin) card.appendChild(el("p", "prospect-from", origin));
+
+  if (row.summary) card.appendChild(el("p", "prospect-summary", row.summary));
+
+  const bars = el("div", "prospect-bars");
+  const style = row.style || {};
+  STYLE_BARS.forEach(([key, label]) => {
+    const line = el("div", "prospect-bar");
+    line.appendChild(el("span", "prospect-bar-label", label));
+    const track = el("span", "prospect-bar-track");
+    const fill = el("span", "prospect-bar-fill");
+    const width = Math.min(100, ((style[key] || 0) / STYLE_BAR_FULL) * 100);
+    fill.style.width = `${Math.round(width)}%`;
+    track.appendChild(fill);
+    line.appendChild(track);
+    bars.appendChild(line);
+  });
+  card.appendChild(bars);
+
+  const comp = row.comp;
+  const foot = el("footer", "prospect-comp");
+  foot.appendChild(el("span", "prospect-comp-label", "Plays like"));
+  if (comp) {
+    const link = playerLink(comp.name, comp.playerId, comp.teamId,
+                            "prospect-comp-name");
+    foot.appendChild(link);
+    const where = comp.current
+      ? `${comp.position} · ${comp.teamId}`
+      : `${comp.position} · ${comp.season}`;
+    foot.appendChild(el("span", "prospect-comp-where", where));
+  } else {
+    foot.appendChild(el("span", "prospect-comp-none",
+      "nobody in the league closely enough"));
+  }
+  card.appendChild(foot);
+  return card;
 }
 
 /* --- Mock drafts ------------------------------------------------------ */
