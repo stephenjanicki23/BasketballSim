@@ -62,6 +62,17 @@ ROTATION_DEPTH = 9
 
 
 class RotationManager:
+    """How deep a bench goes.
+
+    `depth` is per-game rather than a module constant because the All-Star
+    exhibition plays all twelve: a marquee game where three of the men the
+    league just voted in record a DNP is not the game that was voted for. Every
+    league game leaves it at `ROTATION_DEPTH`.
+    """
+
+    def __init__(self, depth: int = ROTATION_DEPTH) -> None:
+        self.depth = depth
+
     def evaluate(
         self,
         team_state: TeamState,
@@ -154,7 +165,7 @@ class RotationManager:
             # declining is always available, and always legal.
             if not available:
                 return None
-        in_rotation = [p for p in available if rank.get(p.id, 99) < ROTATION_DEPTH]
+        in_rotation = [p for p in available if rank.get(p.id, 99) < self.depth]
         options = [p for p in in_rotation if closing or p.condition >= RESTED_THRESHOLD]
         if not options:
             options = [p for p in in_rotation if p.condition > 45.0]

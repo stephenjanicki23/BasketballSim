@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from ..chemistry import drift_after_game
 from .. import health
 from .. import records
+from .. import allstar
 from ..engine.game import GameRules, GameSimulator
 from ..conferences import conference_for
 from ..models import Team
@@ -107,6 +108,12 @@ class League:
     # league to build it. `None` until the Finals conclude and the OFFSEASON
     # menu opens -- `franchise.state()` creates it on first ask.
     offseason: object | None = None
+    # Every All-Star Game the league has played, keyed by season. An
+    # `allstar.AllStarGame` each, held untyped for the same reason `offseason`
+    # is. Kept by season rather than as a single current game because the
+    # accolade is a career one -- "six-time All-Star" is a count over this
+    # dict, and a roster nobody kept could not be counted twice.
+    allstar: dict = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     # Setup
@@ -163,6 +170,14 @@ class League:
 
             if playoffs.advance(self):
                 moved = True
+
+            # The All-Star Game, on the Wednesday it was set for. Declines on a
+            # single comparison until then, and once played it stays played.
+            # Deliberately outside the `for game in self.schedule` loop above:
+            # the exhibition is not a `ScheduledGame` and must never become
+            # one, which is the whole of how it is kept off the standings, the
+            # season totals and the record book.
+            allstar.run(self)
 
             # Front offices doing their own business. Guarded inside: the
             # market only opens on a league-day cadence, so the ordinary tick

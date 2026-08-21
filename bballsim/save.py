@@ -1376,3 +1376,95 @@ def apply_pick_ownership(league, rows) -> None:
             pick.protected_top = int(row[4] or 0)
         if len(row) > 5:
             pick.swap_with = row[5] or ""
+
+
+# --------------------------------------------------------------------------
+# The All-Star Game.
+#
+# Its own file, and stored rather than derived, for the reason `records.py`
+# gives about single-game marks: the roster is a reading of a vote taken at one
+# moment. Voting closes at tip-off and the season keeps moving, so re-deriving
+# the side six weeks later would name a different twelve and quietly rewrite
+# who was ever an All-Star.
+#
+# Keyed by season and never pruned, because the accolade is a career one. A
+# league that kept only the current year could tell you a player is an All-Star
+# but never that he is a six-time one.
+# --------------------------------------------------------------------------
+
+ALLSTAR_PATH = data_dir() / "allstar.json"
+
+
+def dump_allstar(games: dict) -> dict | None:
+    played = [g for g in (games or {}).values() if g.rosters or g.played]
+    if not played:
+        return None
+    return {
+        "version": SAVE_VERSION,
+        "seasons": [
+            {
+                "season": g.season,
+                "tipoff_at": _iso(g.tipoff_at),
+                "played": g.played,
+                "rosters": {k: list(v) for k, v in g.rosters.items()},
+                "home_conference": g.home_conference,
+                "away_conference": g.away_conference,
+                "home_score": g.home_score,
+                "away_score": g.away_score,
+                "mvp_id": g.mvp_id,
+                "mvp_name": g.mvp_name,
+                "mvp_line": g.mvp_line,
+                "box": {k: list(v) for k, v in (g.box or {}).items()},
+            }
+            for g in sorted(played, key=lambda g: g.season)
+        ],
+    }
+
+
+def load_allstar(data: dict | None) -> dict:
+    from .allstar import AllStarGame
+
+    if not data:
+        return {}
+    version = data.get("version", 0)
+    if version > SAVE_VERSION:
+        raise ValueError(
+            f"all-star file is version {version}, this build understands {SAVE_VERSION}")
+
+    out: dict[str, AllStarGame] = {}
+    for row in data.get("seasons", []):
+        game = AllStarGame(
+            season=row.get("season", ""),
+            tipoff_at=_moment(row.get("tipoff_at")),
+            played=bool(row.get("played")),
+            rosters={k: list(v) for k, v in (row.get("rosters") or {}).items()},
+            home_conference=row.get("home_conference", ""),
+            away_conference=row.get("away_conference", ""),
+            home_score=row.get("home_score", 0),
+            away_score=row.get("away_score", 0),
+            mvp_id=row.get("mvp_id", ""),
+            mvp_name=row.get("mvp_name", ""),
+            mvp_line=row.get("mvp_line", ""),
+            box={k: list(v) for k, v in (row.get("box") or {}).items()},
+        )
+        out[game.season] = game
+    return out
+
+
+def write_allstar(path: Path, games: dict, *, indent: int | None = 1) -> Path | None:
+    """Write the All-Star history, or remove the file when there is none."""
+    path = Path(path)
+    payload = dump_allstar(games)
+    if payload is None:
+        if path.is_file():
+            path.unlink()
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_round(payload), indent=indent, sort_keys=True) + "\n")
+    return path
+
+
+def read_allstar(path: Path = ALLSTAR_PATH) -> dict:
+    if not Path(path).is_file():
+        return {}
+    return load_allstar(json.loads(Path(path).read_text()))

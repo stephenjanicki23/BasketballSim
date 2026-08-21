@@ -212,12 +212,15 @@ def state(league) -> AllStarGame:
     date recomputed on every read would slide a week forward every Wednesday
     and the game would never arrive.
     """
-    existing = getattr(league, "allstar", None)
-    if isinstance(existing, AllStarGame) and existing.season == league.season:
+    played = getattr(league, "allstar", None)
+    if played is None:
+        played = league.allstar = {}
+    existing = played.get(league.season)
+    if existing is not None:
         return existing
     made = AllStarGame(season=league.season,
                        tipoff_at=next_wednesday(league.clock.now()))
-    league.allstar = made
+    played[league.season] = made
     return made
 
 
@@ -397,3 +400,182 @@ def _twelve(votes: list[Vote]) -> list[Vote]:
 
     taken.sort(key=lambda v: (-v.share, v.player_id))
     return taken
+
+
+# --------------------------------------------------------------------------
+# The game
+# --------------------------------------------------------------------------
+
+# All-Star basketball is fast, generous and barely defended, and a 96-91
+# exhibition would read as a mistake. These are the sliders that produce it.
+# They are the only place in the project where tactics are set to describe an
+# occasion rather than a game plan.
+EXHIBITION = dict(
+    pace=88.0, three_point_emphasis=78.0, ball_movement=80.0,
+    offensive_rebounding=22.0, tempo_after_rebound=88.0,
+    defensive_pressure=26.0, help_intensity=24.0,
+    foul_discipline=82.0, close_out_hard=22.0,
+    minutes_stagger=90.0,          # everybody gets a run; nobody plays 40
+)
+
+# What decides the game's MVP, on top of the points. Deliberately the same
+# shape as a box-score game score rather than the season panel's machinery --
+# one night is not a case, it is a performance.
+MVP_REBOUND = 0.9
+MVP_ASSIST = 1.2
+MVP_STOP = 1.6          # steals and blocks
+MVP_TURNOVER = -1.0
+
+
+def _side(league, selection: Selection, coach) -> "Team":
+    """One conference's twelve as a team the engine will accept.
+
+    Holds the *real* `Player` objects, not copies, so the exhibition is played
+    by the men who were voted in rather than by clones of their ratings. That
+    is also why `play` has to put their condition back afterwards.
+    """
+    from .models import Team
+    from .tactics import Tactics
+
+    squad = []
+    for vote in selection.roster:
+        team = league.teams.get(vote.team_id)
+        player = team.player(vote.player_id) if team else None
+        if player is not None:
+            squad.append(player)
+
+    starters = {v.player_id for v in selection.starters}
+    # Starters first, then the bench in vote order -- the depth chart is how
+    # the engine learns who was voted in as a starter.
+    order = [p for p in squad if p.id in starters] + [
+        p for p in squad if p.id not in starters]
+    return Team(
+        id=f"as-{selection.conference.lower()}",
+        name=selection.conference,
+        abbreviation=selection.conference[:3].upper(),
+        city="",
+        conference=selection.conference,
+        players=squad,
+        tactics=Tactics(**EXHIBITION),
+        coach=coach,
+        depth_chart=[p.id for p in order],
+        # No chemistry: twelve men who met on Tuesday. `team_chemistry` is left
+        # at its neutral default rather than computed, because computing it
+        # would mean writing pair chemistry onto players who do not play
+        # together and then having to unwrite it.
+    )
+
+
+def _bench_boss(league, conference: str):
+    """The coach of the conference's best club, which is how the real one is
+    decided and costs nothing to honour."""
+    best, record = None, -1.0
+    for row in league.standings_table():
+        team = league.teams.get(row["team_id"])
+        if team is None or conference_for(team.abbreviation) != conference:
+            continue
+        pct = float(row.get("win_pct", 0.0) or 0.0)
+        if pct > record:
+            best, record = team, pct
+    return best.coach if best else None
+
+
+def _game_score(line) -> float:
+    return (line.points
+            + MVP_REBOUND * (line.offensive_rebounds + line.defensive_rebounds)
+            + MVP_ASSIST * line.assists
+            + MVP_STOP * (line.steals + line.blocks)
+            + MVP_TURNOVER * line.turnovers)
+
+
+def play(league) -> AllStarGame:
+    """Play the exhibition and store it. Idempotent: a game already played is
+    returned untouched, because the roster and the result are the only things
+    here that cannot be derived again."""
+    from .engine.game import GameSimulator
+    from .engine.rng import seed_from_string
+
+    game = state(league)
+    if game.played:
+        return game
+
+    sides = select(league)
+    order = list(CONFERENCES)
+    # Which conference is nominally at home alternates by season. The floor is
+    # neutral but `possession.HOME_SHOOTING_EDGE` does not know that, and a
+    # half-percent edge handed to the same conference every year is a thumb on
+    # the scale that nobody put there on purpose.
+    if seed_from_string(f"allstar-home-{league.season}") % 2:
+        order.reverse()
+    away_name, home_name = order
+
+    home = _side(league, sides[home_name], _bench_boss(league, home_name))
+    away = _side(league, sides[away_name], _bench_boss(league, away_name))
+
+    # The one thing an exhibition can leak. The engine sets condition at
+    # tip-off and drains it all night; without this, twelve men on each side
+    # walk into their next league game carrying an All-Star Game they played
+    # in a different universe.
+    carried = {p.id: p.condition for p in home.players + away.players}
+    try:
+        simulator = GameSimulator(
+            game_id=f"allstar-{league.season}", home=home, away=away,
+            rules=league.rules, seed=f"allstar-{league.season}",
+            rotation_depth=ROSTER_SIZE,
+        )
+        result = simulator.simulate()
+    finally:
+        for player in home.players + away.players:
+            player.condition = carried.get(player.id, player.condition)
+
+    game.rosters = {name: [v.to_dict() for v in sides[name].roster]
+                    for name in CONFERENCES}
+    game.home_conference, game.away_conference = home_name, away_name
+    game.home_score, game.away_score = result.home_score, result.away_score
+    game.box = {
+        home_name: _lines(result.home_box, home),
+        away_name: _lines(result.away_box, away),
+    }
+
+    winner = home if result.home_score >= result.away_score else away
+    won = result.home_box if winner is home else result.away_box
+    best = max(won.players.values(), key=_game_score, default=None)
+    if best is not None:
+        game.mvp_id, game.mvp_name = best.player_id, best.name
+        game.mvp_line = (f"{best.points} pts, "
+                         f"{best.offensive_rebounds + best.defensive_rebounds} reb, "
+                         f"{best.assists} ast")
+    game.played = True
+    return game
+
+
+def _lines(box, side) -> list[dict]:
+    """The box score, deepest contributions first."""
+    positions = {p.id: p.position.value for p in side.players}
+    rows = []
+    for line in box.players.values():
+        rebounds = line.offensive_rebounds + line.defensive_rebounds
+        rows.append({
+            "playerId": line.player_id, "name": line.name,
+            "position": positions.get(line.player_id, ""),
+            "minutes": round(line.seconds / 60.0),
+            "points": line.points, "rebounds": rebounds, "assists": line.assists,
+            "steals": line.steals, "blocks": line.blocks,
+            "fgm": line.fgm, "fga": line.fga, "tpm": line.tpm, "tpa": line.tpa,
+        })
+    rows.sort(key=lambda r: (-r["points"], -r["rebounds"], r["name"]))
+    return rows
+
+
+def run(league) -> AllStarGame | None:
+    """The tick hook. Declines unless the league has reached tip-off.
+
+    Same shape as `playoffs.advance` and `trade_market.run`: called on every
+    tick, costs one comparison, and does something only when it is owed.
+    """
+    game = state(league)
+    if game.played or game.tipoff_at is None:
+        return None
+    if league.clock.now() < game.tipoff_at:
+        return None
+    return play(league)

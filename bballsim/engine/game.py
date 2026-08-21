@@ -73,6 +73,7 @@ class GameSimulator:
         away: Team,
         rules: GameRules | None = None,
         seed: int | str | None = None,
+        rotation_depth: int | None = None,
     ) -> None:
         self.game_id = game_id
         self.home = home
@@ -80,7 +81,8 @@ class GameSimulator:
         self.rules = rules or GameRules()
         self.rng = SimRandom(seed if seed is not None else game_id)
         self.possessions = PossessionEngine(self.rng)
-        self.rotations = RotationManager()
+        self.rotations = (RotationManager(rotation_depth)
+                          if rotation_depth else RotationManager())
 
     # ------------------------------------------------------------------
     def simulate(self) -> GameResult:

@@ -26,6 +26,7 @@ from bballsim.save import (
     HISTORY_PATH,
     LEAGUE_PATH,
     OFFSEASON_PATH,
+    ALLSTAR_PATH,
     RECORDS_PATH,
     SEASON_PATH,
     TRADES_PATH,
@@ -34,6 +35,7 @@ from bballsim.save import (
     apply_pick_ownership,
     read_market,
     read_offseason,
+    read_allstar,
     read_records,
     read_season,
     season_exists,
@@ -42,6 +44,7 @@ from bballsim.save import (
     write_league,
     write_market,
     write_offseason,
+    write_allstar,
     write_records,
     write_season,
 )
@@ -120,6 +123,12 @@ def build_league(team_count: int = 30) -> League:
     # no-op once the marks are in.
     records.backfill(league)
 
+    # Every All-Star Game the league has played. Loaded *before* the tick: the
+    # tick is what plays this season's, and a league that reached tip-off with
+    # an empty history would play it again and overwrite the twelve who were
+    # actually voted in.
+    league.allstar = read_allstar()
+
     league.tick()
     return league
 
@@ -143,6 +152,10 @@ def save_season(league: League) -> None:
     book = getattr(league, "records", None)
     if book is not None and book.games:
         write_records(RECORDS_PATH, book)
+    # The All-Star Games, past and present. Written every time for the same
+    # reason the record book is: a vote's verdict cannot be recomputed once the
+    # season it was taken in has moved on.
+    write_allstar(ALLSTAR_PATH, getattr(league, "allstar", None) or {})
     # Writes the summer, or removes the file when there is not one -- a stale
     # offseason.json would reopen the menu mid-season with a year-old list.
     write_offseason(OFFSEASON_PATH, getattr(league, "offseason", None))
