@@ -27,6 +27,7 @@ from bballsim.api.payload import (
     game_detail,
     game_preview,
     offseason_view,
+    allstar_view,
     records_view,
     team_squad,
     trade_market_view,
@@ -141,6 +142,9 @@ def main() -> None:
     payload["offseason"] = offseason_view(league)
     payload["market"] = trade_market_view(league)
     payload["records"] = records_view(league)
+    # The All-Star ballot as it stood at export. Frozen, unlike the live
+    # one -- a static export has no season moving underneath it.
+    payload["allstar"] = allstar_view(league)
 
     raw = json.dumps(payload, separators=(",", ":")).encode()
     packed = base64.b64encode(gzip.compress(raw, 9)).decode()
