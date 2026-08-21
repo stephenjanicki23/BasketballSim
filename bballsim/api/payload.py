@@ -578,7 +578,13 @@ def free_agent_row(league, entry) -> dict:
         row.update({
             "position": "Head Coach",
             "age": getattr(coach, "age", 0),
-            "overall": round(getattr(coach.ratings, "reputation", 0.0), 1) if coach else 0.0,
+            # **Not** `overall`. A player's overall is the 1-20 face of current
+            # ability; a coach's reputation is 0-100. Putting both under one
+            # "OVR" heading printed 14.8 beside 60.8 and implied the coach was
+            # four times the player. `overall` is left absent so any table
+            # renders a dash, and the reputation travels under its own name.
+            "overall": None,
+            "reputation": round(getattr(coach.ratings, "reputation", 0.0), 1) if coach else 0.0,
             "ratings": coach.ratings.to_dict() if coach else {},
             "tier": coach.tier if coach else "",
             "specialism": coach.specialism if coach else "",

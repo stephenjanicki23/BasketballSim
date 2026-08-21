@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bballsim import accolades, portraits
+from bballsim import accolades, contracts, portraits
 from bballsim.api import payload
 from bballsim.league import offseason
 from bballsim.league.calendar import build_daily_schedule
@@ -53,6 +53,13 @@ def rolled(summers: int = 2) -> League:
     league.set_schedule(build_daily_schedule(
         [t.id for t in saved.teams], start_date=date(2026, 10, 20),
         games_per_team=6, season=league.season))
+    # Contracts, which `run.py` generates on load. Without them every player
+    # and coach has `contract is None`, the expiring lists come back empty, and
+    # every test about them passes by comparing one empty set to another --
+    # which is exactly what they were doing before this line existed.
+    contracts.generate_for_league(list(league.teams.values()), season=league.season)
+    contracts.generate_coaches_for_league(list(league.teams.values()),
+                                          season=league.season)
     for _ in range(summers):
         offseason.play_out(league)
         offseason.roll_summer(league)
@@ -340,6 +347,43 @@ class TestTheTeamSubScreens(unittest.TestCase):
                 continue
             self.assertEqual(player.id in listed,
                              contract.years_remaining <= 1, player.name)
+
+    def test_a_coach_does_not_borrow_the_player_overall_column(self):
+        """A player's overall is the 1-20 face of current ability; a coach's
+        reputation is 0-100. One "OVR" heading printed 14.8 beside 60.8 and
+        implied the coach was four times the player.
+
+        The final-year coach is *made* rather than looked for: whether any club
+        happens to have one is an accident of the fixture, and a test that
+        skipped when it did not would be a test that mostly did not run.
+        """
+        from bballsim.league import franchise
+
+        coach = self.team.coach
+        self.assertIsNotNone(coach, "the fixture club has no coach")
+        contract = getattr(coach, "contract", None)
+        self.assertIsNotNone(contract, "the fixture coach has no contract")
+        was = contract.years_remaining
+        contract.years_remaining = 1
+        try:
+            _players, coaches = franchise.projected_expiring(
+                self.league, self.team)
+            rows = [payload.free_agent_row(self.league, e) for e in coaches]
+            self.assertTrue(rows)
+            for row in rows:
+                self.assertIsNone(row["overall"])
+                self.assertIsNotNone(row["reputation"])
+                self.assertLessEqual(row["reputation"], 100.0)
+        finally:
+            contract.years_remaining = was
+
+    def test_a_player_keeps_the_player_scale(self):
+        data = payload.team_squad(self.team, self.league)
+        for row in data["expectedFreeAgents"]:
+            if row.get("isCoach"):
+                continue
+            self.assertIsNotNone(row["overall"])
+            self.assertLessEqual(row["overall"], 20.0)
 
     def test_the_injury_screen_reads_data_already_shipped(self):
         """No endpoint of its own: everything the availability screen shows is

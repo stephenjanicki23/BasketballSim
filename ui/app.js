@@ -2424,7 +2424,10 @@ function renderTeamFreeAgents(team) {
     tr.appendChild(name);
     tr.appendChild(el("td", null, row.position || "—"));
     tr.appendChild(el("td", null, String(row.age ?? "—")));
-    tr.appendChild(el("td", null, row.overall != null ? String(row.overall) : "—"));
+    // A coach has no overall on the player scale, so his cell says what it is
+    // rather than borrowing a heading that means something else.
+    tr.appendChild(el("td", null, row.overall != null ? String(row.overall)
+      : (row.reputation != null ? `Rep ${row.reputation}` : "—")));
     tr.appendChild(el("td", null, money(row.previousSalary)));
     tr.appendChild(el("td", null, money(row.requestedSalary)));
     tr.appendChild(el("td", null, String(row.requestedYears ?? "—")));
