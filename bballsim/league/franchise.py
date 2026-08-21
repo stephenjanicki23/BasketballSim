@@ -529,8 +529,13 @@ def payroll_table(league) -> list[dict]:
 # of them writes.
 # --------------------------------------------------------------------------
 
-def projected_expiring(league) -> tuple[list[FreeAgent], list[FreeAgent]]:
+def projected_expiring(league, team=None) -> tuple[list[FreeAgent], list[FreeAgent]]:
     """Who *will* reach the market when this season ends.
+
+    `team` narrows it to one club, for the squad page's own list. The league
+    view and the club view therefore read one function: a per-club version
+    written separately would answer "who is out of contract" differently from
+    the league-wide screen the first time either was edited.
 
     `collect_expiring` reads `contract.expired`, which is only true after
     `tick_contracts` has run -- so during a season it correctly returns
@@ -544,26 +549,30 @@ def projected_expiring(league) -> tuple[list[FreeAgent], list[FreeAgent]]:
     players: list[FreeAgent] = []
     coaches: list[FreeAgent] = []
 
-    for team in league.teams.values():
-        for player in team.players:
+    # `club`, not `team`: the loop variable shadowed the parameter, which
+    # happened to work for a one-element list and would have quietly broken
+    # anything added below it.
+    clubs = [team] if team is not None else list(league.teams.values())
+    for club in clubs:
+        for player in club.players:
             contract = getattr(player, "contract", None)
             if contract is None or contract.years_remaining > 1:
                 continue
-            where = N.situation(league, team, player)
+            where = N.situation(league, club, player)
             ask = N.demand(player, where)
             players.append(FreeAgent(
-                holder_id=player.id, name=player.name, team_id=team.id,
+                holder_id=player.id, name=player.name, team_id=club.id,
                 previous_salary=contract.salary,
                 requested_years=ask.years, requested_salary=ask.salary,
                 interest=ask.interest,
             ))
-        coach = getattr(team, "coach", None)
+        coach = getattr(club, "coach", None)
         contract = getattr(coach, "contract", None) if coach else None
         if coach is not None and contract is not None and contract.years_remaining <= 1:
-            where = N.situation(league, team, coach_placeholder(team))
+            where = N.situation(league, club, coach_placeholder(club))
             ask = N.coach_demand(coach, where)
             coaches.append(FreeAgent(
-                holder_id=coach.id, name=coach.name, team_id=team.id,
+                holder_id=coach.id, name=coach.name, team_id=club.id,
                 is_coach=True, previous_salary=contract.salary,
                 requested_years=ask.years, requested_salary=ask.salary,
                 interest=ask.interest,

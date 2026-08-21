@@ -288,6 +288,15 @@
       </aside>
 
       <div class="squad-main">
+        <!-- Sub-screens for the club being viewed. The rail on the left picks
+             a player; these pick what you want to know about the club. -->
+        <nav class="offseason-nav squad-nav" role="tablist" aria-label="Team sections">
+          <button class="off-tab is-active" role="tab" aria-selected="true" data-squad="squad">Player</button>
+          <button class="off-tab" role="tab" aria-selected="false" data-squad="injuries">Injuries</button>
+          <button class="off-tab" role="tab" aria-selected="false" data-squad="freeagents">Expected Free Agents</button>
+        </nav>
+
+        <div class="squad-screen" id="squad-screen-squad">
         <!-- Player header, in the shape a stats site uses. -->
         <div class="player-head">
           <div class="player-head-portrait" id="profile-portrait"></div>
@@ -353,6 +362,10 @@
           </div>
           <p class="note" id="profile-chart-note"></p>
         </div>
+        </div><!-- /squad-screen-squad -->
+
+        <div class="squad-screen" id="squad-screen-injuries" hidden></div>
+        <div class="squad-screen" id="squad-screen-freeagents" hidden></div>
       </div>
     </div>
   </section>

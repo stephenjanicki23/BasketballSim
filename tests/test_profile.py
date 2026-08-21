@@ -283,6 +283,88 @@ class TestCareerTotals(unittest.TestCase):
             self.assertIn(stat, ("points", "rebounds", "assists", "tpm", "games"))
 
 
+class TestTheTeamSubScreens(unittest.TestCase):
+    """The two club-scoped screens under Teams.
+
+    Both read data the squad payload already carries, so the interesting claim
+    is that the *scoped* list agrees with the league-wide one. A per-club
+    version written separately would answer "who is out of contract"
+    differently from the Offseason screen the first time either was edited.
+    """
+
+    def setUp(self):
+        self.league = rolled()
+        self.team = next(iter(self.league.teams.values()))
+
+    def test_a_club_list_is_the_league_list_filtered(self):
+        from bballsim.league import franchise
+        scoped, scoped_coaches = franchise.projected_expiring(
+            self.league, self.team)
+        everyone, all_coaches = franchise.projected_expiring(self.league)
+        self.assertEqual(
+            {e.holder_id for e in scoped},
+            {e.holder_id for e in everyone if e.team_id == self.team.id})
+        self.assertEqual(
+            {e.holder_id for e in scoped_coaches},
+            {e.holder_id for e in all_coaches if e.team_id == self.team.id})
+
+    def test_every_club_scopes_correctly(self):
+        """The loop variable used to shadow the parameter. It happened to work
+        for a one-element list, and would have broken anything added under
+        it."""
+        from bballsim.league import franchise
+        everyone, _ = franchise.projected_expiring(self.league)
+        counted = 0
+        for team in self.league.teams.values():
+            scoped, _ = franchise.projected_expiring(self.league, team)
+            for entry in scoped:
+                self.assertEqual(entry.team_id, team.id)
+            counted += len(scoped)
+        self.assertEqual(counted, len(everyone))
+
+    def test_the_squad_payload_carries_the_club_list(self):
+        data = payload.team_squad(self.team, self.league)
+        self.assertIn("expectedFreeAgents", data)
+        for row in data["expectedFreeAgents"]:
+            self.assertEqual(row["teamId"], self.team.id)
+            for key in ("name", "requestedSalary", "requestedYears",
+                        "interestLabel", "previousSalary"):
+                self.assertIn(key, row)
+
+    def test_only_last_year_deals_are_expected(self):
+        data = payload.team_squad(self.team, self.league)
+        listed = {row["id"] for row in data["expectedFreeAgents"]}
+        for player in self.team.players:
+            contract = getattr(player, "contract", None)
+            if contract is None:
+                continue
+            self.assertEqual(player.id in listed,
+                             contract.years_remaining <= 1, player.name)
+
+    def test_the_injury_screen_reads_data_already_shipped(self):
+        """No endpoint of its own: everything the availability screen shows is
+        on `health`, which every squad row already carries."""
+        data = payload.team_squad(self.team, self.league)
+        for row in data["players"]:
+            health = row["health"]
+            for key in ("injury", "knock", "fatigue", "fatigueLabel",
+                        "condition", "gamesMissed"):
+                self.assertIn(key, health)
+
+    def test_an_injury_says_how_long(self):
+        """A screen that said "injured" without saying for how long would send
+        a manager to the player page to find out, which is the thing it
+        exists to save."""
+        for team in self.league.teams.values():
+            for row in payload.team_squad(team, self.league)["players"]:
+                injury = row["health"].get("injury")
+                if injury is None:
+                    continue
+                self.assertIn("name", injury)
+                self.assertGreaterEqual(injury["gamesRemaining"], 0)
+                self.assertGreater(injury["gamesTotal"], 0)
+
+
 class TestThePayloadCarriesIt(unittest.TestCase):
 
     def test_a_squad_row_has_a_portrait_and_a_shelf(self):

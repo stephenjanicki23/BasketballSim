@@ -241,6 +241,10 @@ const state = {
   // two, because "not loaded" and "no records exist" must not read alike.
   records: null,
   recordsHalf: "game",
+  // Which Teams sub-screen is open, and the squad it is showing. The squad is
+  // held so a sub-screen can re-render on a tab click without refetching.
+  squadTab: "squad",
+  squad: null,
   offTab: "news",
   offFilter: "all",
   offTeam: "",
@@ -312,6 +316,7 @@ async function boot() {
   renderStats();
   bindControls();
   bindOffseason();
+  bindSquadTabs();
   bindTrades();
   // The tab is hidden until the Finals conclude; the server decides that, so
   // this asks rather than inferring it from the schedule.
@@ -2191,6 +2196,11 @@ function squadFilter(players) {
 async function renderTeamDetail() {
   const team = await squadFor(state.teamId);
   if (!team || state.teamId !== team.id) return;
+  // Held for the sub-screens, which must repaint when the club changes and
+  // must not refetch when only the tab does.
+  state.squad = team;
+  if (state.squadTab === "injuries") renderInjuries(team);
+  if (state.squadTab === "freeagents") renderTeamFreeAgents(team);
 
   const shown = squadFilter(team.players);
   if (!shown.length) {
@@ -2228,6 +2238,201 @@ async function renderTeamDetail() {
   });
 
   renderPlayer(team);
+}
+
+/* --- Team sub-screens -------------------------------------------------
+ *
+ * The left rail picks a player; these pick what you want to know about the
+ * club. Both new screens read data the squad payload already carries, so
+ * switching between them costs nothing and never refetches. */
+
+const SQUAD_SCREENS = ["squad", "injuries", "freeagents"];
+
+function setSquadTab(key) {
+  state.squadTab = SQUAD_SCREENS.includes(key) ? key : "squad";
+  $$(".squad-nav .off-tab").forEach((tab) => {
+    const active = tab.dataset.squad === state.squadTab;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  SQUAD_SCREENS.forEach((name) => {
+    const node = $(`#squad-screen-${name}`);
+    if (node) node.hidden = name !== state.squadTab;
+  });
+  const team = state.squad;
+  if (team) {
+    if (state.squadTab === "injuries") renderInjuries(team);
+    if (state.squadTab === "freeagents") renderTeamFreeAgents(team);
+  }
+}
+
+function bindSquadTabs() {
+  $$(".squad-nav .off-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setSquadTab(tab.dataset.squad));
+  });
+}
+
+/* Who is not fully fit, split into two lists rather than one.
+ *
+ * Three states matter here, and only the first two are *availability*: a major
+ * injury rules a man out, a knock is a performance cost he plays through, and
+ * heavy fatigue is a rest decision. They are separated because a single sorted
+ * table buried the one man who was actually injured under eleven tired ones --
+ * measured on the demo club, where the fatigue threshold caught 11 of 12.
+ *
+ * The tired list keeps the league's own vocabulary (`Noticeable Fatigue`
+ * upward, see docs/HEALTH.md) rather than a threshold invented for this
+ * screen, so it says the same thing the player page says. */
+const REST_WATCH_FATIGUE = 46;   // the "Noticeable Fatigue" band floor
+const KNOCK_WORTH_SHOWING = 25;
+
+function availabilityRows(team) {
+  const hurt = [];
+  const tired = [];
+  for (const player of team.players || []) {
+    const health = player.health || {};
+    if (health.injury) {
+      hurt.push({
+        player, kind: "out", rank: 0,
+        status: health.injury.name,
+        detail: `${health.injury.gamesRemaining} of `
+          + `${health.injury.gamesTotal} games remaining`,
+      });
+    } else if ((health.knock || 0) >= KNOCK_WORTH_SHOWING) {
+      hurt.push({
+        player, kind: "knock", rank: 1,
+        status: "Carrying a knock",
+        detail: `Severity ${Math.round(health.knock)} — available, but it costs him`,
+      });
+    } else if ((health.fatigue || 0) >= REST_WATCH_FATIGUE) {
+      tired.push({
+        player, kind: "tired",
+        status: health.fatigueLabel || "Tired",
+        detail: `Fatigue ${Math.round(health.fatigue)}`,
+      });
+    }
+  }
+  hurt.sort((a, b) => a.rank - b.rank);
+  tired.sort((a, b) => (b.player.health.fatigue || 0) - (a.player.health.fatigue || 0));
+  return { hurt, tired };
+}
+
+function availabilityTable(rows, team) {
+  const table = offTable([
+    ["name", "Player", "col-name"], ["pos", "Pos"], ["age", "Age"],
+    ["status", "Status"], ["detail", "Detail"], ["cond", "Condition"],
+    ["missed", "Games missed"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr", `injury-row is-${row.kind}`);
+    const name = el("td", "col-name");
+    name.appendChild(playerLink(row.player.name, row.player.id, team.id));
+    tr.appendChild(name);
+    tr.appendChild(el("td", null, row.player.pos));
+    tr.appendChild(el("td", null, String(row.player.age)));
+    const status = el("td");
+    status.appendChild(el("span", `injury-pill is-${row.kind}`, row.status));
+    tr.appendChild(status);
+    tr.appendChild(el("td", null, row.detail));
+    tr.appendChild(el("td", null, row.player.health.condition || "—"));
+    tr.appendChild(el("td", null, String(row.player.health.gamesMissed ?? 0)));
+    tbody.appendChild(tr);
+  });
+  return table;
+}
+
+function renderInjuries(team) {
+  const body = $("#squad-screen-injuries");
+  if (!body) return;
+  body.textContent = "";
+  const { hurt, tired } = availabilityRows(team);
+
+  const card = el("div", "card");
+  const head = el("div", "card-head");
+  head.appendChild(el("h2", null, "Injury Room"));
+  card.appendChild(head);
+  if (!hurt.length) {
+    card.appendChild(el("p", "note",
+      "Nobody is injured and nobody is carrying a knock."));
+  } else {
+    const out = hurt.filter((r) => r.kind === "out").length;
+    card.appendChild(el("p", "note",
+      `${out} unavailable, ${hurt.length - out} playing through something. `
+      + `A knock is a performance cost rather than an absence — he takes the `
+      + `floor, and it shows in what he does on it.`));
+    appendTable(card, availabilityTable(hurt, team));
+  }
+  body.appendChild(card);
+
+  const watch = el("div", "card");
+  const watchHead = el("div", "card-head");
+  watchHead.appendChild(el("h2", null, "Rest Watch"));
+  watch.appendChild(watchHead);
+  if (!tired.length) {
+    watch.appendChild(el("p", "note", "Everyone is inside Slightly Tired."));
+  } else {
+    watch.appendChild(el("p", "note",
+      `${tired.length} at Noticeable Fatigue or worse. Not an injury list — `
+      + `this is who the coach is weighing up resting, and he decides it on `
+      + `ability lost at tip-off rather than on this number.`));
+    appendTable(watch, availabilityTable(tired, team));
+  }
+  body.appendChild(watch);
+}
+
+/* This club's own contracts running out, with what each man would want today.
+ *
+ * The same `franchise.projected_expiring` the league-wide Offseason screen
+ * reads, scoped to one club -- so the two can never disagree about who is out
+ * of contract. */
+function renderTeamFreeAgents(team) {
+  const body = $("#squad-screen-freeagents");
+  if (!body) return;
+  body.textContent = "";
+  const card = el("div", "card");
+  const head = el("div", "card-head");
+  head.appendChild(el("h2", null, "Expected Free Agents"));
+  card.appendChild(head);
+
+  const rows = team.expectedFreeAgents || [];
+  if (!rows.length) {
+    card.appendChild(el("p", "note",
+      "Nobody at this club is in the last year of a deal."));
+    body.appendChild(card);
+    return;
+  }
+  const players = rows.filter((r) => !r.isCoach).length;
+  card.appendChild(el("p", "note",
+    `${players} player${players === 1 ? "" : "s"}`
+    + `${rows.length > players ? " and the head coach" : ""} `
+    + `reach the market when this season ends. Asking prices are what each `
+    + `would want today — a season still being played moves them, and the club `
+    + `gets first refusal before anyone else can talk to him.`));
+
+  const table = offTable([
+    ["name", "Player", "col-name"], ["pos", "Pos"], ["age", "Age"],
+    ["ovr", "OVR"], ["now", "Current"], ["ask", "Asking"], ["years", "Yrs"],
+    ["interest", "Interest in Returning"],
+  ]);
+  const tbody = table.querySelector("tbody");
+  rows.forEach((row) => {
+    const tr = el("tr");
+    const name = el("td", "col-name");
+    if (row.isCoach) name.appendChild(el("span", "player-name", row.name));
+    else name.appendChild(playerLink(row.name, row.id, team.id));
+    tr.appendChild(name);
+    tr.appendChild(el("td", null, row.position || "—"));
+    tr.appendChild(el("td", null, String(row.age ?? "—")));
+    tr.appendChild(el("td", null, row.overall != null ? String(row.overall) : "—"));
+    tr.appendChild(el("td", null, money(row.previousSalary)));
+    tr.appendChild(el("td", null, money(row.requestedSalary)));
+    tr.appendChild(el("td", null, String(row.requestedYears ?? "—")));
+    tr.appendChild(interestCell(row));
+    tbody.appendChild(tr);
+  });
+  appendTable(card, table);
+  body.appendChild(card);
 }
 
 function fact(list, term, value) {

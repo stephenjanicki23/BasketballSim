@@ -241,6 +241,14 @@ def team_squad(team, league=None) -> dict:
         if league is not None:
             row["career"] = accolades.career_totals(league, player.id)
     if league is not None:
+        # This club's own expiring contracts, from the same function the
+        # league-wide Expected Free Agents screen reads. A separate per-club
+        # version would answer the same question differently the first time
+        # either was edited.
+        expiring, coaches = franchise.projected_expiring(league, team)
+        data["expectedFreeAgents"] = [
+            free_agent_row(league, entry) for entry in expiring + coaches
+        ]
         data["gameLog"] = history.game_log(league, team.id)
         # Two shapes for one chart, because they answer different questions.
         # `advancedSeries` is this season game by game; `advancedSeasons` is the
