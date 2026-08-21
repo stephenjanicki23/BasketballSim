@@ -37,6 +37,7 @@ from .. import mvp
 from .. import portraits
 from .. import records
 from .. import scouting
+from .. import coaching
 from .. import accolades
 from .. import allstar
 from ..league import franchise, history, playoffs, power
@@ -258,6 +259,11 @@ def team_squad(team, league=None) -> dict:
         # the league has played more than one season.
         data["advancedSeries"] = history.team_advanced_series(league, team.id)
         data["advancedSeasons"] = history.team_season_series(league, team.id)
+        # The coach, read off the seasons rather than his ratings -- his record,
+        # his style, and how the years have progressed. Sits beside the roster
+        # because it belongs to the club, not to any one player.
+        if team.coach is not None:
+            data["coaching"] = coaching.career(league, team.id).to_dict()
     return data
 
 

@@ -2225,6 +2225,7 @@ async function renderTeamDetail() {
   state.squad = team;
   if (state.squadTab === "injuries") renderInjuries(team);
   if (state.squadTab === "freeagents") renderTeamFreeAgents(team);
+  if (state.squadTab === "coach") renderCoach(team);
 
   const shown = squadFilter(team.players);
   if (!shown.length) {
@@ -2270,7 +2271,7 @@ async function renderTeamDetail() {
  * club. Both new screens read data the squad payload already carries, so
  * switching between them costs nothing and never refetches. */
 
-const SQUAD_SCREENS = ["squad", "injuries", "freeagents"];
+const SQUAD_SCREENS = ["squad", "injuries", "freeagents", "coach"];
 
 function setSquadTab(key) {
   state.squadTab = SQUAD_SCREENS.includes(key) ? key : "squad";
@@ -2287,6 +2288,7 @@ function setSquadTab(key) {
   if (team) {
     if (state.squadTab === "injuries") renderInjuries(team);
     if (state.squadTab === "freeagents") renderTeamFreeAgents(team);
+    if (state.squadTab === "coach") renderCoach(team);
   }
 }
 
@@ -2410,6 +2412,168 @@ function renderInjuries(team) {
  * The same `franchise.projected_expiring` the league-wide Offseason screen
  * reads, scoped to one club -- so the two can never disagree about who is out
  * of contract. */
+/* --- The coach ---------------------------------------------------------
+ *
+ * Read off the seasons, not the ratings. Identity, a style-and-record summary,
+ * a shelf of what he has won, the five style axes as league-relative bars, and
+ * the season-by-season progression that is the point of the page: how the
+ * years have gone under him. Nothing here comes from a coaching rating. */
+
+const COACH_STYLE_BARS = [
+  ["pace", "Pace", "Deliberate", "Fast"],
+  ["perimeter", "Shot profile", "Inside", "Perimeter"],
+  ["ball_movement", "Ball movement", "Iso", "Shares it"],
+  ["defense", "Defence", "Leaky", "Stingy"],
+  ["offensive_glass", "Off. glass", "Gets back", "Crashes"],
+];
+
+const COACH_FINISH_CLASS = {
+  Champions: "is-champion",
+  Finals: "is-finals",
+  Playoffs: "is-playoffs",
+  Missed: "is-missed",
+  "In progress": "is-live",
+};
+
+function renderCoach(team) {
+  const body = $("#squad-screen-coach");
+  if (!body) return;
+  body.textContent = "";
+
+  const coach = team.coach;
+  if (!coach) {
+    body.appendChild(el("p", "note", "This club has no head coach."));
+    return;
+  }
+  const data = team.coaching || null;
+
+  const card = el("div", "card coach-card");
+
+  // Identity. Portrait would be a fabrication -- coaches have no generated
+  // face -- so this leads with the name and the plain facts.
+  const head = el("header", "coach-head");
+  const id = el("div", "coach-id");
+  id.appendChild(el("h2", null, coach.name));
+  const facts = [coach.nationality];
+  if (coach.age) facts.push(`age ${coach.age}`);
+  id.appendChild(el("p", "coach-facts", facts.filter(Boolean).join(" · ")));
+  head.appendChild(id);
+  card.appendChild(head);
+
+  if (!data || !(data.seasons || []).length) {
+    card.appendChild(el("p", "note",
+      "No seasons on record at this club yet. A coach's page is his results, "
+      + "and there are none to show until a season has been played."));
+    body.appendChild(card);
+    return;
+  }
+
+  if (data.summary) card.appendChild(el("p", "coach-summary", data.summary));
+  card.appendChild(coachHonours(data.honours || []));
+  card.appendChild(coachRecordStrip(data.record || {}));
+  card.appendChild(coachStyle(data.style || {}));
+  card.appendChild(coachSeasons(data.seasons || []));
+  body.appendChild(card);
+}
+
+function coachHonours(honours) {
+  const wrap = el("div", "coach-honours");
+  if (!honours.length) {
+    wrap.appendChild(el("span", "coach-honour is-empty", "No titles yet"));
+    return wrap;
+  }
+  honours.forEach((h) => {
+    const chip = el("span", `coach-honour honour-${h.id}`);
+    chip.appendChild(el("span", "coach-honour-count",
+      h.count > 1 ? `${h.count}×` : "★"));
+    chip.appendChild(el("span", "coach-honour-label", h.label));
+    wrap.appendChild(chip);
+  });
+  return wrap;
+}
+
+function coachRecordStrip(record) {
+  const strip = el("div", "coach-record");
+  const pct = record.winPct != null
+    ? `.${String(Math.round(record.winPct * 1000)).padStart(3, "0")}` : "—";
+  const cells = [
+    [`${record.wins ?? 0}–${record.losses ?? 0}`, "Record"],
+    [pct, "Win %"],
+    [record.seasons ?? 0, record.seasons === 1 ? "Season" : "Seasons"],
+    [record.playoffAppearances ?? 0, "Playoffs"],
+    [record.championships ?? 0, "Titles"],
+  ];
+  cells.forEach(([value, label]) => {
+    const cell = el("div", "coach-record-cell");
+    cell.appendChild(el("span", "coach-record-value", String(value)));
+    cell.appendChild(el("span", "coach-record-label", label));
+    strip.appendChild(cell);
+  });
+  return strip;
+}
+
+function coachStyle(style) {
+  const wrap = el("section", "coach-style");
+  wrap.appendChild(el("h3", null, "Style"));
+  wrap.appendChild(el("p", "note",
+    "How his teams have actually played, measured against the league of their "
+    + "season — not a rating."));
+  COACH_STYLE_BARS.forEach(([key, label, low, high]) => {
+    // A z-score, roughly -2.5..+2.5, drawn from a centre line so the bar grows
+    // left for one identity and right for the other. Neither end is "better";
+    // they are two ways to play.
+    const z = Math.max(-2.5, Math.min(2.5, style[key] || 0));
+    const row = el("div", "coach-axis");
+    row.appendChild(el("span", "coach-axis-label", label));
+    const track = el("span", "coach-axis-track");
+    const fill = el("span", z >= 0 ? "coach-axis-fill is-high" : "coach-axis-fill is-low");
+    fill.style.width = `${(Math.abs(z) / 2.5) * 50}%`;
+    track.appendChild(fill);
+    row.appendChild(track);
+    const pole = el("span", "coach-axis-pole", z >= 0 ? high : low);
+    row.appendChild(pole);
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+function coachSeasons(seasons) {
+  const wrap = el("section", "coach-seasons");
+  wrap.appendChild(el("h3", null, "Season by season"));
+  const table = el("table", "coach-season-table");
+  const head = el("tr");
+  ["Season", "W", "L", "Win %", "Conf", "Result"].forEach(
+    (h) => head.appendChild(el("th", null, h)));
+  table.appendChild(el("thead")).appendChild(head);
+  const tbody = el("tbody");
+  // Newest first: the most recent season is what a reader looks for.
+  [...seasons].reverse().forEach((row) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", "coach-season-name", row.season));
+    tr.appendChild(el("td", "num", String(row.wins)));
+    tr.appendChild(el("td", "num", String(row.losses)));
+    // games is a derived property that never leaves Python, so read it off
+    // the two counts that do -- row.games would be undefined and every Win %
+    // fell through to a dash.
+    const played = (row.wins || 0) + (row.losses || 0);
+    const pct = played
+      ? `.${String(Math.round(row.winPct * 1000)).padStart(3, "0")}` : "—";
+    tr.appendChild(el("td", "num", pct));
+    tr.appendChild(el("td", "num", row.conferenceRank <= 15
+      ? `#${row.conferenceRank}` : "—"));
+    const result = el("td");
+    result.appendChild(el("span",
+      `coach-finish ${COACH_FINISH_CLASS[row.finish] || ""}`, row.finish));
+    tr.appendChild(result);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  const scroll = el("div", "table-scroll");
+  scroll.appendChild(table);
+  wrap.appendChild(scroll);
+  return wrap;
+}
+
 function renderTeamFreeAgents(team) {
   const body = $("#squad-screen-freeagents");
   if (!body) return;
