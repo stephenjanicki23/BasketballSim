@@ -437,3 +437,46 @@ class TestTheFixturesStaySeparate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestItWaitsForASeasonToVoteOn(unittest.TestCase):
+    """`offseason.reschedule` clears `league.stats` when it installs a new
+    calendar, so the opening days of every season have an empty ballot -- and a
+    date set to "next Wednesday" can land inside them. Playing then would field
+    two sides of nobody and mark that season's game *played*, freezing a broken
+    result forever."""
+
+    def _opening_night(self) -> League:
+        saved = load_teams()
+        league = League(name=saved.name, season=saved.season)
+        for team in saved.teams:
+            league.add_team(team)
+        league.set_schedule(build_daily_schedule(
+            [t.id for t in saved.teams], start_date=date(2026, 10, 20),
+            games_per_team=4, season=league.season))
+        return league
+
+    def test_it_declines_and_pushes_the_date_a_week(self):
+        league = self._opening_night()
+        game = allstar.state(league)
+        first = game.tipoff_at
+        league.clock.jump_to(first + timedelta(hours=2))
+
+        self.assertIsNone(allstar.run(league))
+        self.assertFalse(game.played)
+        self.assertGreater(game.tipoff_at, league.clock.now())
+        self.assertEqual(game.tipoff_at.weekday(), allstar.GAME_WEEKDAY)
+
+    def test_a_clock_jumped_months_forward_still_lands_ahead(self):
+        league = self._opening_night()
+        game = allstar.state(league)
+        league.clock.jump_to(game.tipoff_at + timedelta(days=200))
+
+        self.assertIsNone(allstar.run(league))
+        self.assertGreater(game.tipoff_at, league.clock.now())
+
+    def test_play_refuses_rather_than_fielding_nobody(self):
+        league = self._opening_night()
+        with self.assertRaises(ValueError):
+            allstar.play(league)
+        self.assertFalse(allstar.state(league).played)

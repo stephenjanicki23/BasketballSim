@@ -501,6 +501,12 @@ def play(league) -> AllStarGame:
         return game
 
     sides = select(league)
+    if any(len(side.roster) < ROSTER_SIZE for side in sides.values()):
+        # Callers reach `play` directly in tests and tools; `run` guards this
+        # already. Refusing here rather than fielding a side of nobody keeps
+        # the invariant in one place that cannot be bypassed.
+        raise ValueError("not enough eligible players to fill both sides")
+
     order = list(CONFERENCES)
     # Which conference is nominally at home alternates by season. The floor is
     # neutral but `possession.HOME_SHOOTING_EDGE` does not know that, and a
@@ -590,14 +596,32 @@ def _lines(box, side, clubs: dict[str, str]) -> list[dict]:
 
 
 def run(league) -> AllStarGame | None:
-    """The tick hook. Declines unless the league has reached tip-off.
+    """The tick hook. Declines unless the league has reached tip-off *and* has
+    a season to vote on.
 
     Same shape as `playoffs.advance` and `trade_market.run`: called on every
     tick, costs one comparison, and does something only when it is owed.
+
+    The second condition is not defensive padding. `offseason.reschedule`
+    clears `league.stats` when it installs a new calendar, so the first days of
+    every season after this one have an empty ballot -- and a date set to "next
+    Wednesday" can easily land inside them. Playing then would field two sides
+    of nobody and, far worse, would mark that season's game *played*, freezing
+    a broken result forever. So it waits a week and asks again, which is also
+    what a league would do.
     """
     game = state(league)
     if game.played or game.tipoff_at is None:
         return None
-    if league.clock.now() < game.tipoff_at:
+    now = league.clock.now()
+    if now < game.tipoff_at:
+        return None
+
+    sides = select(league)
+    if any(len(side.roster) < ROSTER_SIZE for side in sides.values()):
+        # Push it a week at a time until the season has caught up. Looping
+        # rather than adding one week handles a clock jumped months forward.
+        while game.tipoff_at <= now:
+            game.tipoff_at = next_wednesday(game.tipoff_at)
         return None
     return play(league)

@@ -132,6 +132,25 @@ The tactics are set to describe an occasion rather than a game plan — fast,
 generous and barely defended — which is the only place in the project that
 happens. A 96–91 All-Star Game would read as a bug.
 
+### Two ways it would have gone quietly wrong
+
+Neither would have raised anything.
+
+**The date was not saved.** `dump_allstar` first wrote only games that had been
+*played*, which reads as the obvious filter. But a scheduled game is a date and
+nothing else, so skipping it meant the date was recomputed from "next
+Wednesday" on every boot — and on a host that restarts a few times a week, it
+slides forward a week each time and the game never arrives. Anything with a
+tipoff is written now.
+
+**Opening night has an empty ballot.** `offseason.reschedule` clears
+`league.stats` when it installs a new calendar, so the first days of every
+season after this one have nobody eligible — and a date set to "next Wednesday"
+can land inside them. Playing then would have fielded two sides of nobody and,
+far worse, marked that season's game *played*, freezing a broken result
+forever. `run` now waits a week and asks again, which is also what a league
+would do, and `play` refuses outright rather than trusting its caller.
+
 ---
 
 ## 5. What it is worth
@@ -158,7 +177,7 @@ these two are the exception.
 | `GET /api/allstar` | not in the bootstrap: it changes on every request |
 | `data/allstar.json` | the stored history, keyed by season |
 | Stats → All-Star | the screen |
-| `tests/test_allstar.py` | 30 tests |
+| `tests/test_allstar.py` | 34 tests |
 
 ### A note on the fixtures
 
