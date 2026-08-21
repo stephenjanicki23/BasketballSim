@@ -52,6 +52,13 @@ window.BBALL_SOURCE = {
     return this._data.records || null;
   },
 
+  /* The All-Star vote as it stood when the demo was exported. Frozen, unlike
+   * the live one -- a static export has no season still moving underneath it,
+   * and the screen says so. */
+  async allstar() {
+    return this._data.allstar || null;
+  },
+
   /* A published page is one frozen moment, so there is no market activity to
    * show and nothing to veto. Returning null keeps the screen honest about
    * that rather than rendering an empty board. */

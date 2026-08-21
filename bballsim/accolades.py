@@ -23,12 +23,20 @@ A separate "historical MVP" formula would have been a second opinion wearing
 the same name, and it would have disagreed with the live tab the first time a
 voter was edited.
 
-**What is deliberately absent.** There is no All-Star game, no Defensive Player
-of the Year, no Rookie of the Year and no Finals MVP, because none of those
-mechanisms exist in the simulation -- and an award handed out by a formula
-nobody can see is not an award, it is a label. All-League selections *are*
-derived, because they are exactly "the panel's top five", which the panel
-really does produce.
+**All-Star selections are the one honour here that is read rather than
+recomputed**, and the exception proves the rule. Everything else on this page
+is answerable from the archives forever: who won the title is who won the
+title. A vote is not like that -- it closes at tip-off, and the standing it
+closed on stops existing the moment the season moves past it. Re-deriving the
+2027-28 side from 2031-32 would name a different twelve, so `allstar.py` writes
+the roster down and this module reads it back. See its docstring for the
+argument in full.
+
+**What is deliberately absent.** There is no Defensive Player of the Year, no
+Rookie of the Year and no Finals MVP, because none of those mechanisms exist in
+the simulation -- and an award handed out by a formula nobody can see is not an
+award, it is a label. All-League selections *are* derived, because they are
+exactly "the panel's top five", which the panel really does produce.
 
 Postseason honours stop at the team. `SeasonStats` does not separate playoff
 games from regular-season ones, so "averaged 30 in the Finals" is not a
@@ -245,7 +253,12 @@ def _league_honours(league) -> dict[str, dict]:
     signature = (len(getattr(league, "history", []) or []),
                  getattr(league, "season", ""),
                  sum(line.games for line in league.stats.players.values())
-                 if getattr(league, "stats", None) else 0)
+                 if getattr(league, "stats", None) else 0,
+                 # An All-Star Game being played adds honours without adding a
+                 # game to anyone's totals, so it has to be in the signature or
+                 # the shelf would not change until the next tip-off.
+                 sum(1 for g in (getattr(league, "allstar", None) or {}).values()
+                     if g.played))
     cached = getattr(league, "_accolades_cache", None)
     if cached is not None and cached[0] == signature:
         return cached[1]
@@ -254,7 +267,9 @@ def _league_honours(league) -> dict[str, dict]:
 
     def bucket(pid: str) -> dict:
         return out.setdefault(pid, {"rings": [], "finals": [], "mvp": [],
-                                    "all_league": [], "titles": {}})
+                                    "all_league": [], "titles": {},
+                                    "all_star": [], "all_star_start": [],
+                                    "all_star_mvp": []})
 
     for season in seasons_of(league):
         won, lost = _champions(season)
@@ -272,6 +287,22 @@ def _league_honours(league) -> dict[str, dict]:
 
         for key, pid in _titles(season).items():
             bucket(pid)["titles"].setdefault(key, []).append(season.label)
+
+    # All-Star sides, read from what was stored rather than re-voted. Only a
+    # game that has been played has a roster: until tip-off there is a vote and
+    # nobody is an All-Star yet, which is what makes the run-up a race.
+    for game in sorted((getattr(league, "allstar", None) or {}).values(),
+                       key=lambda g: g.season):
+        if not game.played:
+            continue
+        for rows in game.rosters.values():
+            for row in rows:
+                entry = bucket(row["playerId"])
+                entry["all_star"].append(game.season)
+                if row.get("starter"):
+                    entry["all_star_start"].append(game.season)
+        if game.mvp_id:
+            bucket(game.mvp_id)["all_star_mvp"].append(game.season)
 
     for pid, labels in _record_holders(league).items():
         bucket(pid)["records"] = labels
@@ -328,6 +359,19 @@ def for_player(league, player) -> list[dict]:
     if selections:
         out.append(Accolade("all_league", "All-League Team", "star", selections,
                             detail=", ".join(selections)))
+
+    all_star = honours.get("all_star") or []
+    if all_star:
+        starts = honours.get("all_star_start") or []
+        detail = ", ".join(all_star)
+        if starts:
+            detail += f" -- started {len(starts)}"
+        out.append(Accolade("all_star", "All-Star", "allstar", all_star,
+                            detail=detail))
+    game_mvp = honours.get("all_star_mvp") or []
+    if game_mvp:
+        out.append(Accolade("all_star_mvp", "All-Star Game MVP", "allstar_mvp",
+                            game_mvp, detail=", ".join(game_mvp)))
 
     for key, label, _stat in TITLES:
         seasons = (honours.get("titles") or {}).get(key) or []

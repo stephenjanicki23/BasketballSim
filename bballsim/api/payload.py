@@ -37,6 +37,7 @@ from .. import mvp
 from .. import portraits
 from .. import records
 from .. import accolades
+from .. import allstar
 from ..league import franchise, history, playoffs, power
 from ..league.advanced import ADVANCED_COLUMNS, advanced_table
 from ..news import write_stories
@@ -665,6 +666,67 @@ def records_view(league) -> dict:
                     mark["teamName"] = full.get(mark["teamId"], "")
                     mark["opponentAbbr"] = clubs.get(mark["opponentId"], "")
     return data
+
+
+# How many names the vote leaderboard carries per conference. The eligible
+# pool is around 180 a side; this is a leaderboard, not a census.
+VOTE_BOARD_DEPTH = 25
+
+
+def allstar_view(league) -> dict:
+    """The All-Star screen: the vote, the sides, and the game if it is played.
+
+    Two states in one shape, because they are two stages of one thing. Before
+    tip-off `standings` is the live count and `sides` is who would go if voting
+    closed now -- both recomputed on every request, which is what makes the
+    run-up worth watching. After tip-off both are read from what was stored,
+    and the projection is gone: there is nothing left to project.
+
+    Club names are filled in here for the same reason `records_view` fills them
+    in -- `allstar.py` writes ids to disk and a club can be renamed.
+    """
+    game = allstar.state(league)
+    clubs = {tid: team.abbreviation for tid, team in league.teams.items()}
+    full = {tid: team.full_name for tid, team in league.teams.items()}
+
+    def name(rows):
+        for row in rows:
+            row["teamAbbr"] = clubs.get(row.get("teamId", ""), "")
+            row["teamName"] = full.get(row.get("teamId", ""), "")
+        return rows
+
+    view = game.to_dict()
+    view["conferences"] = list(CONFERENCES)
+    view["rosterSize"] = allstar.ROSTER_SIZE
+    view["minimumGames"] = allstar._minimum_games(league)
+    view["weights"] = dict(allstar.WEIGHTS)
+    # The league's clock, not the reader's. The sim runs on its own date, and a
+    # countdown measured against the browser said "in 76 days" for a game six
+    # weeks away.
+    view["now"] = league.clock.now().isoformat()
+
+    if game.played:
+        view["rosters"] = {k: name([dict(r) for r in v])
+                           for k, v in game.rosters.items()}
+        view["box"] = {k: list(v) for k, v in (game.box or {}).items()}
+        view["standings"] = {}
+        return view
+
+    # Still open. The board is capped: a conference has around 180 eligible
+    # players and the screen is a leaderboard, not a census.
+    counts = allstar.tally(league)
+    picked = allstar.select(league)
+    view["standings"] = {
+        conf: name([v.to_dict() for v in votes[:VOTE_BOARD_DEPTH]])
+        for conf, votes in counts.items()
+    }
+    view["rosters"] = {
+        conf: name([dict(v.to_dict(), starter=v in sel.starters)
+                    for v in sel.roster])
+        for conf, sel in picked.items()
+    }
+    view["eligible"] = {conf: len(votes) for conf, votes in counts.items()}
+    return view
 
 
 def offseason_preview(league) -> dict:

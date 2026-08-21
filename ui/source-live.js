@@ -55,6 +55,18 @@ window.BBALL_SOURCE = {
     }
   },
 
+  /* The All-Star vote and game. Never cached by the caller: until tip-off
+   * the standing is recomputed from the season on every request, so a copy
+   * held from one page view would show a race that had stopped moving. */
+  async allstar() {
+    try {
+      return await getJSON("/api/allstar");
+    } catch (error) {
+      console.warn("all-star fetch failed", error);
+      return null;
+    }
+  },
+
   /* The Trade Block. Everything in it has already happened -- the market runs
    * itself inside the league tick. */
   async market() {

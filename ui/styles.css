@@ -2325,7 +2325,155 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
 .pill-buyer { background: color-mix(in srgb, var(--live) 18%, transparent); color: var(--live); }
 .pill-seller { background: color-mix(in srgb, var(--home) 20%, transparent); color: var(--home); }
 
+/* --- The All-Star Game ------------------------------------------------
+ *
+ * One page for two stages. Before tip-off the emphasis is on the count and
+ * what it weighs; after it, on the score. The layout is the same either way
+ * so the page does not appear to become a different screen overnight. */
+
+.allstar-page { display: grid; gap: 22px; padding-top: 4px; }
+.allstar-page > .note { margin: 0; max-width: 86ch; line-height: 1.6; }
+.allstar-head { display: grid; gap: 10px; }
+.allstar-head h3 { margin: 0; font: 600 17px/1.2 var(--sans); }
+.allstar-when {
+  margin: 0;
+  font: 600 12px/1.4 var(--mono);
+  letter-spacing: .04em;
+  color: var(--accent);
+}
+.allstar-head .note { margin: 0; max-width: 76ch; line-height: 1.6; }
+
+/* What the vote weighs, printed rather than implied. */
+.allstar-weights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.allstar-weights li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 11px;
+}
+.allstar-weight-value { font: 600 10px/1 var(--mono); color: var(--accent); }
+
+.allstar-score {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.allstar-side {
+  display: grid;
+  gap: 2px;
+  min-width: 120px;
+  padding: 10px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.allstar-side.is-winner { border-color: var(--accent); }
+.allstar-side-name {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.allstar-side-score { font: 600 26px/1 var(--sans); }
+.allstar-side.is-winner .allstar-side-score { color: var(--accent); }
+
+.allstar-mvp {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.allstar-mvp svg { width: 16px; height: 16px; fill: var(--accent); }
+.allstar-mvp-label {
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.allstar-mvp-name { font: 600 14px/1.2 var(--sans); }
+.allstar-mvp-line { font-size: 12px; color: var(--muted); }
+
+.allstar-toggle { display: inline-flex; }
+.allstar-group { display: grid; gap: 10px; }
+.allstar-group h4 { margin: 0; font: 600 15px/1.3 var(--sans); }
+.allstar-group .note { margin: 0; max-width: 76ch; line-height: 1.6; }
+
+.allstar-roster { display: grid; gap: 8px; }
+.allstar-roster-head {
+  margin: 6px 0 0;
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.allstar-roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.allstar-player {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.allstar-player.is-starter { border-color: var(--accent); }
+.allstar-player-icon { display: inline-flex; width: 16px; height: 16px; color: var(--muted); }
+.allstar-player.is-starter .allstar-player-icon { color: var(--accent); }
+.allstar-player-icon svg { width: 100%; height: 100%; fill: currentColor; }
+.allstar-player-who { display: grid; gap: 1px; min-width: 0; }
+.allstar-player-club { font: 500 10px/1.4 var(--mono); color: var(--muted); }
+.allstar-player-line { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+.allstar-board { width: 100%; border-collapse: collapse; font-size: 12px; }
+.allstar-board th {
+  text-align: left;
+  padding: 6px 10px;
+  font: 600 9px/1.6 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.allstar-board td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.allstar-board td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.allstar-rank { color: var(--muted); font: 600 10px/1 var(--mono); }
+/* The slack in a wide table has to go somewhere. Put it here, so the name
+ * stays beside its position and club and the rating stays beside its votes,
+ * rather than spreading every column evenly across 1400px. */
+.allstar-line { color: var(--muted); width: 100%; }
+.allstar-board td.allstar-name { width: 100%; }
+
 @media (max-width: 720px) {
   .trade-sides { grid-template-columns: 1fr; }
   .veto-btn { width: 100%; margin-left: 0; }
+  /* The per-game line is the first thing to go: it is a convenience, and the
+     name, club and share are what the row is for. */
+  .allstar-player-line { display: none; }
+  .allstar-player { grid-template-columns: 18px 1fr; }
 }

@@ -241,6 +241,11 @@ const state = {
   // two, because "not loaded" and "no records exist" must not read alike.
   records: null,
   recordsHalf: "game",
+  // Same three-state shape as `records`: null is "not fetched", "missing" is
+  // "this payload has none", an object is the thing. Never held across a view
+  // change while voting is open -- see `loadAllStar`.
+  allstar: null,
+  allstarConference: null,
   // Which Teams sub-screen is open, and the squad it is showing. The squad is
   // held so a sub-screen can re-render on a tab click without refetching.
   squadTab: "squad",
@@ -708,6 +713,11 @@ const ACCOLADE_ICONS = {
   rebounding_title: '<path d="M3 3h18v10H3zm2 2v6h14V5zM8 13h8v2a4 4 0 0 1-8 0zm2 2a2 2 0 0 0 4 0z"/>',
   // Assists title — one arrow feeding another.
   assists_title: '<path d="M3 11h9V8l6 4-6 4v-3H3zM19 4h2v16h-2z"/>',
+  // All-Star — a star inside a ring, the shape a ballot logo takes.
+  allstar: '<path d="M12 1a11 11 0 1 1 0 22 11 11 0 0 1 0-22zm0 2.2a8.8 8.8 0 1 0 0 17.6 8.8 8.8 0 0 0 0-17.6zm0 1.9l2.1 4.4 4.8.6-3.5 3.3.9 4.8-4.3-2.3-4.3 2.3.9-4.8L5.1 9.1l4.8-.6z"/>',
+  // All-Star Game MVP — the same star, wearing the crown.
+  allstar_mvp: '<path d="M3 3.2l3.6 2.8L10 1.6l2 3.4 2-3.4 3.4 4.4L21 3.2 19.5 9h-15zM4.9 10.4h14.2l-.5 1.9H5.4z"/>'
+    + '<path d="M12 13l1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z"/>',
 };
 
 function accoladeIcon(name) {
@@ -1464,15 +1474,18 @@ function renderStats() {
   // filling it. Everything below this point assumes columns and rows.
   const isMvp = state.statsScope === "mvp";
   const isRecords = state.statsScope === "records";
-  const isGrid = !isMvp && !isRecords;
+  const isAllStar = state.statsScope === "allstar";
+  const isGrid = !isMvp && !isRecords && !isAllStar;
   const sheet = $("#stats-sheet");
   const page = $("#mvp-page");
   const records = $("#records-page");
+  const allstar = $("#allstar-page");
   const tabs = $("#stat-tabs");
   const note = $("#stats-note");
   if (sheet) sheet.hidden = !isGrid;
   if (page) page.hidden = !isMvp;
   if (records) records.hidden = !isRecords;
+  if (allstar) allstar.hidden = !isAllStar;
   if (tabs) tabs.hidden = !isGrid;
   if (note) note.hidden = !isGrid;
   $$("#stats-scope button").forEach((button) => {
@@ -1486,6 +1499,15 @@ function renderStats() {
   if (isRecords) {
     $("#stats-caption").textContent = "";
     renderRecords();
+    return;
+  }
+  if (isAllStar) {
+    $("#stats-caption").textContent = "";
+    // Always refetched, never repainted from what is in hand: while voting is
+    // open the board moves every time a game finalises, and a screen showing
+    // last visit's count is showing a race that has stopped.
+    state.allstar = null;
+    renderAllStar();
     return;
   }
 
@@ -4360,6 +4382,292 @@ function renderRecords() {
   const half = data[state.recordsHalf] || {};
   recordGroup(page, "Players", half.players || []);
   recordGroup(page, "Teams", half.teams || []);
+}
+
+/* --- The All-Star Game -----------------------------------------------
+ *
+ * One screen, two stages. Until tip-off it is a race: a leaderboard per
+ * conference, recomputed from the season on every request, and the twelve each
+ * side would send if voting closed now. After tip-off it is a result, read
+ * from what was stored.
+ *
+ * The page states outright what the vote is counting. There are no fans in
+ * this simulation, so there is no fan ballot -- what decides it is performance,
+ * and a screen that hid the formula behind the word "votes" would be dressing
+ * an arithmetic up as a public. The weights are printed.
+ */
+
+const VOTE_PART_LABELS = {
+  scoring: "Scoring",
+  all_round: "All-round",
+  efficiency: "Efficiency",
+  impact: "Impact",
+  team: "Team record",
+  availability: "Availability",
+};
+
+function renderAllStar() {
+  const page = $("#allstar-page");
+  if (!page) return;
+  page.textContent = "";
+
+  if (!state.allstar) {
+    page.appendChild(el("p", "empty", "Loading the All-Star ballot…"));
+    loadAllStar();
+    return;
+  }
+  if (state.allstar === "missing") {
+    page.appendChild(el("p", "empty", "No All-Star Game in this payload."));
+    return;
+  }
+
+  const data = state.allstar;
+  const conferences = data.conferences || [];
+  if (!state.allstarConference || !conferences.includes(state.allstarConference)) {
+    state.allstarConference = conferences[0] || null;
+  }
+
+  page.appendChild(allStarHeader(data));
+  if (data.played) {
+    allStarResult(page, data);
+    return;
+  }
+  allStarBallot(page, data);
+}
+
+async function loadAllStar() {
+  if (!state.source.allstar) { state.allstar = "missing"; renderAllStar(); return; }
+  try {
+    state.allstar = (await state.source.allstar()) || "missing";
+  } catch (error) {
+    console.warn("could not load the All-Star ballot", error);
+    state.allstar = "missing";
+  }
+  if (state.view === "stats" && state.statsScope === "allstar") renderAllStar();
+}
+
+function allStarHeader(data) {
+  const head = el("header", "allstar-head");
+  head.appendChild(el("h3", null, `${data.season} All-Star Game`));
+
+  if (data.played) {
+    const score = el("div", "allstar-score");
+    [[data.awayConference, data.awayScore], [data.homeConference, data.homeScore]]
+      .forEach(([conference, points], index) => {
+        const won = index === 0
+          ? data.awayScore > data.homeScore
+          : data.homeScore > data.awayScore;
+        const side = el("div", won ? "allstar-side is-winner" : "allstar-side");
+        side.appendChild(el("span", "allstar-side-name", conference));
+        side.appendChild(el("span", "allstar-side-score", String(points)));
+        score.appendChild(side);
+      });
+    head.appendChild(score);
+    if (data.mvpName) {
+      const mvp = el("p", "allstar-mvp");
+      mvp.innerHTML = accoladeIcon("allstar_mvp");
+      mvp.appendChild(el("span", "allstar-mvp-label", "Game MVP"));
+      mvp.appendChild(el("span", "allstar-mvp-name", data.mvpName));
+      mvp.appendChild(el("span", "allstar-mvp-line", data.mvpLine || ""));
+      head.appendChild(mvp);
+    }
+    return head;
+  }
+
+  head.appendChild(el("p", "allstar-when", tipoffLabel(data.tipoffAt, data.now)));
+  head.appendChild(el("p", "note",
+    "Voting is open and the count moves with the season — every game played "
+    + "changes it. There are no fans in this league, so there is no fan "
+    + "ballot: what this counts is what the players have done."));
+
+  const weights = el("ul", "allstar-weights");
+  Object.entries(data.weights || {})
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([key, weight]) => {
+      const item = el("li");
+      item.appendChild(el("span", "allstar-weight-name",
+        VOTE_PART_LABELS[key] || key));
+      item.appendChild(el("span", "allstar-weight-value",
+        `${Math.round(weight * 100)}%`));
+      weights.appendChild(item);
+    });
+  head.appendChild(weights);
+  if (data.minimumGames) {
+    head.appendChild(el("p", "note",
+      `A player needs ${data.minimumGames} games played to appear on the `
+      + `ballot.`));
+  }
+  return head;
+}
+
+/* "Wednesday 4 November, 8:00 pm — in 6 days". The relative half is what the
+ * reader actually wants; the absolute half is what they need to plan around. */
+function tipoffLabel(iso, nowIso) {
+  if (!iso) return "";
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return "";
+  const stamp = when.toLocaleString(undefined, {
+    weekday: "long", day: "numeric", month: "long",
+    hour: "numeric", minute: "2-digit",
+  });
+  // Counted from the *league's* clock. The sim keeps its own date and the two
+  // can be months apart, which turned a game six days out into "in 76 days".
+  const now = nowIso ? new Date(nowIso) : new Date();
+  const from = Number.isNaN(now.getTime()) ? Date.now() : now.getTime();
+  const days = Math.ceil((when.getTime() - from) / 86400000);
+  if (days > 1) return `Tips off ${stamp} — in ${days} days`;
+  if (days === 1) return `Tips off ${stamp} — tomorrow`;
+  if (days === 0) return `Tips off ${stamp} — today`;
+  return `Tips off ${stamp}`;
+}
+
+function allStarConferenceTabs(data, onPick) {
+  const toggle = el("div", "scope-toggle allstar-toggle");
+  (data.conferences || []).forEach((conference) => {
+    const button = el("button",
+      conference === state.allstarConference ? "is-active" : null, conference);
+    button.addEventListener("click", () => {
+      state.allstarConference = conference;
+      onPick();
+    });
+    toggle.appendChild(button);
+  });
+  return toggle;
+}
+
+function allStarBallot(page, data) {
+  page.appendChild(allStarConferenceTabs(data, renderAllStar));
+  const conference = state.allstarConference;
+  const roster = (data.rosters || {})[conference] || [];
+  const board = (data.standings || {})[conference] || [];
+
+  const projected = el("section", "allstar-group");
+  projected.appendChild(el("h4", null, "If voting closed now"));
+  projected.appendChild(el("p", "note",
+    `The ${data.rosterSize} ${conference} would send. Nobody is an All-Star `
+    + `until tip-off — this is a projection, and it moves.`));
+  projected.appendChild(allStarRoster(roster));
+  page.appendChild(projected);
+
+  const race = el("section", "allstar-group");
+  race.appendChild(el("h4", null, "The vote"));
+  if ((data.eligible || {})[conference]) {
+    race.appendChild(el("p", "note",
+      `${data.eligible[conference]} eligible in the ${conference}; top `
+      + `${board.length} shown.`));
+  }
+  race.appendChild(allStarBoard(board));
+  page.appendChild(race);
+}
+
+function allStarRoster(rows) {
+  const wrap = el("div", "allstar-roster");
+  if (!rows.length) {
+    wrap.appendChild(el("p", "note", "Nobody qualifies yet."));
+    return wrap;
+  }
+  [["Starters", true], ["Reserves", false]].forEach(([label, starting]) => {
+    const group = rows.filter((row) => Boolean(row.starter) === starting);
+    if (!group.length) return;
+    wrap.appendChild(el("h5", "allstar-roster-head", label));
+    const list = el("ul", "allstar-roster-list");
+    group.forEach((row) => list.appendChild(allStarPlayerRow(row, starting)));
+    wrap.appendChild(list);
+  });
+  return wrap;
+}
+
+function allStarPlayerRow(row, starting) {
+  const item = el("li", starting ? "allstar-player is-starter" : "allstar-player");
+  const badge = el("span", "allstar-player-icon");
+  badge.innerHTML = accoladeIcon("allstar");
+  item.appendChild(badge);
+  const who = el("span", "allstar-player-who");
+  who.appendChild(playerLink(row.name, row.playerId, row.teamId));
+  who.appendChild(el("span", "allstar-player-club",
+    `${row.position} · ${row.teamAbbr || row.teamId}`));
+  item.appendChild(who);
+  item.appendChild(el("span", "allstar-player-line", row.line || ""));
+  return item;
+}
+
+function allStarBoard(rows) {
+  const wrap = el("div", "table-scroll");
+  if (!rows.length) {
+    wrap.appendChild(el("p", "note", "Nobody qualifies yet."));
+    return wrap;
+  }
+  const table = el("table", "allstar-board");
+  const head = el("tr");
+  ["#", "Player", "Pos", "Club", "GP", "Per game", "Rating", "Votes"]
+    .forEach((label) => head.appendChild(el("th", null, label)));
+  table.appendChild(el("thead")).appendChild(head);
+
+  const body = el("tbody");
+  rows.forEach((row, index) => {
+    const line = el("tr");
+    line.appendChild(el("td", "allstar-rank", String(index + 1)));
+    const who = el("td");
+    who.appendChild(playerLink(row.name, row.playerId, row.teamId));
+    line.appendChild(who);
+    line.appendChild(el("td", null, row.position || ""));
+    line.appendChild(el("td", null, row.teamAbbr || row.teamId || ""));
+    line.appendChild(el("td", "num", String(row.games)));
+    line.appendChild(el("td", "allstar-line", row.line || ""));
+    line.appendChild(el("td", "num", String(Math.round(row.score * 100))));
+    line.appendChild(el("td", "num", (row.votes || 0).toLocaleString()));
+    // The parts that produced the share, so a reader who disagrees with the
+    // order can see exactly which column did it.
+    line.title = Object.entries(row.parts || {})
+      .map(([key, value]) =>
+        `${VOTE_PART_LABELS[key] || key} ${Math.round(value * 100)}`)
+      .join(" · ");
+    body.appendChild(line);
+  });
+  table.appendChild(body);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function allStarResult(page, data) {
+  page.appendChild(allStarConferenceTabs(data, renderAllStar));
+  const conference = state.allstarConference;
+  const roster = (data.rosters || {})[conference] || [];
+  const box = (data.box || {})[conference] || [];
+
+  const squad = el("section", "allstar-group");
+  squad.appendChild(el("h4", null, `${conference} All-Stars`));
+  squad.appendChild(allStarRoster(roster));
+  page.appendChild(squad);
+
+  if (!box.length) return;
+  const scores = el("section", "allstar-group");
+  scores.appendChild(el("h4", null, "Box score"));
+  const wrap = el("div", "table-scroll");
+  const table = el("table", "allstar-board");
+  const head = el("tr");
+  ["Player", "Pos", "MIN", "PTS", "REB", "AST", "STL", "BLK", "FG", "3P"]
+    .forEach((label) => head.appendChild(el("th", null, label)));
+  table.appendChild(el("thead")).appendChild(head);
+  const body = el("tbody");
+  box.forEach((row) => {
+    const line = el("tr");
+    // The name column absorbs the slack; without it a twelve-column box score
+    // spreads MIN through 3P evenly across the whole page.
+    const who = el("td", "allstar-name");
+    who.appendChild(playerLink(row.name, row.playerId, row.teamId));
+    line.appendChild(who);
+    line.appendChild(el("td", null, row.position || ""));
+    [row.minutes, row.points, row.rebounds, row.assists, row.steals, row.blocks]
+      .forEach((value) => line.appendChild(el("td", "num", String(value))));
+    line.appendChild(el("td", "num", `${row.fgm}-${row.fga}`));
+    line.appendChild(el("td", "num", `${row.tpm}-${row.tpa}`));
+    body.appendChild(line);
+  });
+  table.appendChild(body);
+  wrap.appendChild(table);
+  scores.appendChild(wrap);
+  page.appendChild(scores);
 }
 
 async function loadRecords() {

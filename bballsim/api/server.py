@@ -15,6 +15,7 @@ Endpoints
 
     GET  /api/mvp                           the MVP race: ten ballots, one board
     GET  /api/records                       the record book: single game and season
+    GET  /api/allstar                       the All-Star vote, the sides, the game
     GET  /api/trades/block                  every club: timeline, window, needs
     GET  /api/trades/market                 the Trade Block: board, pending, log
     POST /api/trades/veto   {"id": "..."}   stop a pending trade
@@ -259,6 +260,13 @@ class ApiHandler(BaseHTTPRequestHandler):
             # and the season half of it walks every archived season, so it is
             # fetched when it is looked at.
             self._send_json(views.records_view(league))
+
+        elif parts == ["allstar"]:
+            # Not in the bootstrap either, and for the opposite reason to the
+            # record book: this one *changes* -- the vote is recomputed from
+            # the season on every request until tip-off, so a copy shipped with
+            # the bootstrap would be stale before the page finished painting.
+            self._send_json(views.allstar_view(league))
 
         elif parts == ["trades", "block"]:
             self._send_json(views.trade_block(league))

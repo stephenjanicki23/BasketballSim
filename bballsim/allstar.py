@@ -84,10 +84,13 @@ WEIGHTS: dict[str, float] = {
     "availability": 0.04,  # games played
 }
 
-# Vote counts are cosmetic, and this is the number they are scaled to. A share
-# is the real quantity -- see `_ballot` -- but "22.4% of the conference vote"
-# reads as an audit and "1,340,000 votes" reads as a ballot, which is what this
-# screen is imitating.
+# Vote counts are cosmetic and this is what the *leader* is scaled to, with
+# everyone else in proportion to him. Scaling to the conference total instead
+# was the obvious thing and it was wrong: around 180 players qualify, they all
+# score something, and dividing by the sum gave the leading vote-getter 1.5% of
+# the ballot and 88,000 votes out of six million. Nothing about that reads like
+# leading a vote. Against the leader the same numbers spread 100 down to 7,
+# which is what the underlying scores actually do.
 HEADLINE_VOTES = 6_000_000
 
 
@@ -101,7 +104,7 @@ class Vote:
     conference: str
     position: str
     games: int
-    share: float                      # 0-1 of his conference's vote
+    score: float                      # 0-1, the weighted case for him
     votes: int
     parts: dict[str, float] = field(default_factory=dict)
     line: str = ""                    # "27.4 pts, 8.1 reb, 5.0 ast"
@@ -118,7 +121,7 @@ class Vote:
             "conference": self.conference,
             "position": self.position,
             "games": self.games,
-            "share": round(self.share, 4),
+            "score": round(self.score, 4),
             "votes": self.votes,
             "parts": {k: round(v, 3) for k, v in self.parts.items()},
             "line": self.line,
@@ -297,19 +300,17 @@ def tally(league) -> dict[str, list[Vote]]:
             votes.append(Vote(
                 player_id=line.player_id, name=line.name, team_id=line.team_id,
                 conference=conference, position=line.position or "",
-                games=line.games, share=score, votes=0, parts=parts,
+                games=line.games, score=score, votes=0, parts=parts,
                 line=(f"{_per_game(line, 'points'):.1f} pts, "
                       f"{_per_game(line, 'rebounds'):.1f} reb, "
                       f"{_per_game(line, 'assists'):.1f} ast"),
             ))
 
-        # Shares, normalised across the conference so they add to one, then a
-        # headline vote count for the look of the thing.
-        total = sum(v.share for v in votes) or 1.0
+        # A headline vote count, scaled off the leader rather than the pool.
+        leader = max((v.score for v in votes), default=0.0) or 1.0
         for vote in votes:
-            vote.share = vote.share / total
-            vote.votes = int(round(vote.share * HEADLINE_VOTES))
-        votes.sort(key=lambda v: (-v.share, v.player_id))
+            vote.votes = int(round(vote.score / leader * HEADLINE_VOTES))
+        votes.sort(key=lambda v: (-v.score, v.player_id))
         out[conference] = votes
     return out
 
@@ -348,7 +349,7 @@ def select(league) -> dict[str, Selection]:
         roster = _twelve(votes)
         picked = Selection(conference=conference)
         first = set(choose_lineup(
-            [(v.player_id, v.position, v.share) for v in roster]))
+            [(v.player_id, v.position, v.score) for v in roster]))
         picked.starters = [v for v in roster if v.player_id in first]
         picked.reserves = [v for v in roster if v.player_id not in first]
         out[conference] = picked
@@ -398,7 +399,7 @@ def _twelve(votes: list[Vote]) -> list[Vote]:
         if vote.player_id not in seen:
             add(vote)
 
-    taken.sort(key=lambda v: (-v.share, v.player_id))
+    taken.sort(key=lambda v: (-v.score, v.player_id))
     return taken
 
 
@@ -528,13 +529,17 @@ def play(league) -> AllStarGame:
         for player in home.players + away.players:
             player.condition = carried.get(player.id, player.condition)
 
-    game.rosters = {name: [v.to_dict() for v in sides[name].roster]
-                    for name in CONFERENCES}
+    game.rosters = {name: _roster_rows(sides[name]) for name in CONFERENCES}
     game.home_conference, game.away_conference = home_name, away_name
     game.home_score, game.away_score = result.home_score, result.away_score
+    # Club ids for the box score, taken from the vote rather than from the
+    # exhibition side -- an All-Star team's own id is `as-ironridge`, which is
+    # not a club anyone can open.
+    clubs = {row["playerId"]: row["teamId"]
+             for rows in game.rosters.values() for row in rows}
     game.box = {
-        home_name: _lines(result.home_box, home),
-        away_name: _lines(result.away_box, away),
+        home_name: _lines(result.home_box, home, clubs),
+        away_name: _lines(result.away_box, away, clubs),
     }
 
     winner = home if result.home_score >= result.away_score else away
@@ -549,7 +554,23 @@ def play(league) -> AllStarGame:
     return game
 
 
-def _lines(box, side) -> list[dict]:
+def _roster_rows(selection: Selection) -> list[dict]:
+    """The twelve as stored, starters flagged.
+
+    The flag is written here rather than left to be recomputed later because it
+    is part of the same closed vote: who started is a fact about that night,
+    not a thing to work out again from a roster years afterwards.
+    """
+    rows = []
+    for vote in selection.roster:
+        row = vote.to_dict()
+        row["starter"] = any(v.player_id == vote.player_id
+                             for v in selection.starters)
+        rows.append(row)
+    return rows
+
+
+def _lines(box, side, clubs: dict[str, str]) -> list[dict]:
     """The box score, deepest contributions first."""
     positions = {p.id: p.position.value for p in side.players}
     rows = []
@@ -557,6 +578,7 @@ def _lines(box, side) -> list[dict]:
         rebounds = line.offensive_rebounds + line.defensive_rebounds
         rows.append({
             "playerId": line.player_id, "name": line.name,
+            "teamId": clubs.get(line.player_id, ""),
             "position": positions.get(line.player_id, ""),
             "minutes": round(line.seconds / 60.0),
             "points": line.points, "rebounds": rebounds, "assists": line.assists,
