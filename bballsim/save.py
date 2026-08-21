@@ -1396,8 +1396,16 @@ ALLSTAR_PATH = data_dir() / "allstar.json"
 
 
 def dump_allstar(games: dict) -> dict | None:
-    played = [g for g in (games or {}).values() if g.rosters or g.played]
-    if not played:
+    """Everything with a date on it, played or not.
+
+    Writing only *played* games was the obvious filter and it was a bug that
+    would never have thrown. A scheduled game is a date and nothing else, so
+    skipping it meant the date was recomputed from "next Wednesday" on every
+    boot -- and on a host that restarts a few times a week, the game slides
+    forward a week each time and never arrives at all.
+    """
+    kept = [g for g in (games or {}).values() if g.tipoff_at or g.played]
+    if not kept:
         return None
     return {
         "version": SAVE_VERSION,
@@ -1416,7 +1424,7 @@ def dump_allstar(games: dict) -> dict | None:
                 "mvp_line": g.mvp_line,
                 "box": {k: list(v) for k, v in (g.box or {}).items()},
             }
-            for g in sorted(played, key=lambda g: g.season)
+            for g in sorted(kept, key=lambda g: g.season)
         ],
     }
 

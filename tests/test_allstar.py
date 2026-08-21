@@ -327,6 +327,24 @@ class TestItSurvivesASave(unittest.TestCase):
         self.assertEqual(json.dumps(back.box, sort_keys=True),
                          json.dumps(original.box, sort_keys=True))
 
+    def test_a_scheduled_game_survives_a_restart(self):
+        """The bug this pins would never have thrown. Writing only *played*
+        games meant a scheduled one was a date and nothing else, so the date
+        was recomputed from "next Wednesday" on every boot -- and on a host
+        that restarts a few times a week the game slides forward a week each
+        time and never arrives."""
+        league = played(games_per_team=10)
+        game = allstar.state(league)
+        self.assertFalse(game.played)
+        path = Path(__file__).with_name("_allstar_scheduled.json")
+        try:
+            self.assertIsNotNone(save.write_allstar(path, league.allstar))
+            back = save.read_allstar(path)
+        finally:
+            path.unlink(missing_ok=True)
+        self.assertEqual(back[league.season].tipoff_at, game.tipoff_at)
+        self.assertFalse(back[league.season].played)
+
     def test_nothing_played_writes_no_file(self):
         path = Path(__file__).with_name("_allstar_empty.json")
         path.write_text("stale")
