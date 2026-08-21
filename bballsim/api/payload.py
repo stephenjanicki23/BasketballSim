@@ -722,7 +722,9 @@ def allstar_view(league) -> dict:
         for conf, votes in counts.items()
     }
     view["rosters"] = {
-        conf: name([dict(v.to_dict(), starter=v in sel.starters)
+        conf: name([dict(v.to_dict(),
+                         starter=v in sel.starters,
+                         wildcard=v in sel.wildcards)
                     for v in sel.roster])
         for conf, sel in picked.items()
     }

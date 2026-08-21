@@ -41,26 +41,31 @@ from datetime import datetime, time, timedelta, timezone
 
 from .conferences import CONFERENCES, conference_for
 from .league.advanced import advanced_table
-from .lineup import GUARDS, POSITIONS, choose_lineup
+from .lineup import GUARDS, POSITIONS
 
-# The classic shape: five starters, seven reserves, twelve a side.
-STARTERS = 5
-RESERVES = 7
-ROSTER_SIZE = STARTERS + RESERVES
-
-# A ballot decided purely on votes sends a side that cannot play. This engine
-# gives power forwards the most minutes and the most of everything else (23.2
-# mpg and 11.0 points against a point guard's 19.7 and 8.7), so the raw vote
-# named an Ironridge twelve of eight bigs and four shooting guards -- with no
-# point guard anywhere on it. `lineup.LineupRules` caps a five at two per
-# position and wants three distinct ones, so that roster could not have fielded
-# a legal lineup at all.
+# The shape of a side: five starters, seven reserves, twelve in all.
 #
-# Hence a floor and a ceiling, and only those two. The floor is what makes the
-# side playable; the ceiling stops one position eating the bench. Between them
-# the vote decides, which is the point.
-MIN_PER_POSITION = 1
-MAX_PER_POSITION = 4
+# **The ballot is positional.** The five who start are the leading vote-getter
+# at each of the five positions, the next five are the runner-up at each, and
+# the last two go to the best of everyone left regardless of where he plays.
+# So a side reads as a lineup card and a bench behind it, with two spots the
+# vote fills on merit alone.
+#
+# This replaced a shape that was nearly right and wrong in the way that
+# matters. A ballot decided purely on votes sends a side that cannot play at
+# all: this engine gives power forwards the most minutes and the most of
+# everything else (23.2 mpg and 11.0 points against a point guard's 19.7 and
+# 8.7), so the raw vote named an Ironridge twelve of eight bigs and four
+# shooting guards with no point guard anywhere on it. A floor of one per
+# position fixed that, and the five who started were then the strongest *legal*
+# five among the twelve -- which is a rule about what a lineup may be, not
+# about what a ballot is for. One per position says the thing directly: the
+# best centre in a conference starts at centre.
+STARTERS = 5              # one at each position
+POSITIONAL_RESERVES = 5   # the runner-up at each
+WILDCARDS = 2             # best of the rest, wherever they play
+RESERVES = POSITIONAL_RESERVES + WILDCARDS
+ROSTER_SIZE = STARTERS + RESERVES
 
 # Tip-off, and the day it lands on. Wednesday because that is when it was
 # asked for; the hour matches the league's own evening slate.
@@ -136,6 +141,16 @@ class Selection:
     conference: str
     starters: list[Vote] = field(default_factory=list)
     reserves: list[Vote] = field(default_factory=list)
+
+    @property
+    def wildcards(self) -> list["Vote"]:
+        """The last two, who are here on the vote alone.
+
+        Marked rather than left to be counted off the end of the bench: which
+        two they are is a fact about how the side was picked, and a reader
+        should not have to know `POSITIONAL_RESERVES` to see it.
+        """
+        return self.reserves[POSITIONAL_RESERVES:]
 
     @property
     def roster(self) -> list[Vote]:
@@ -333,74 +348,59 @@ def _minimum_games(league) -> int:
 def select(league) -> dict[str, Selection]:
     """The twelve each conference would send if voting closed now.
 
-    Two passes. The roster is the vote, bounded by `MIN_PER_POSITION` and
-    `MAX_PER_POSITION` so the side can field a lineup. The five who start are
-    then the strongest *legal* five among those twelve, decided by
-    `lineup.choose_lineup` -- the same function `Team.starters` uses.
+    Three passes over the same board, in order of what a spot is worth:
 
-    Deferring to it rather than hard-coding "two guards and three frontcourt"
-    matters: the raw vote's announced Tidewater five was three power forwards,
-    which is a shape the league does not allow anyone to play. A ballot that
-    names a starting five the sim would refuse to field is naming something
-    other than a starting five.
+      1. The leading vote-getter at each position starts.
+      2. The runner-up at each position makes the bench.
+      3. The two best left, wherever they play, take the last two spots.
+
+    A side built this way is a legal lineup by construction -- five distinct
+    positions, one apiece -- so nothing here has to consult `lineup.py` to find
+    out whether the five it just named could take the floor together.
+
+    A conference thin at a position simply does not fill that slot from it, and
+    the wildcards take up the slack. Twelve players who can play beats eleven
+    and a rule.
     """
     out: dict[str, Selection] = {}
     for conference, votes in tally(league).items():
-        roster = _twelve(votes)
         picked = Selection(conference=conference)
-        first = set(choose_lineup(
-            [(v.player_id, v.position, v.score) for v in roster]))
-        picked.starters = [v for v in roster if v.player_id in first]
-        picked.reserves = [v for v in roster if v.player_id not in first]
+        taken: set[str] = set()
+
+        def best_at(position: str) -> Vote | None:
+            return next((v for v in votes
+                         if v.position == position and v.player_id not in taken),
+                        None)
+
+        starters: list[Vote] = []
+        bench: list[Vote] = []
+        for tier in (starters, bench):
+            for position in POSITIONS:
+                choice = best_at(position)
+                if choice is not None:
+                    taken.add(choice.player_id)
+                    tier.append(choice)
+
+        # The last two, on the vote alone. Also where a conference that could
+        # not field a runner-up at some position makes the number back up.
+        wild: list[Vote] = []
+        for vote in votes:
+            if len(starters) + len(bench) + len(wild) >= ROSTER_SIZE:
+                break
+            if vote.player_id not in taken:
+                taken.add(vote.player_id)
+                wild.append(vote)
+
+        # Announced in lineup order rather than vote order: a starting five is
+        # read one through five, not first through fifth. The wildcards stay in
+        # vote order behind the positional bench, because that is the only
+        # thing that put them there.
+        order = {position: index for index, position in enumerate(POSITIONS)}
+        by_position = lambda v: order.get(v.position, len(POSITIONS))
+        picked.starters = sorted(starters, key=by_position)
+        picked.reserves = sorted(bench, key=by_position) + wild
         out[conference] = picked
     return out
-
-
-def _twelve(votes: list[Vote]) -> list[Vote]:
-    """The roster, best first, with every position represented and none of them
-    running away with the bench."""
-    if not votes:
-        return []
-
-    taken: list[Vote] = []
-    seen: set[str] = set()
-    counts: dict[str, int] = {}
-
-    def add(vote: Vote) -> None:
-        taken.append(vote)
-        seen.add(vote.player_id)
-        counts[vote.position] = counts.get(vote.position, 0) + 1
-
-    # The floor first: the leading vote-getter at each position. The best
-    # centre in a conference is an All-Star even in a year the forwards are
-    # better, which is exactly what a positional ballot is for.
-    for position in POSITIONS:
-        for _ in range(MIN_PER_POSITION):
-            best = next((v for v in votes
-                         if v.position == position and v.player_id not in seen), None)
-            if best is not None:
-                add(best)
-
-    # Then the best of the rest, up to the ceiling.
-    for vote in votes:
-        if len(taken) >= ROSTER_SIZE:
-            break
-        if vote.player_id in seen:
-            continue
-        if counts.get(vote.position, 0) >= MAX_PER_POSITION:
-            continue
-        add(vote)
-
-    # A conference too thin to fill twelve under the ceiling fills the rest
-    # without it. Twelve players who can play beats eleven and a rule.
-    for vote in votes:
-        if len(taken) >= ROSTER_SIZE:
-            break
-        if vote.player_id not in seen:
-            add(vote)
-
-    taken.sort(key=lambda v: (-v.score, v.player_id))
-    return taken
 
 
 # --------------------------------------------------------------------------
@@ -567,11 +567,13 @@ def _roster_rows(selection: Selection) -> list[dict]:
     is part of the same closed vote: who started is a fact about that night,
     not a thing to work out again from a roster years afterwards.
     """
+    starting = {v.player_id for v in selection.starters}
+    wild = {v.player_id for v in selection.wildcards}
     rows = []
     for vote in selection.roster:
         row = vote.to_dict()
-        row["starter"] = any(v.player_id == vote.player_id
-                             for v in selection.starters)
+        row["starter"] = vote.player_id in starting
+        row["wildcard"] = vote.player_id in wild
         rows.append(row)
     return rows
 

@@ -4702,12 +4702,25 @@ function allStarRoster(rows) {
     wrap.appendChild(el("p", "note", "Nobody qualifies yet."));
     return wrap;
   }
-  [["Starters", true], ["Reserves", false]].forEach(([label, starting]) => {
-    const group = rows.filter((row) => Boolean(row.starter) === starting);
+  // Three groups, because the side is picked in three passes and a reader who
+  // cannot see that is looking at twelve names in an order nobody explained.
+  const GROUPS = [
+    ["Starters", (row) => row.starter],
+    ["Reserves", (row) => !row.starter && !row.wildcard],
+    ["Wildcards", (row) => !row.starter && row.wildcard],
+  ];
+  GROUPS.forEach(([label, match]) => {
+    const group = rows.filter(match);
     if (!group.length) return;
-    wrap.appendChild(el("h5", "allstar-roster-head", label));
+    const head = el("h5", "allstar-roster-head", label);
+    if (label === "Wildcards") {
+      head.appendChild(el("span", "allstar-roster-note",
+        "best of the rest, any position"));
+    }
+    wrap.appendChild(head);
     const list = el("ul", "allstar-roster-list");
-    group.forEach((row) => list.appendChild(allStarPlayerRow(row, starting)));
+    group.forEach((row) => list.appendChild(
+      allStarPlayerRow(row, Boolean(row.starter))));
     wrap.appendChild(list);
   });
   return wrap;

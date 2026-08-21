@@ -72,34 +72,46 @@ leader, who gets the six million.
 
 ---
 
-## 3. The side has to be able to play
+## 3. The ballot is positional
 
-The vote on its own named an Ironridge twelve of **eight bigs and four shooting
-guards, with no point guard on it**, and a Tidewater starting five of **three
-power forwards**. Both are shapes `lineup.LineupRules` forbids anyone to field:
-two per position, three distinct positions, at least one guard and one big.
+A side is twelve, picked in three passes over the same board:
 
-This is not a flaw in the ballot. It is the ballot reporting an engine fact —
-power forwards in this sim take the most minutes and lead everything else
-(23.2 mpg and 11.0 points against a point guard's 19.7 and 8.7). The ballot is
-right that they are the best players. It is just not, on its own, a team sheet.
+| | |
+|---|---|
+| **Starters** (5) | the leading vote-getter at each of the five positions |
+| **Reserves** (5) | the runner-up at each of the five positions |
+| **Wildcards** (2) | the best of everyone left, wherever he plays |
 
-Two numbers fix it, and only two:
+So the page reads as a lineup card, a bench behind it, and two spots the vote
+fills on merit alone. The best centre in a conference starts at centre rather
+than sitting behind three forwards who polled higher, and a conference deep at
+one position still gets those players in — through the wildcards, which is
+exactly what a wildcard is for.
 
-* `MIN_PER_POSITION = 1` — the leading vote-getter at each of the five
-  positions. The best centre in a conference is an All-Star even in a year the
-  forwards are better, which is what a positional ballot is *for*.
-* `MAX_PER_POSITION = 4` — so one position cannot eat the bench.
+A side built this way is a legal lineup **by construction**: five distinct
+positions, one apiece, is legal under any reading of `lineup.LineupRules`, so
+nothing has to consult it to find out whether the five just named could take
+the floor together.
 
-Between them, the vote decides.
+### What this replaced, and why the first version was not enough
 
-The **starting five is then `lineup.choose_lineup` over those twelve** — the
-same function `Team.starters` uses, with the vote as the strength signal.
-Deferring to it rather than hard-coding "two guards and three frontcourt"
-matters: a ballot that names a starting five the sim would refuse to field is
-naming something other than a starting five.
+A ballot decided purely on votes sends a side that cannot play at all. This
+engine's power forwards take the most minutes and lead everything else — 23.2
+mpg and 11.0 points against a point guard's 19.7 and 8.7 — so the raw vote
+named an Ironridge twelve of **eight bigs and four shooting guards, with no
+point guard on it**, and a Tidewater starting five of **three power forwards**.
+Both are shapes the league forbids anyone to field.
 
----
+The first fix was a floor of one per position on the roster and a ceiling of
+four, with the starting five then chosen by `lineup.choose_lineup` — the
+strongest *legal* five among the twelve. That produced legal sides, and it was
+still the wrong rule: `choose_lineup` answers "what may a lineup be", which is
+a question about the rulebook, not about what a ballot is for. In practice it
+came out close to the top five by vote, so a conference whose forwards polled
+best started two of them and left the position's leading vote-getter on the
+bench.
+
+One per position says the thing directly, and needs no rulebook to check it.
 
 ## 4. The exhibition cannot touch the season
 
@@ -177,7 +189,7 @@ these two are the exception.
 | `GET /api/allstar` | not in the bootstrap: it changes on every request |
 | `data/allstar.json` | the stored history, keyed by season |
 | Stats → All-Star | the screen |
-| `tests/test_allstar.py` | 34 tests |
+| `tests/test_allstar.py` | 36 tests |
 
 ### A note on the fixtures
 

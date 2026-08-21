@@ -2418,6 +2418,13 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
   text-transform: uppercase;
   color: var(--muted);
 }
+.allstar-roster-note {
+  margin-left: 8px;
+  font: 400 9px/1.6 var(--mono);
+  letter-spacing: .04em;
+  text-transform: none;
+  opacity: .75;
+}
 .allstar-roster-list {
   list-style: none;
   margin: 0;

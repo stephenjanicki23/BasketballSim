@@ -191,23 +191,59 @@ class TestTheSideCanPlay(unittest.TestCase):
             self.assertEqual(len(set(ids)), len(ids), conference)
             self.assertEqual(len(side.starters), 5, conference)
 
-    def test_every_position_is_represented(self):
-        """Without the floor the raw vote sent eight bigs and four shooting
-        guards, which cannot make three distinct positions on the floor."""
+    def test_every_position_is_represented_twice_over(self):
+        """Without the positional ballot the raw vote sent eight bigs and four
+        shooting guards, which cannot make three distinct positions on the
+        floor -- let alone a starter and a deputy at each."""
         for conference, side in self.sides.items():
-            held = {v.position for v in side.roster}
+            held = [v.position for v in side.roster]
             for position in POSITIONS:
-                self.assertIn(position, held, f"{conference} has no {position}")
+                self.assertGreaterEqual(
+                    held.count(position), 2,
+                    f"{conference} has {held.count(position)} at {position}")
 
-    def test_no_position_runs_away_with_the_bench(self):
+    def test_the_five_who_start_are_one_at_each_position(self):
+        """The ballot is positional: the best centre in a conference starts at
+        centre, not behind three forwards who polled higher."""
         for conference, side in self.sides.items():
-            for position in POSITIONS:
-                count = sum(1 for v in side.roster if v.position == position)
-                self.assertLessEqual(count, allstar.MAX_PER_POSITION,
-                                     f"{conference} sent {count} at {position}")
+            shape = sorted(v.position for v in side.starters)
+            self.assertEqual(shape, sorted(POSITIONS), conference)
+
+    def test_each_starter_is_his_position_s_leading_vote_getter(self):
+        counts = allstar.tally(played())
+        for conference, side in self.sides.items():
+            board = counts[conference]
+            for starter in side.starters:
+                best = next(v for v in board if v.position == starter.position)
+                self.assertEqual(starter.player_id, best.player_id,
+                                 f"{conference} {starter.position}")
+
+    def test_the_bench_is_the_runner_up_at_each_position_then_two_free(self):
+        counts = allstar.tally(played())
+        for conference, side in self.sides.items():
+            board = counts[conference]
+            positional = side.reserves[:allstar.POSITIONAL_RESERVES]
+            self.assertEqual(sorted(v.position for v in positional),
+                             sorted(POSITIONS), conference)
+            for reserve in positional:
+                at = [v for v in board if v.position == reserve.position]
+                self.assertEqual(reserve.player_id, at[1].player_id,
+                                 f"{conference} second {reserve.position}")
+
+            # And the last two are simply the best left, wherever they play.
+            wild = side.reserves[allstar.POSITIONAL_RESERVES:]
+            self.assertEqual(len(wild), allstar.WILDCARDS, conference)
+            chosen = {v.player_id for v in side.roster}
+            missed = [v for v in board if v.player_id not in chosen]
+            if missed:
+                self.assertGreaterEqual(min(v.score for v in wild),
+                                        max(v.score for v in missed),
+                                        f"{conference} passed over a better vote")
 
     def test_the_announced_five_is_a_five_the_league_would_field(self):
-        """The raw vote's Tidewater starters were three power forwards."""
+        """Now true by construction rather than by consulting `lineup.py` --
+        five distinct positions, one apiece, is legal under any reading of the
+        rules. The raw vote's Tidewater starters were three power forwards."""
         for conference, side in self.sides.items():
             shape = [v.position for v in side.starters]
             self.assertTrue(DEFAULT_RULES.is_legal(shape),
