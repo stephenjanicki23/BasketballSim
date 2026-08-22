@@ -60,6 +60,16 @@ DEEP_BENCH_TOLERANCE = 12.0
 # front of it is unavailable (fouled out, injured, or gassed).
 ROTATION_DEPTH = 9
 
+# The shortest a man plays before he can be moved again. Substitutions now only
+# happen at dead balls, but there are forty-odd of those a game, and without a
+# floor on a stint the rotation thrashed: a player dipped below his tired line,
+# got pulled at the next whistle, and a minute later the man who replaced him
+# was the tired one. Three game-minutes of protection turns that churn -- most
+# of a hundred subs a night, the majority of them a man going straight back out
+# -- into the couple of dozen real rotations a game actually has. A foul-out or
+# an injury is an emergency and ignores it; nothing else does.
+MIN_STINT_SECONDS = 180.0
+
 
 class RotationManager:
     """How deep a bench goes.
@@ -72,6 +82,11 @@ class RotationManager:
 
     def __init__(self, depth: int = ROTATION_DEPTH) -> None:
         self.depth = depth
+        # game_seconds at which each player last went in or out. Missing means
+        # "since tip-off", which is eligible -- a starter can be pulled the
+        # first time he tires without having to wait out a stint he began on
+        # the floor.
+        self._changed_at: dict[str, float] = {}
 
     def evaluate(
         self,
@@ -79,8 +94,17 @@ class RotationManager:
         period: int,
         final_period: int,
         clock: float,
+        now: float = 0.0,
     ) -> list[tuple[Player, Player]]:
-        """Return (player_out, player_in) pairs to apply right now."""
+        """Return (player_out, player_in) pairs to apply right now.
+
+        `now` is the game clock in elapsed seconds, used only to keep a man on
+        the floor for `MIN_STINT_SECONDS` before he can be moved again.
+        """
+
+        def settled(player: Player) -> bool:
+            """Long enough in his current role to be moved without churn."""
+            return now - self._changed_at.get(player.id, -1e9) >= MIN_STINT_SECONDS
         rotation = team_state.team.rotation()
         rank = {player.id: index for index, player in enumerate(rotation)}
         on_court = list(team_state.on_court.players)
@@ -88,6 +112,10 @@ class RotationManager:
         bench = [p for p in rotation if p.id not in on_court_ids]
         if not bench:
             return []
+        # Who is eligible to come in: everyone who has been off long enough.
+        # Kept as a set the replacement search can widen past in an emergency.
+        rested_enough = {p.id for p in bench
+                         if now - self._changed_at.get(p.id, -1e9) >= MIN_STINT_SECONDS}
 
         closing = period >= final_period and clock <= CLOSING_TIME_SECONDS
         stagger = slider_mod(team_state.team.tactics.minutes_stagger)
@@ -112,8 +140,13 @@ class RotationManager:
             return line - 25.0 if closing else line
 
         fouled_out = [p for p in on_court if self._fouled_out(team_state, p)]
+        # A tired man is only pulled once he has actually had his stint. The
+        # foul-out list is not filtered -- six fouls comes off at once, minimum
+        # stint or not.
         tired = sorted(
-            (p for p in on_court if p.condition < tired_line(p) and p not in fouled_out),
+            (p for p in on_court
+             if p.condition < tired_line(p) and p not in fouled_out
+             and settled(p)),
             key=lambda p: p.condition,
         )
         candidates_out = fouled_out + tired
@@ -126,13 +159,17 @@ class RotationManager:
         shape = [p.position.value for p in on_court]
 
         for player_out in candidates_out:
+            emergency = player_out in fouled_out
             replacement = self._best_replacement(
                 bench, rank, used_in, player_out, closing, on_court=shape,
+                rested_enough=rested_enough, emergency=emergency,
             )
             if replacement is None:
                 continue
             used_in.add(replacement.id)
             swaps.append((player_out, replacement))
+            self._changed_at[player_out.id] = now
+            self._changed_at[replacement.id] = now
             shape.remove(player_out.position.value)
             shape.append(replacement.position.value)
             if len(swaps) >= 3:
@@ -150,8 +187,17 @@ class RotationManager:
         player_out: Player,
         closing: bool,
         on_court: list[str] | None = None,
+        rested_enough: set[str] | None = None,
+        emergency: bool = False,
     ) -> Player | None:
         available = [p for p in bench if p.id not in used]
+        # Prefer men who have been off long enough to come back without churn.
+        # Dropped when it would leave nobody -- an empty bench of "rested" men,
+        # or a foul-out that has to be covered right now by whoever is there.
+        if rested_enough is not None and not emergency:
+            settled = [p for p in available if p.id in rested_enough]
+            if settled:
+                available = settled
         # A tired centre cannot be replaced by a fourth guard. Filter to swaps
         # that leave a legal lineup *before* ranking, so the fallback path
         # ("nobody rested, take anyone") cannot break the shape either.

@@ -1293,7 +1293,11 @@ def streaks(room: Newsroom) -> list[Story]:
         coach = team.coach if team else None
 
         headline = pick([
-            f"{room.nickname(team_id)} win {c.n(run)} straight",
+            # "...straight games", not bare "...straight": a one-word nickname
+            # like the Current left the first option a four-word headline, under
+            # the five-word floor the whole newsroom holds to. The extra word
+            # makes it safe for any nickname and reads no worse.
+            f"{room.nickname(team_id)} win {c.n(run)} straight games",
             f"{room.club(team_id)} stretch run to {c.n(run)} games",
             f"{c.n(run)} in a row for the {room.nickname(team_id)}",
         ], story_id)

@@ -195,23 +195,58 @@ class GameSimulator:
         return winner
 
     def _play_period(self, state: GameState, offense: TeamState) -> TeamState:
+        # Coming out of the break is a substitution opportunity, and a common
+        # one -- a coach sets his lineup for the quarter before the ball is
+        # even in play.
+        self._maybe_substitute(state)
         while state.clock > 0:
             defense = state.opponent(offense)
-            before = state.sequence
             self.possessions.play(state, offense, defense)
 
             # Possession changes hands unless the offence kept it on the glass;
             # the possession engine already resolved any second-chance shots.
             offense = defense
 
-            if state.sequence > before:
+            # Substitutions are only legal when the ball is dead, and the truest
+            # signal of that is how the possession just *ended* -- read off the
+            # last line of the play-by-play. A possession that finishes on a
+            # whistle (a foul, its free throws, a ball knocked out of bounds)
+            # is a dead ball; one that finishes on a made basket, a steal or a
+            # live rebound is not, and no bench moves behind it. This is what
+            # stopped the flood of subs on made baskets and fast breaks. The
+            # last two minutes are the exception the real game makes -- a made
+            # basket stops the clock there, and between that and the fouls and
+            # timeouts the bench is effectively free to move every trip.
+            endgame = (state.period >= self.rules.periods and state.clock <= 120)
+            if endgame or self._ended_dead(state):
                 self._maybe_substitute(state)
         return offense
+
+    # A possession that ends on one of these left the ball dead -- the whistle
+    # blew or the ball went out of bounds. Anything else (a made basket, a
+    # steal, a live rebound and the break the other way) is live play, and no
+    # substitution may happen behind it.
+    _DEAD_BALL_END = frozenset({
+        EventType.FOUL, EventType.TURNOVER,
+        EventType.FREE_THROW_MADE, EventType.FREE_THROW_MISSED,
+        EventType.TIMEOUT,
+    })
+
+    def _ended_dead(self, state: GameState) -> bool:
+        """Did the possession just played end at a stoppage? Read from the last
+        event, so a foul that flows into a live shot -- the same possession
+        continuing -- is judged by the shot, not the foul."""
+        for event in reversed(state.events):
+            if event.type == EventType.SUBSTITUTION:
+                continue
+            return event.type in self._DEAD_BALL_END
+        return False
 
     def _maybe_substitute(self, state: GameState) -> None:
         for team_state in (state.home, state.away):
             swaps = self.rotations.evaluate(
-                team_state, state.period, self.rules.periods, state.clock
+                team_state, state.period, self.rules.periods, state.clock,
+                now=state.game_seconds,
             )
             if not swaps:
                 continue
