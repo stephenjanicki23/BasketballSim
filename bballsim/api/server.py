@@ -13,7 +13,7 @@ Endpoints
     POST /api/clock/advance {"minutes": n}  push the league clock forward
     POST /api/clock/speed   {"speed": n}    game seconds per real second
 
-    GET  /api/mvp                           the MVP race: ten ballots, one board
+    GET  /api/awards                        the awards watch: contenders, no standing
     GET  /api/records                       the record book: single game and season
     GET  /api/allstar                       the All-Star vote, the sides, the game
     GET  /api/trades/block                  every club: timeline, window, needs
@@ -250,10 +250,10 @@ class ApiHandler(BaseHTTPRequestHandler):
                 payload["away_box"] = game.result.away_box.to_dict()
             self._send_json(payload)
 
-        elif parts == ["mvp"]:
-            # Also in the bootstrap; here on its own so a page watching a live
-            # race can refresh the board without re-fetching the season.
-            self._send_json(views.mvp.race(league))
+        elif parts == ["awards"]:
+            # Also in the bootstrap; here on its own so a page watching the
+            # races can refresh the field without re-fetching the season.
+            self._send_json(views.awards.watch(league))
 
         elif parts == ["records"]:
             # Not in the bootstrap. The book is a page most visits never open,

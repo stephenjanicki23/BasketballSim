@@ -34,6 +34,7 @@ from ..league.stats import STAT_COLUMNS
 from ..conferences import CONFERENCES, FINALS_NAME, TROPHY_NAME
 from .. import mock_draft
 from .. import mvp
+from .. import awards
 from .. import portraits
 from .. import records
 from .. import scouting
@@ -540,7 +541,9 @@ def bootstrap(league, minimum_games: int = 1) -> dict:
         # ship whole -- ten ballots of five is fifty rows against the four
         # megabytes of rosters that forced the bootstrap split -- and shipping
         # it here means the published demo carries the race too.
-        "mvp": mvp.race(league),
+        # The awards watch -- who is in contention for each honour, with no
+        # vote and no standing. Replaced the MVP race board, which showed both.
+        "awards": awards.watch(league),
     })
     return payload
 

@@ -131,17 +131,19 @@ def _voted_pool(league) -> list[dict]:
     return rows
 
 
-def _stat_leaders(league, stat: str, count: int) -> list[dict]:
+def _stat_leaders(rows: list[dict], stat: str, count: int) -> list[dict]:
     """The season leaders in one counting stat, per game, over the games floor.
 
-    Ranked internally to pick the shortlist; the ranking is thrown away when the
-    award is serialised and the names are sorted.
+    Reads the same totals-based rows the voted awards use -- `_candidate_rows`
+    carries season *totals*, and `_contender` divides by games, so both award
+    kinds compute a per-game line the one way. An earlier version read the
+    per-game `player_table` and divided a second time, which turned a scoring
+    leader's 21.8 into 0.9. Ranked internally to pick the shortlist; the order
+    is thrown away when the award is serialised and the names are sorted.
     """
-    minimum = mvp.minimum_games(league)
-    rows = [row for row in league.stats.player_table(minimum_games=minimum)]
-    rows.sort(key=lambda r: r.get(stat, 0) / max(1, r.get("games", 1)),
-              reverse=True)
-    return rows[:count]
+    ranked = sorted(rows, key=lambda r: (r.get(stat, 0) or 0) / max(1, r.get("games", 1)),
+                    reverse=True)
+    return ranked[:count]
 
 
 def watch(league) -> dict:
@@ -151,6 +153,10 @@ def watch(league) -> dict:
     because as far as this page is concerned it is never settled, only watched.
     """
     awards: list[Award] = []
+    minimum = mvp.minimum_games(league)
+    # Season totals for every qualifying player, the one table both kinds of
+    # award are read from.
+    qualifying = mvp._candidate_rows(league, minimum)
 
     if mvp.is_open(league):
         pool = _voted_pool(league)
@@ -164,7 +170,7 @@ def watch(league) -> dict:
             [_contender(row) for row in pool[:ALL_LEAGUE_CONTENDERS]]))
 
     for award_id, name, stat, basis in STAT_TITLES:
-        leaders = _stat_leaders(league, stat, STAT_CONTENDERS)
+        leaders = _stat_leaders(qualifying, stat, STAT_CONTENDERS)
         if leaders:
             awards.append(Award(award_id, name, basis,
                                 [_contender(row) for row in leaders]))

@@ -55,6 +55,17 @@ window.BBALL_SOURCE = {
     }
   },
 
+  /* The awards watch -- contenders per honour, no standing. In the bootstrap
+   * too; fetched on its own so the field can refresh without the season. */
+  async awards() {
+    try {
+      return await getJSON("/api/awards");
+    } catch (error) {
+      console.warn("awards fetch failed", error);
+      return null;
+    }
+  },
+
   /* The All-Star vote and game. Never cached by the caller: until tip-off
    * the standing is recomputed from the season on every request, so a copy
    * held from one page view would show a race that had stopped moving. */

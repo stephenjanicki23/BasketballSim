@@ -52,6 +52,11 @@ window.BBALL_SOURCE = {
     return this._data.records || null;
   },
 
+  /* The awards watch as it stood at export. */
+  async awards() {
+    return this._data.awards || null;
+  },
+
   /* The All-Star vote as it stood when the demo was exported. Frozen, unlike
    * the live one -- a static export has no season still moving underneath it,
    * and the screen says so. */

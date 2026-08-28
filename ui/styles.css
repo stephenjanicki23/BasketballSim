@@ -2476,6 +2476,49 @@ tr.is-cutline td { border-bottom: 2px solid var(--accent); }
 .allstar-line { color: var(--muted); width: 100%; }
 .allstar-board td.allstar-name { width: 100%; }
 
+/* --- Awards watch ----------------------------------------------------
+ *
+ * Contender lists, one card per award. No ranking, no votes, no leader mark --
+ * the design says "these are in the conversation" and refuses to say more. */
+
+.awards-page { display: grid; gap: 18px; padding-top: 4px; }
+.awards-page > .note { margin: 0; max-width: 86ch; line-height: 1.6; }
+.awards-note { font-weight: 500; }
+.awards-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.award-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+}
+.award-head h3 { margin: 0; font: 600 16px/1.2 var(--sans); }
+.award-basis { margin: 3px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.award-contenders { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.award-contender {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hairline);
+}
+.award-contender:first-child { border-top: none; }
+.award-who { display: grid; gap: 1px; min-width: 0; }
+.award-name { font: 600 13px/1.3 var(--sans); }
+.award-meta { font: 500 10px/1.4 var(--mono); color: var(--muted); }
+.award-line { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .awards-grid { grid-template-columns: 1fr; }
+}
+
 /* --- Draft prospect cards ---------------------------------------------
  *
  * A card that shows a face, a frame and a shape — and no numbers a reader
