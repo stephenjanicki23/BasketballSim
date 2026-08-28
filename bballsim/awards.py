@@ -1,32 +1,41 @@
 """The awards watch: who is in contention, and nothing about who is winning.
 
-This is the season's individual honours -- Most Valuable Player, the All-League
-team, the scoring, rebounding and playmaking titles -- shown as a **watch
-list**. For each one it names the players in the conversation, and it stops
-there. No vote count, no vote share, no ranking, no "front-runner" marker,
-nothing that says who is ahead.
+The season's individual honours, shown as a watch. For each one it names the
+field and stops there -- no vote count, no share, no leaderboard. Who wins is
+found out when the season ends and `accolades.py` reads it off the archives,
+the same way nobody is an All-Star until tip-off.
 
-That restraint is the whole point, and it is deliberate. The winner is a thing
-to be found out when the season ends and `accolades.py` reads it off the
-archives -- the same way nobody is an All-Star until tip-off and a draft
-prospect's ceiling stays hidden until he plays. An awards page that printed the
-standing would answer the question the season is there to answer.
+Two kinds of award live here.
 
-**Selecting a shortlist is not the same as ranking it.** To decide who is even
-in contention, the panel and the leaderboards have to be consulted -- there is
-no other way to know a fringe rotation player is not an MVP candidate. So the
-contenders are chosen by the real machinery (`mvp.tally` for the voted awards,
-the season leaders for the statistical ones) and then **sorted by name** before
-they leave this module. The reader sees the field; the order it was picked in
-never reaches them.
+  * **List awards** -- Most Valuable Player, the Scoring Title, Sixth Man of the
+    Year, Coach of the Year -- name a shortlist of contenders, sorted
+    alphabetically so the order they were selected in never reaches the page.
+  * **Team awards** -- All-League, All-Defensive, All-Rookie -- are named as a
+    First Team and a Second Team, one player at each of the five positions,
+    which is the shape those honours actually take. The First/Second split is
+    the award's own structure, not a vote tally; no numbers say who is ahead.
 
-**Every award is honest about its own basis.** The voted awards -- MVP and
-All-League -- are the panel's pool. The statistical titles are the season
-leaders in a counting stat, and those a reader can of course infer from a box
-score; the watch does not pretend otherwise, it simply declines to rank them.
-There is no Defensive Player of the Year and no Rookie of the Year here, for
-the reason `accolades.py` gives: the simulation has no mechanism for them, and
-an award with no machinery behind it is a label, not an award.
+**Everything is derived from what happened, never from a rating.**
+
+  * A player's All-League value is his win shares and VORP -- how much he did
+    to win games -- the same advanced lines the MVP panel reads.
+  * All-Defensive value is defensive win shares and defensive box plus-minus,
+    plus the stops a box score records: steals and blocks. This is why the
+    rebounding and playmaking titles were dropped -- an award decided on total
+    rebounds is a leaderboard, and a defensive team is the more interesting
+    thing that data can honestly support.
+  * A rookie is a player whose draft class is the one that entered this season
+    (`bio.draft.year`), the same test the newsroom's rookie wire uses.
+  * A sixth man is the best reserve -- a productive player who is **not** among
+    his club's top five by minutes. The engine does not record who started, so
+    "started on the bench" is read from minutes, which is the honest proxy: a
+    club's five biggest-minute men are its starters, and the best of the rest
+    is its sixth man.
+  * A coach's case is his club's record this season, from the standings.
+
+Selecting a field is not the same as ranking it. The value scores decide who is
+even in contention; the names then come out sorted, and for the list awards the
+order is gone entirely.
 """
 
 from __future__ import annotations
@@ -34,38 +43,35 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import mvp
+from .lineup import POSITIONS
 
-# How many names each award carries. Enough to be a field, few enough that the
-# list is a shortlist rather than a leaderboard in disguise.
-MVP_CONTENDERS = 6
-ALL_LEAGUE_CONTENDERS = 10
-STAT_CONTENDERS = 5
+# How many names a list award carries, and how deep a team award's bench pool is
+# allowed to reach when a position is thin.
+LIST_CONTENDERS = 6
+SIXTH_MAN_CONTENDERS = 6
+COACH_CONTENDERS = 6
 
-# The statistical titles, and the per-game stat each is decided on. Mirrors
-# `accolades.TITLES`, because these are the same awards seen from the other end
-# of the season -- a watch now, a badge when it is won.
-STAT_TITLES = (
-    ("scoring_title", "Scoring Title", "points",
-     "Most points per game across the season."),
-    ("rebounding_title", "Rebounding Title", "rebounds",
-     "Most rebounds per game across the season."),
-    ("playmaking_title", "Playmaking Title", "assists",
-     "Most assists per game across the season."),
-)
+# A club's five biggest-minute players are treated as its starters; everyone
+# else is a reserve. Not stored anywhere -- see the module docstring for why
+# minutes are the honest stand-in for a start.
+STARTERS_PER_CLUB = 5
 
+# A reserve needs to have actually played to be a sixth-man candidate: a fifth
+# of a starter's minutes, so a garbage-time body does not qualify.
+SIXTH_MAN_MIN_MPG = 12.0
+
+
+# --------------------------------------------------------------------------
+# One player on a card
+# --------------------------------------------------------------------------
 
 @dataclass
-class Contender:
-    """One name on a watch list. A line of context, and not one number that
-    says he is ahead."""
-
+class Slot:
     player_id: str
     name: str
     team_id: str
     position: str
-    points: float
-    rebounds: float
-    assists: float
+    line: str
 
     def to_dict(self) -> dict:
         return {
@@ -73,115 +79,254 @@ class Contender:
             "name": self.name,
             "teamId": self.team_id,
             "position": self.position,
-            # The same neutral three-stat line for every award, so a card reads
-            # as "here is the player", not "here is why he leads". No vote, no
-            # share, no rank.
-            "line": f"{self.points:.1f} pts, {self.rebounds:.1f} reb, "
-                    f"{self.assists:.1f} ast",
+            "line": self.line,
         }
 
 
-@dataclass
-class Award:
-    id: str
-    name: str
-    basis: str
-    contenders: list[Contender] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "basis": self.basis,
-            # Alphabetical. The order they were selected in -- which is the
-            # order that would reveal the standing -- does not survive this.
-            "contenders": [c.to_dict() for c in
-                           sorted(self.contenders, key=lambda c: c.name)],
-        }
+def _per_game(row: dict, key: str) -> float:
+    return (row.get(key, 0) or 0) / max(1, int(row.get("games", 0) or 0))
 
 
-def _contender(row: dict) -> Contender:
-    games = max(1, int(row.get("games", 0) or 0))
-    return Contender(
-        player_id=row.get("player_id") or row.get("playerId", ""),
+def _scoring_line(row: dict) -> str:
+    return (f"{_per_game(row, 'points'):.1f} pts, "
+            f"{_per_game(row, 'rebounds'):.1f} reb, "
+            f"{_per_game(row, 'assists'):.1f} ast")
+
+
+def _defensive_line(row: dict) -> str:
+    return (f"{_per_game(row, 'steals'):.1f} stl, "
+            f"{_per_game(row, 'blocks'):.1f} blk, "
+            f"{_per_game(row, 'rebounds'):.1f} reb")
+
+
+def _slot(row: dict, line=_scoring_line) -> Slot:
+    return Slot(
+        player_id=row.get("player_id", ""),
         name=row.get("name", ""),
-        team_id=row.get("team_id") or row.get("teamId", ""),
+        team_id=row.get("team_id", ""),
         position=row.get("position", ""),
-        points=(row.get("points", 0) or 0) / games,
-        rebounds=(row.get("rebounds", 0) or 0) / games,
-        assists=(row.get("assists", 0) or 0) / games,
+        line=line(row),
     )
 
 
-def _voted_pool(league) -> list[dict]:
-    """The players the panel is actually weighing, most-considered first.
+# --------------------------------------------------------------------------
+# Value scores -- all read off the advanced line, none off a rating
+# --------------------------------------------------------------------------
 
-    `mvp.tally` is the real award's count. It is used here only to find out who
-    is in the room -- the points it assigns are dropped, and the names come out
-    of this module in alphabetical order.
+def _value(row: dict) -> float:
+    """All-League value: how much he did to win. Win shares carry it, VORP
+    breaks the ties -- the same quantities the MVP panel weighs."""
+    return float(row.get("ws", 0) or 0) + 0.5 * float(row.get("vorp", 0) or 0)
+
+
+def _defense(row: dict) -> float:
+    """All-Defensive value: defensive win shares and defensive box plus-minus,
+    lifted by the stops a box score actually counts."""
+    games = max(1, int(row.get("games", 0) or 0))
+    stops = (float(row.get("steals", 0) or 0)
+             + float(row.get("blocks", 0) or 0)) / games
+    return (2.0 * float(row.get("dws", 0) or 0)
+            + float(row.get("dbpm", 0) or 0)
+            + stops * 0.6)
+
+
+def _sixth_man_value(row: dict) -> float:
+    """A reserve's case: scoring and efficiency off the bench. PER is the single
+    number that rewards a productive scorer without punishing his minutes."""
+    return float(row.get("per", 0) or 0) + _per_game(row, "points") * 0.5
+
+
+# --------------------------------------------------------------------------
+# Building a two-team, one-per-position award
+# --------------------------------------------------------------------------
+
+def _teams(rows: list[dict], score, line=_scoring_line, teams: int = 2) -> list[dict]:
+    """First team, then second, one player at each position.
+
+    Greedy by score within a position: the strongest available at each position
+    fills the first team, the next fills the second. A position with only one
+    qualifier fills the first team and leaves the second open rather than
+    inventing a name for it.
     """
-    contenders = mvp.tally(mvp.ballots(league))
-    rows = []
-    for contender in contenders:
-        row = dict(contender.row)
-        row.setdefault("player_id", contender.player_id)
-        row.setdefault("name", contender.name)
-        row.setdefault("team_id", contender.team_id)
-        rows.append(row)
-    return rows
+    by_position: dict[str, list[dict]] = {p: [] for p in POSITIONS}
+    for row in rows:
+        position = row.get("position", "")
+        if position in by_position:
+            by_position[position].append(row)
+    for position in by_position:
+        by_position[position].sort(key=score, reverse=True)
+
+    out = []
+    labels = ["First Team", "Second Team", "Third Team"]
+    for tier in range(teams):
+        players = []
+        for position in POSITIONS:
+            pool = by_position[position]
+            if len(pool) > tier:
+                players.append(_slot(pool[tier], line).to_dict())
+        out.append({"tier": labels[tier], "players": players})
+    return out
 
 
-def _stat_leaders(rows: list[dict], stat: str, count: int) -> list[dict]:
-    """The season leaders in one counting stat, per game, over the games floor.
+# --------------------------------------------------------------------------
+# Rookies, reserves and coaches
+# --------------------------------------------------------------------------
 
-    Reads the same totals-based rows the voted awards use -- `_candidate_rows`
-    carries season *totals*, and `_contender` divides by games, so both award
-    kinds compute a per-game line the one way. An earlier version read the
-    per-game `player_table` and divided a second time, which turned a scoring
-    leader's 21.8 into 0.9. Ranked internally to pick the shortlist; the order
-    is thrown away when the award is serialised and the names are sorted.
+def _rookie_ids(league) -> set[str]:
+    """Everyone whose draft class is the one that entered this season.
+
+    The newest draft year on any roster, exactly as `news._draft_year` reads it,
+    so the rookie wire and the All-Rookie team agree on who is a rookie.
     """
-    ranked = sorted(rows, key=lambda r: (r.get(stat, 0) or 0) / max(1, r.get("games", 1)),
-                    reverse=True)
-    return ranked[:count]
+    years = [p.bio.draft.year
+             for team in league.teams.values()
+             for p in team.players
+             if getattr(p, "bio", None) and p.bio.draft is not None]
+    if not years:
+        return set()
+    newest = max(years)
+    return {p.id
+            for team in league.teams.values()
+            for p in team.players
+            if getattr(p, "bio", None) and p.bio.draft is not None
+            and p.bio.draft.year == newest}
+
+
+def _reserves(rows: list[dict]) -> list[dict]:
+    """Every qualifying player who is not among his club's top five by minutes.
+
+    Grouped by club, ranked by total minutes; the bottom of each rotation is the
+    bench. Minutes are the proxy for a start -- see the module docstring.
+    """
+    by_club: dict[str, list[dict]] = {}
+    for row in rows:
+        by_club.setdefault(row.get("team_id", ""), []).append(row)
+    reserves = []
+    for club_rows in by_club.values():
+        club_rows.sort(key=lambda r: r.get("minutes", 0), reverse=True)
+        for row in club_rows[STARTERS_PER_CLUB:]:
+            games = max(1, int(row.get("games", 0) or 0))
+            if (row.get("minutes", 0) / games) / 60.0 >= 0 and \
+               _per_game(row, "minutes") >= SIXTH_MAN_MIN_MPG:
+                reserves.append(row)
+    return reserves
+
+
+def _coach_field(league) -> list[dict]:
+    """The coaches in the Coach-of-the-Year conversation: the clubs winning now.
+
+    Read straight off the standings -- a coach's case is his record. Ranked to
+    pick the field, then handed on to be sorted by name like every other list.
+    """
+    table = league.standings_table()
+    table = [row for row in table if (row.get("wins", 0) + row.get("losses", 0)) > 0]
+    table.sort(key=lambda r: r.get("win_pct", 0.0), reverse=True)
+    field_rows = []
+    for row in table[:COACH_CONTENDERS]:
+        team = league.teams.get(row.get("team_id"))
+        coach = getattr(team, "coach", None) if team else None
+        if coach is None:
+            continue
+        field_rows.append({
+            "playerId": coach.id,
+            "name": coach.name,
+            "teamId": row.get("team_id", ""),
+            "position": "",
+            "line": f"{row.get('wins', 0)}-{row.get('losses', 0)}",
+        })
+    return field_rows
+
+
+# --------------------------------------------------------------------------
+# The watch
+# --------------------------------------------------------------------------
+
+def _list_award(award_id, name, basis, slots, line_kind="scoring") -> dict:
+    return {
+        "id": award_id,
+        "name": name,
+        "basis": basis,
+        "format": "list",
+        # Alphabetical -- the selection order, which would reveal the standing,
+        # does not survive.
+        "contenders": sorted((s if isinstance(s, dict) else s.to_dict()
+                              for s in slots), key=lambda c: c["name"]),
+    }
+
+
+def _team_award(award_id, name, basis, teams) -> dict:
+    return {
+        "id": award_id, "name": name, "basis": basis,
+        "format": "teams", "teams": teams,
+    }
 
 
 def watch(league) -> dict:
-    """Every award, each with its field of contenders and no standing.
-
-    Returns the same shape whether the race is wide open or nearly settled --
-    because as far as this page is concerned it is never settled, only watched.
-    """
-    awards: list[Award] = []
+    awards: list[dict] = []
     minimum = mvp.minimum_games(league)
-    # Season totals for every qualifying player, the one table both kinds of
-    # award are read from.
-    qualifying = mvp._candidate_rows(league, minimum)
+    rows = mvp._candidate_rows(league, minimum)
+    open_race = mvp.is_open(league) and bool(rows)
 
-    if mvp.is_open(league):
-        pool = _voted_pool(league)
-        awards.append(Award(
+    if open_race:
+        pool = sorted(rows, key=_value, reverse=True)
+
+        awards.append(_list_award(
             "mvp", "Most Valuable Player",
             "The ten-writer panel's pick for the league's best season.",
-            [_contender(row) for row in pool[:MVP_CONTENDERS]]))
-        awards.append(Award(
-            "all_league", "All-League Team",
-            "The five best at their positions, chosen by the same panel.",
-            [_contender(row) for row in pool[:ALL_LEAGUE_CONTENDERS]]))
+            [_slot(r) for r in pool[:LIST_CONTENDERS]]))
 
-    for award_id, name, stat, basis in STAT_TITLES:
-        leaders = _stat_leaders(qualifying, stat, STAT_CONTENDERS)
-        if leaders:
-            awards.append(Award(award_id, name, basis,
-                                [_contender(row) for row in leaders]))
+        awards.append(_team_award(
+            "all_league", "All-League Team",
+            "The best at each position, first team and second.",
+            _teams(rows, _value)))
+
+        awards.append(_team_award(
+            "all_defense", "All-Defensive Team",
+            "The best defender at each position — defensive win shares, "
+            "steals and blocks, never total rebounds.",
+            _teams(rows, _defense, line=_defensive_line)))
+
+        rookies = _rookie_ids(league)
+        rookie_rows = [r for r in rows if r.get("player_id") in rookies]
+        if rookie_rows:
+            awards.append(_team_award(
+                "all_rookie", "All-Rookie Team",
+                "The best first-year player at each position.",
+                _teams(rookie_rows, _value)))
+
+        reserves = _reserves(rows)
+        if reserves:
+            best = sorted(reserves, key=_sixth_man_value, reverse=True)[:SIXTH_MAN_CONTENDERS]
+            awards.append(_list_award(
+                "sixth_man", "Sixth Man of the Year",
+                "The best player who comes off the bench — outside his club's "
+                "top five by minutes.",
+                [_slot(r) for r in best]))
+
+        # The scoring title stays; rebounding and playmaking are gone, replaced
+        # by the All-Defensive team.
+        scorers = sorted(rows, key=lambda r: _per_game(r, "points"),
+                         reverse=True)[:LIST_CONTENDERS]
+        awards.append(_list_award(
+            "scoring_title", "Scoring Title",
+            "Most points per game across the season.",
+            [_slot(r) for r in scorers]))
+
+    coaches = _coach_field(league) if open_race else []
+    if coaches:
+        awards.append(_list_award(
+            "coach", "Coach of the Year",
+            "The coach whose club has the season's best record.",
+            coaches, line_kind="record"))
 
     return {
         "open": bool(awards),
         "note": (
-            "A watch list, not a leaderboard. These are the players in "
-            "contention for each award — no vote, no standing, no favourite. "
-            "The winners are announced when the season ends."
+            "A watch list, not a leaderboard. These are the players and coaches "
+            "in contention for each award — no vote, no standing, no favourite. "
+            "The team awards name a first and second team by position; the "
+            "winners are all announced when the season ends."
         ),
-        "minimumGames": mvp.minimum_games(league),
-        "awards": [award.to_dict() for award in awards],
+        "minimumGames": minimum,
+        "awards": awards,
     }
