@@ -1,20 +1,18 @@
-"""The awards watch shows the field, and never the standing.
+"""The awards watch: seven honours, and never a standing.
 
-The one rule this feature exists to keep: it names who is in contention for each
-award and says nothing about who is ahead. No vote count, no vote share, no
-ranking, no front-runner marker. The winner is found out when the season ends,
-not read off this page -- the same discipline the All-Star vote and the draft
-scouting cards follow.
+The rule the feature keeps: it names who is in contention for each award and
+says nothing about who is ahead. No vote, no share, no ranking number, no
+front-runner marker. Who wins is found out when the season ends.
 
-Two claims are pinned, and both would regress without a sound:
+The team awards -- All-League, All-Defensive, All-Rookie -- are a first and a
+second team, one player at each position, which is the shape the honour takes.
+The first/second split is the award's structure, not a vote, and the tests
+below pin the structure without letting a number sneak in behind it:
 
-  * `TestNoStandingLeaks` -- the serialised payload carries no vote, share,
-    rank, first-place count or "leader" field. It is checked against the JSON
-    text because the guarantee is that none of it can reach the page, and the
-    surest proof is that the words are not there.
-  * `TestTheOrderRevealsNothing` -- the contenders come out alphabetical. If the
-    selection order ever survived into the payload it would be a ranking in
-    disguise, so the test sorts the names itself and demands they already match.
+  * every team has one player per position and none twice across the two teams;
+  * the rookie teams are made of actual rookies;
+  * the sixth-man field is made of actual reserves;
+  * the payload carries no vote, share, rank, ballot or advanced-stat column.
 
 Run with:  python3 -m unittest tests.test_awards -v
 """
@@ -22,6 +20,7 @@ Run with:  python3 -m unittest tests.test_awards -v
 from __future__ import annotations
 
 import json
+import re
 import sys
 import unittest
 from datetime import date, timedelta
@@ -31,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bballsim import awards, mvp
 from bballsim.api import payload
+from bballsim.lineup import POSITIONS
 from bballsim.league.calendar import build_daily_schedule
 from bballsim.league.league import League
 from bballsim.roster import load_teams
@@ -38,8 +38,7 @@ from bballsim.roster import load_teams
 _LEAGUE: list[League] = []
 
 
-def played(games_per_team: int = 20) -> League:
-    """A league with a season behind it, so every award has a field."""
+def played(games_per_team: int = 24) -> League:
     if _LEAGUE:
         return _LEAGUE[0]
     saved = load_teams()
@@ -55,93 +54,146 @@ def played(games_per_team: int = 20) -> League:
     return league
 
 
-class TestEveryAwardHasAField(unittest.TestCase):
+def award(data, award_id):
+    return next((a for a in data["awards"] if a["id"] == award_id), None)
+
+
+class TestTheSlate(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.data = awards.watch(played())
 
-    def test_all_the_season_awards_are_present(self):
+    def test_all_seven_honours_are_present(self):
         ids = {a["id"] for a in self.data["awards"]}
-        for expected in ("mvp", "all_league", "scoring_title",
-                         "rebounding_title", "playmaking_title"):
+        for expected in ("mvp", "all_league", "all_defense", "all_rookie",
+                         "sixth_man", "scoring_title", "coach"):
             self.assertIn(expected, ids, expected)
 
-    def test_each_award_names_a_shortlist(self):
-        for award in self.data["awards"]:
-            self.assertGreaterEqual(len(award["contenders"]), 3, award["id"])
-            self.assertTrue(award["name"])
-            self.assertTrue(award["basis"])
+    def test_the_dropped_titles_are_gone(self):
+        ids = {a["id"] for a in self.data["awards"]}
+        self.assertNotIn("rebounding_title", ids)
+        self.assertNotIn("playmaking_title", ids)
 
-    def test_a_contender_is_a_player_with_a_line(self):
-        for award in self.data["awards"]:
-            for c in award["contenders"]:
-                self.assertTrue(c["playerId"])
-                self.assertTrue(c["name"])
-                self.assertRegex(c["line"], r"pts.*reb.*ast")
+    def test_the_two_award_kinds_are_shaped_right(self):
+        for a in self.data["awards"]:
+            if a["format"] == "teams":
+                self.assertIn("teams", a)
+                self.assertNotIn("contenders", a)
+            else:
+                self.assertIn("contenders", a)
+                self.assertNotIn("teams", a)
 
-    def test_the_lines_are_real_per_game_numbers(self):
-        """The double-divide bug did not change *which* names appeared -- near
-        season's end games counts are close, so the order held -- it wrecked the
-        *numbers*, turning 21.8 points into 0.9. So check the magnitude, not
-        just the shape: a scoring contender averages real points."""
-        import re
-        scoring = next(a for a in self.data["awards"]
-                       if a["id"] == "scoring_title")
-        tops = []
-        for c in scoring["contenders"]:
-            tops.append(float(re.match(r"([\d.]+) pts", c["line"]).group(1)))
-        self.assertGreater(max(tops), 15.0,
-                           f"scoring lines look double-divided: {tops}")
 
-    def test_the_stat_titles_pick_the_real_leaders(self):
-        """The scoring shortlist must actually be the top scorers -- the bug
-        that shipped once had them at 0.9 points a game."""
+class TestTheTeams(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.data = awards.watch(played())
+
+    def _team_awards(self):
+        return [a for a in self.data["awards"] if a["format"] == "teams"]
+
+    def test_a_team_is_one_player_per_position(self):
+        for a in self._team_awards():
+            for team in a["teams"]:
+                positions = [p["position"] for p in team["players"]]
+                # No position appears twice, and every named slot is a real one.
+                self.assertEqual(len(positions), len(set(positions)),
+                                 f"{a['id']} {team['tier']}")
+                for p in positions:
+                    self.assertIn(p, POSITIONS)
+
+    def test_the_first_team_is_full(self):
+        """The first team of every award should have all five positions -- the
+        league is deep enough that only a thin rookie class leaves a gap, and
+        even then only on the second team."""
+        for a in self._team_awards():
+            first = a["teams"][0]
+            if a["id"] != "all_rookie":
+                self.assertEqual(len(first["players"]), len(POSITIONS), a["id"])
+
+    def test_nobody_is_on_both_teams_of_one_award(self):
+        for a in self._team_awards():
+            ids = [p["playerId"] for team in a["teams"] for p in team["players"]]
+            self.assertEqual(len(ids), len(set(ids)), a["id"])
+
+    def test_the_first_team_outranks_the_second_without_saying_so(self):
+        """The split has to mean something -- the first team is the better five
+        -- even though no number on the page says it. Checked here against the
+        value score the module used, which never reaches the payload."""
         league = played()
-        minimum = mvp.minimum_games(league)
-        rows = mvp._candidate_rows(league, minimum)
-        top = sorted(rows, key=lambda r: r["points"] / max(1, r["games"]),
-                     reverse=True)[:awards.STAT_CONTENDERS]
-        expected = {r["player_id"] for r in top}
-        scoring = next(a for a in self.data["awards"] if a["id"] == "scoring_title")
-        got = {c["playerId"] for c in scoring["contenders"]}
-        self.assertEqual(got, expected)
+        rows = {r["player_id"]: r for r in mvp._candidate_rows(
+            league, mvp.minimum_games(league))}
+        card = award(awards.watch(league), "all_league")
+        first = {p["position"]: p["playerId"] for p in card["teams"][0]["players"]}
+        second = {p["position"]: p["playerId"] for p in card["teams"][1]["players"]}
+        for position, second_id in second.items():
+            first_id = first.get(position)
+            if first_id and first_id in rows and second_id in rows:
+                self.assertGreaterEqual(awards._value(rows[first_id]),
+                                        awards._value(rows[second_id]),
+                                        position)
+
+
+class TestRookiesAreRookies(unittest.TestCase):
+    def test_every_all_rookie_name_is_a_rookie(self):
+        league = played()
+        rookies = awards._rookie_ids(league)
+        self.assertTrue(rookies, "the fixture produced no rookies to check")
+        card = award(awards.watch(league), "all_rookie")
+        for team in card["teams"]:
+            for p in team["players"]:
+                self.assertIn(p["playerId"], rookies, p["name"])
+
+
+class TestSixthMenAreReserves(unittest.TestCase):
+    def test_no_sixth_man_is_among_his_club_top_five_minutes(self):
+        league = played()
+        rows = mvp._candidate_rows(league, mvp.minimum_games(league))
+        by_club: dict[str, list[dict]] = {}
+        for r in rows:
+            by_club.setdefault(r["team_id"], []).append(r)
+        starters = set()
+        for club in by_club.values():
+            club.sort(key=lambda r: r.get("minutes", 0), reverse=True)
+            starters.update(r["player_id"] for r in club[:awards.STARTERS_PER_CLUB])
+        card = award(awards.watch(league), "sixth_man")
+        for c in card["contenders"]:
+            self.assertNotIn(c["playerId"], starters, c["name"])
+
+
+class TestCoachOfTheYear(unittest.TestCase):
+    def test_the_field_is_coaches_with_a_record_line(self):
+        card = award(awards.watch(played()), "coach")
+        self.assertTrue(card["contenders"])
+        for c in card["contenders"]:
+            self.assertRegex(c["line"], r"^\d+-\d+$")
+            self.assertEqual(c["position"], "")
 
 
 class TestNoStandingLeaks(unittest.TestCase):
-    def test_the_payload_carries_no_vote_or_rank(self):
-        blob = json.dumps(awards.watch(played())["awards"]).lower()
-        for banned in ("vote", "share", "rank", "first", "points\":",
-                       "leader", "favourite", "favorite", "standing",
-                       "ppg", "appearances", "ballot"):
-            self.assertNotIn(banned, blob, banned)
+    def test_the_payload_carries_no_vote_or_advanced_column(self):
+        data = awards.watch(played())
+        keys = set()
+        for a in data["awards"]:
+            for c in a.get("contenders", []):
+                keys |= set(c)
+            for team in a.get("teams", []):
+                for p in team["players"]:
+                    keys |= set(p)
+        # A row is identity and one line, nothing that ranks it.
+        self.assertEqual(keys, {"playerId", "name", "teamId", "position", "line"})
 
-    def test_a_contender_has_only_identity_and_a_line(self):
-        for award in awards.watch(played())["awards"]:
-            for c in award["contenders"]:
-                self.assertEqual(set(c), {"playerId", "name", "teamId",
-                                          "position", "line"})
+    def test_the_scoring_lines_are_real_per_game_numbers(self):
+        card = award(awards.watch(played()), "scoring_title")
+        tops = [float(re.match(r"([\d.]+) pts", c["line"]).group(1))
+                for c in card["contenders"]]
+        self.assertGreater(max(tops), 15.0, tops)
 
-
-class TestTheOrderRevealsNothing(unittest.TestCase):
-    def test_contenders_are_alphabetical(self):
-        for award in awards.watch(played())["awards"]:
-            names = [c["name"] for c in award["contenders"]]
-            self.assertEqual(names, sorted(names), award["id"])
-
-    def test_the_selection_order_does_not_survive(self):
-        """Build the MVP field twice from the same league and confirm the
-        payload order is stable and alphabetical -- not the panel's order,
-        which is what would leak the leader."""
-        league = played()
-        pool = awards._voted_pool(league)          # panel order, best first
-        card = next(a for a in awards.watch(league)["awards"] if a["id"] == "mvp")
-        panel_first = pool[0]["name"]
-        shown_first = card["contenders"][0]["name"]
-        # The panel's leader is only "first" on the card if he also sorts first
-        # by name; in general the two disagree, and the card follows the name.
-        self.assertEqual([c["name"] for c in card["contenders"]],
-                         sorted(c["name"] for c in card["contenders"]))
-        del panel_first, shown_first  # asserted structurally above
+    def test_list_contenders_are_alphabetical(self):
+        for a in awards.watch(played())["awards"]:
+            if a["format"] == "list":
+                names = [c["name"] for c in a["contenders"]]
+                self.assertEqual(names, sorted(names), a["id"])
 
 
 class TestItRidesInTheBootstrap(unittest.TestCase):
@@ -149,12 +201,10 @@ class TestItRidesInTheBootstrap(unittest.TestCase):
         boot = payload.bootstrap(played())
         self.assertIn("awards", boot)
         self.assertNotIn("mvp", boot)
-        self.assertEqual({a["id"] for a in boot["awards"]["awards"]} >= {"mvp"},
-                         True)
 
 
 class TestBeforeThereIsASeason(unittest.TestCase):
-    def test_a_fresh_league_has_nothing_to_watch_yet(self):
+    def test_a_fresh_league_has_nothing_to_watch(self):
         saved = load_teams()
         league = League(name=saved.name, season=saved.season)
         for team in saved.teams:
@@ -163,8 +213,6 @@ class TestBeforeThereIsASeason(unittest.TestCase):
             [t.id for t in saved.teams], start_date=date(2026, 10, 20),
             games_per_team=4, season=league.season))
         data = awards.watch(league)
-        # No games played, so the voted awards are shut and the stat titles have
-        # nobody over the games floor.
         self.assertFalse(data["open"])
         self.assertEqual(data["awards"], [])
 

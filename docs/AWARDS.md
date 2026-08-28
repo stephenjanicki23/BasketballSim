@@ -46,25 +46,50 @@ carries no `vote`, `share`, `rank`, `first`, `leader` or `ballot`.
 
 ---
 
-## 3. The awards, and what each is
+## 3. Two kinds of award
 
-| award | field is | decided at season's end by |
+**List awards** name a shortlist, alphabetical, no ranking:
+
+| award | field | decided at season's end by |
 |---|---|---|
-| Most Valuable Player | the panel's top of the ballot | the ten-writer vote |
-| All-League Team | the panel's broader pool | the five best at each position |
-| Scoring Title | the season's top scorers | most points per game |
-| Rebounding Title | the season's top rebounders | most rebounds per game |
-| Playmaking Title | the season's top passers | most assists per game |
+| Most Valuable Player | the season's best players | the ten-writer vote |
+| Scoring Title | the top scorers | most points per game |
+| Sixth Man of the Year | the best reserves | the panel |
+| Coach of the Year | the winning clubs' coaches | the panel |
 
-There is no Defensive Player of the Year and no Rookie of the Year, for the
-reason `accolades.py` gives: the simulation has no mechanism to decide them, and
-an award with no machinery behind it is a label, not an award.
+**Team awards** name a **first team and a second team, one player at each
+position** — the shape those honours actually take. The first/second split is
+the award's own structure; no number ranks the two.
 
-The watch opens once there is enough season to argue about — `mvp.is_open` for
-the voted awards, and the games-played floor for the statistical ones. A fresh
-league shows nothing yet, and says so.
+| award | value is | positions |
+|---|---|---|
+| All-League Team | win shares and VORP | PG · SG · SF · PF · C, ×2 |
+| All-Defensive Team | defensive win shares, box plus-minus, steals, blocks | PG · SG · SF · PF · C, ×2 |
+| All-Rookie Team | win shares and VORP, among first-years | PG · SG · SF · PF · C, ×2 |
 
----
+A position with only one qualifier fills the first team and leaves the second
+open rather than inventing a name — which is why a thin rookie class can show a
+four-man second team.
+
+### What is deliberately gone
+
+The **rebounding and playmaking titles** were removed. An award decided on total
+rebounds is a leaderboard by another name, and the data supports something
+better in their place: an **All-Defensive team**, built from defensive win
+shares, defensive box plus-minus and the stops a box score records — steals and
+blocks, and pointedly *not* total rebounds.
+
+### How the tricky ones are derived, honestly
+
+* A **rookie** is a player whose draft class is the newest on any roster
+  (`bio.draft.year`), the same test `news._draft_year` uses, so the rookie wire
+  and the All-Rookie team never disagree about who is one.
+* A **sixth man** is the best player who is *not* among his club's top five by
+  minutes. The engine never records who started, so minutes are the honest
+  stand-in: a club's five biggest-minute men are its starters, and the best of
+  the rest is its sixth man.
+* A **coach's** case is his club's record this season, straight off the
+  standings.
 
 ## 4. `mvp.py` did not go anywhere
 
@@ -83,7 +108,7 @@ view of it; the view changed, the machinery did not.
 | `bballsim/api/payload.py` | rides in the bootstrap as `awards` (was `mvp`) |
 | `GET /api/awards` | the same shape on its own (was `/api/mvp`) |
 | Stats → Awards Watch | the screen |
-| `tests/test_awards.py` | 11 tests |
+| `tests/test_awards.py` | 15 tests |
 
 ### One bug, caught on screen
 
