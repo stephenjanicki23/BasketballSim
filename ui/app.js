@@ -4678,31 +4678,73 @@ function renderAwards() {
 }
 
 function awardCard(award) {
-  const card = el("section", "award-card");
+  const card = el("section",
+    award.format === "teams" ? "award-card is-teams" : "award-card");
   const head = el("header", "award-head");
   head.appendChild(el("h3", null, award.name));
   if (award.basis) head.appendChild(el("p", "award-basis", award.basis));
   card.appendChild(head);
 
-  const list = el("ul", "award-contenders");
-  (award.contenders || []).forEach((c) => {
-    const item = el("li", "award-contender");
-    const who = el("div", "award-who");
-    who.appendChild(playerLink(c.name, c.playerId, c.teamId, "award-name"));
-    who.appendChild(el("span", "award-meta",
-      `${c.position}${c.teamId ? " · " + (teamAbbr(c.teamId) || c.teamId) : ""}`));
-    item.appendChild(who);
-    item.appendChild(el("span", "award-line", c.line || ""));
-    list.appendChild(item);
-  });
-  card.appendChild(list);
+  if (award.format === "teams") {
+    (award.teams || []).forEach((team) => card.appendChild(awardTeam(team)));
+  } else {
+    card.appendChild(awardList(award.contenders || [], award.id === "coach"));
+  }
   return card;
+}
+
+/* A shortlist -- MVP, the scoring title, Sixth Man, Coach of the Year. */
+function awardList(contenders, isCoach) {
+  const list = el("ul", "award-contenders");
+  contenders.forEach((c) => list.appendChild(awardRow(c, false, isCoach)));
+  return list;
+}
+
+/* One team of an All-League / All-Defensive / All-Rookie card: a heading and
+ * five positions, the shape the honour actually takes. No number ranks the two
+ * teams against each other; First and Second is the award's own structure. */
+function awardTeam(team) {
+  const wrap = el("div", "award-team");
+  wrap.appendChild(el("h4", "award-team-head", team.tier));
+  const list = el("ul", "award-contenders");
+  (team.players || []).forEach((p) => list.appendChild(awardRow(p, true)));
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function awardRow(c, showPosition, isCoach) {
+  const item = el("li", "award-contender");
+  if (showPosition) {
+    item.appendChild(el("span", "award-pos", c.position || ""));
+  }
+  const who = el("div", "award-who");
+  // A coach has no player page -- his name goes to his club, where the Coach
+  // tab is. Everyone else links to his own profile.
+  if (isCoach) {
+    who.appendChild(teamLink(c.teamId, (node) =>
+      node.appendChild(el("span", "award-name", c.name)), "award-name-link"));
+  } else {
+    who.appendChild(playerLink(c.name, c.playerId, c.teamId, "award-name"));
+  }
+  const club = c.teamId ? (teamAbbr(c.teamId) || c.teamId) : "";
+  const meta = showPosition
+    ? club
+    // Position, then club -- but a coach has no position, so drop the leading
+    // separator rather than print "· CBS".
+    : [c.position, club].filter(Boolean).join(" · ");
+  who.appendChild(el("span", "award-meta", meta));
+  item.appendChild(who);
+  item.appendChild(el("span", "award-line", c.line || ""));
+  return item;
 }
 
 /* A club's short code from the loaded teams, for the contender meta line. */
 function teamAbbr(teamId) {
   const team = state.teams && state.teams.get(teamId);
-  return team ? team.abbreviation : "";
+  // The team summary ships the code as `abbr`; `abbreviation` is the Python
+  // name and never reaches the client. Reading the wrong one left every award
+  // row falling back to the lowercase team id.
+  return team ? (team.abbr || team.abbreviation || "") : "";
 }
 
 
