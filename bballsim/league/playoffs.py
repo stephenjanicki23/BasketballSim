@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 
 from ..conferences import CONFERENCES, FINALS_NAME, conference_for
-from .calendar import PACIFIC, GameStatus, ScheduledGame, game_id
+from .calendar import DAILY_TIPOFFS, PACIFIC, GameStatus, ScheduledGame, game_id
 
 # Round names, in order. The last one is the championship and is not tied to a
 # conference; the three before it are played inside one.
@@ -56,12 +56,34 @@ HOME_PATTERN: tuple[bool, ...] = (True, True, False, False, True, False, True)
 # so a sweep does not run straight into the next series.
 DAYS_BETWEEN_GAMES = 2
 DAYS_BETWEEN_ROUNDS = 3
-PLAYOFF_TIPOFF = time(19, 0)   # Pacific, the evening slot
+
+# The postseason runs two games a day and no more, in the first slate and the
+# last -- an early game and a night game -- rather than the eight-at-once wall
+# the regular season allows. The slots are the calendar's own first and last
+# tip times, so a playoff day sits inside the same schedule as the season it
+# grew out of.
+PLAYOFF_SLOTS: tuple[time, ...] = (DAILY_TIPOFFS[0], DAILY_TIPOFFS[-1])
+GAMES_PER_DAY = len(PLAYOFF_SLOTS)
 
 # Who meets whom in round two, by seed. The bracket is fixed at seeding time:
 # the 1/8 winner takes the 4/5 winner whatever the upsets, which is what makes
 # a bracket a bracket rather than a re-seed.
 SEMIFINAL_PAIRS: tuple[tuple[int, int], ...] = ((1, 8), (4, 5)), ((2, 7), (3, 6))
+
+# The first round in bracket order -- the high seed of each series, top to
+# bottom, so that two series sharing a semifinal sit next to each other. Read
+# straight off SEMIFINAL_PAIRS: 1/8 and 4/5 feed one semifinal, 2/7 and 3/6 the
+# other, giving 1, 4, 2, 3.
+_FIRST_ROUND_ORDER: tuple[int, ...] = tuple(
+    matchup[0] for pair in SEMIFINAL_PAIRS for matchup in pair)
+
+# Which semifinal (0 or 1) a seed belongs to, so a rebuilt semifinal series can
+# be placed in the right half of the bracket whoever survived the first round.
+_SEMI_OF_SEED: dict[int, int] = {
+    seed: index
+    for index, pair in enumerate(SEMIFINAL_PAIRS)
+    for matchup in pair for seed in matchup
+}
 
 
 def is_playoff(game: ScheduledGame) -> bool:
@@ -228,12 +250,32 @@ def series_in(league, round_label: str) -> list[Series]:
     return built
 
 
+def _bracket_key(series: "Series", label: str) -> tuple:
+    """Where a series sits in the drawn bracket, top to bottom.
+
+    `series_in` sorts by seed, which is right for a table and wrong for a
+    bracket: it puts 1/8 next to 2/7, two series that never meet, and makes the
+    draw look as though they would. This orders by the half of the bracket a
+    series lives in instead, so the picture reads down the page the way a
+    bracket should.
+    """
+    conf = CONFERENCES.index(series.conference) if series.conference in CONFERENCES else 9
+    if label == FIRST_ROUND:
+        rank = series.high_rank
+        order = _FIRST_ROUND_ORDER.index(rank) if rank in _FIRST_ROUND_ORDER else 9
+        return (conf, order)
+    if label == CONFERENCE_SEMIS:
+        return (conf, _SEMI_OF_SEED.get(series.high_rank, 9))
+    return (conf, 0)
+
+
 def bracket(league) -> dict:
     """The whole postseason as the front end wants it."""
     rounds = []
     for label in ROUNDS:
         found = series_in(league, label)
         if found:
+            found = sorted(found, key=lambda s: _bracket_key(s, label))
             rounds.append({"round": label, "series": [s.to_dict() for s in found]})
     champion = None
     finals = series_in(league, KEYSTONE_FINALS)
@@ -259,16 +301,14 @@ def champion(league) -> str | None:
 # Scheduling: add the games that have just become knowable
 # --------------------------------------------------------------------------
 
-def _utc(day: date) -> datetime:
-    """Pacific evening, stored as UTC -- the same rule the calendar uses, so
-    playoff tip-offs survive daylight saving the way regular ones do."""
-    local = datetime.combine(day, PLAYOFF_TIPOFF, tzinfo=PACIFIC)
-    return local.astimezone(timezone.utc)
-
-
 def _make_game(league, series_round: str, high: str, low: str, number: int,
-               when: date) -> ScheduledGame:
-    """One fixture of a series, with home court on the 2-2-1-1-1 pattern."""
+               tipoff: datetime) -> ScheduledGame:
+    """One fixture of a series, with home court on the 2-2-1-1-1 pattern.
+
+    `tipoff` is a full UTC datetime rather than a bare day, because a playoff
+    game now carries a slot -- an early game or a night game -- not just a date.
+    `_next_slot` is what chooses it.
+    """
     high_home = HOME_PATTERN[number - 1]
     home, away = (high, low) if high_home else (low, high)
     label = series_round
@@ -279,10 +319,35 @@ def _make_game(league, series_round: str, high: str, low: str, number: int,
         id=game_id(league.season, key, home, away),
         home_team_id=home,
         away_team_id=away,
-        tipoff_at=_utc(when),
+        tipoff_at=tipoff,
         season=league.season,
         round_label=label,
     )
+
+
+def _next_slot(scheduled, not_before: date) -> datetime:
+    """The next open playoff slot on or after `not_before`.
+
+    Two games a day, in the first slate and the last: a day already holding two
+    playoff games is full and the search moves on. Counts the games passed in --
+    both those already on the schedule and the ones being added in this same
+    pass -- so a round's fixtures spread across the days instead of piling onto
+    one.
+    """
+    used: dict[date, set[time]] = {}
+    for game in scheduled:
+        if is_playoff(game):
+            local = game.tipoff_at.astimezone(PACIFIC)
+            used.setdefault(local.date(), set()).add(
+                local.time().replace(second=0, microsecond=0))
+    day = not_before
+    while True:
+        taken = used.get(day, set())
+        for slot in PLAYOFF_SLOTS:
+            if slot not in taken:
+                local = datetime.combine(day, slot, tzinfo=PACIFIC)
+                return local.astimezone(timezone.utc)
+        day += timedelta(days=1)
 
 
 def _last_playoff_day(league) -> date | None:
@@ -358,15 +423,19 @@ def advance(league) -> list[ScheduledGame]:
     # Round one, if it has not started.
     if not series_in(league, FIRST_ROUND):
         start = _regular_season_end(league) + timedelta(days=DAYS_BETWEEN_ROUNDS)
+        # Order the openers the way the bracket reads -- 1/8, 4/5, 2/7, 3/6 --
+        # so the two games sharing a day are the two that will meet, not two
+        # halves of the draw that never touch.
         for conference in CONFERENCES:
             seeds = seed_conference(league, conference)
             if len(seeds) < SEEDS:
                 continue
-            for high_index in range(SEEDS // 2):
-                high = seeds[high_index]
-                low = seeds[SEEDS - 1 - high_index]
+            for high_seed in _FIRST_ROUND_ORDER:
+                high = seeds[high_seed - 1]
+                low = seeds[SEEDS - high_seed]
+                tipoff = _next_slot(league.schedule + added, start)
                 added.append(_make_game(
-                    league, FIRST_ROUND, high, low, 1, start))
+                    league, FIRST_ROUND, high, low, 1, tipoff))
         if added:
             league.set_schedule(league.schedule + added)
         return added
@@ -382,9 +451,11 @@ def advance(league) -> list[ScheduledGame]:
                 continue
             if len(s.games) >= MAX_GAMES:
                 continue
-            when = s.games[-1].tipoff_at.date() + timedelta(days=DAYS_BETWEEN_GAMES)
+            earliest = s.games[-1].tipoff_at.astimezone(PACIFIC).date() + \
+                timedelta(days=DAYS_BETWEEN_GAMES)
+            tipoff = _next_slot(league.schedule + added, earliest)
             added.append(_make_game(
-                league, label, s.high_seed, s.low_seed, len(s.games) + 1, when))
+                league, label, s.high_seed, s.low_seed, len(s.games) + 1, tipoff))
 
         nxt = _next_round(label)
         if nxt and not series_in(league, nxt):
@@ -394,7 +465,8 @@ def advance(league) -> list[ScheduledGame]:
                 start = last + timedelta(days=DAYS_BETWEEN_ROUNDS)
                 for pair in pairs:
                     high, low = _ordered(league, pair)
-                    added.append(_make_game(league, nxt, high, low, 1, start))
+                    tipoff = _next_slot(league.schedule + added, start)
+                    added.append(_make_game(league, nxt, high, low, 1, tipoff))
 
     if added:
         league.set_schedule(league.schedule + added)

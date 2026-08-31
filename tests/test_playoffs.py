@@ -148,6 +148,35 @@ class TestTheBracket(unittest.TestCase):
             )
             self.assertEqual(pairs, [(1, 8), (2, 7), (3, 6), (4, 5)])
 
+    def test_the_bracket_orders_the_first_round_for_the_draw(self):
+        """The table sorts by seed; the bracket must not. Two series that share
+        a semifinal have to sit together, so the first round reads 1/8, 4/5,
+        2/7, 3/6 -- not 1/8 next to 2/7, which never meet."""
+        rounds = playoffs.bracket(self.league)["rounds"]
+        first = next(r for r in rounds if r["round"] == playoffs.FIRST_ROUND)
+        for conference in CONFERENCES:
+            order = [s["highRank"] for s in first["series"]
+                     if s["conference"] == conference]
+            self.assertEqual(order, list(playoffs._FIRST_ROUND_ORDER),
+                             conference)
+
+    def test_the_one_eight_winner_meets_the_four_five_winner(self):
+        """The semifinal pairing itself, checked on the played bracket: the two
+        clubs in each conference semifinal came from first-round series whose
+        high seeds share a `SEMIFINAL_PAIRS` group."""
+        first = {s.conference: {} for s in
+                 playoffs.series_in(self.league, playoffs.FIRST_ROUND)}
+        for s in playoffs.series_in(self.league, playoffs.FIRST_ROUND):
+            first[s.conference][s.winner] = s.high_rank
+        for s in playoffs.series_in(self.league, playoffs.CONFERENCE_SEMIS):
+            seeds = first[s.conference]
+            a = seeds.get(s.high_seed)
+            b = seeds.get(s.low_seed)
+            self.assertIsNotNone(a); self.assertIsNotNone(b)
+            self.assertEqual(playoffs._SEMI_OF_SEED[a],
+                             playoffs._SEMI_OF_SEED[b],
+                             f"{a} and {b} should not meet in a semifinal")
+
     def test_all_four_rounds_are_played(self):
         for label in playoffs.ROUNDS:
             self.assertTrue(playoffs.series_in(self.league, label), label)
@@ -273,6 +302,55 @@ class TestAdvanceIsSafeToCallRepeatedly(unittest.TestCase):
         self.assertFalse(playoffs.regular_season_complete(league))
         self.assertEqual(playoffs.advance(league), [])
         self.assertEqual(playoffs.bracket(league)["rounds"], [])
+
+
+class TestThePlayoffSchedule(unittest.TestCase):
+    """Two games a day, in the first slate and the last."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.league = finished_league()
+
+    def _playoff_local_times(self):
+        from bballsim.league.calendar import PACIFIC
+        return [game.tipoff_at.astimezone(PACIFIC)
+                for game in self.league.schedule if playoffs.is_playoff(game)]
+
+    def test_no_day_carries_more_than_two_games(self):
+        """Two, literally -- not `GAMES_PER_DAY`, so widening that constant
+        cannot quietly let the wall of simultaneous games back in."""
+        from collections import Counter
+        days = Counter(t.date() for t in self._playoff_local_times())
+        self.assertTrue(days)
+        self.assertLessEqual(max(days.values()), 2)
+
+    def test_every_game_is_in_the_first_or_last_calendar_slot(self):
+        """Checked against the calendar's own first and last tip times, not the
+        playoffs' copy of them -- an early game and a night game, nothing in the
+        middle."""
+        from bballsim.league.calendar import DAILY_TIPOFFS
+        allowed = {DAILY_TIPOFFS[0], DAILY_TIPOFFS[-1]}
+        for local in self._playoff_local_times():
+            self.assertIn(local.time().replace(second=0, microsecond=0), allowed,
+                          local.isoformat())
+
+    def test_both_slots_are_actually_used(self):
+        from bballsim.league.calendar import DAILY_TIPOFFS
+        used = {t.time().replace(second=0, microsecond=0)
+                for t in self._playoff_local_times()}
+        for slot in (DAILY_TIPOFFS[0], DAILY_TIPOFFS[-1]):
+            self.assertIn(slot, used, slot)
+
+    def test_a_club_never_plays_twice_in_a_day(self):
+        from collections import defaultdict
+        by_day = defaultdict(list)
+        for game in self.league.schedule:
+            if playoffs.is_playoff(game):
+                day = game.tipoff_at.date()
+                by_day[day] += [game.home_team_id, game.away_team_id]
+        for day, clubs in by_day.items():
+            self.assertEqual(len(clubs), len(set(clubs)),
+                             f"a club plays twice on {day}")
 
 
 if __name__ == "__main__":
