@@ -141,6 +141,20 @@ def _season_schedule_id(path: Path) -> str | None:
     return schedule_fingerprint(data.get("games", []))
 
 
+# The derived and rolled files a season accumulates as it is played. On a full
+# reset they are cleared, because they are the record of the very progression
+# the reset exists to undo: leaving history.json behind would put the league
+# back on 2026-27 with four years of archived seasons still hanging off it, and
+# leaving it also blocks the season reseed (see `_should_replace_season`).
+_ROLLED_FILES = ("history.json", "records.json", "offseason.json",
+                 "trades.json", "allstar.json")
+
+
+def _reset_requested() -> bool:
+    return os.environ.get("BBALLSIM_RESET_SEASON", "").strip().lower() in {
+        "1", "true", "yes"}
+
+
 def seed_data_dir(target: Path | None = None) -> list[Path]:
     """Put the bundled league and season on the data directory.
 
@@ -153,6 +167,14 @@ def seed_data_dir(target: Path | None = None) -> list[Path]:
         fixtures that no longer exist; or
       * `BBALLSIM_RESET_SEASON` is set, which is the manual override.
 
+    The override is a **full** reset: it does not just replace the season, it
+    clears the rolled state a played league leaves behind -- the archived
+    seasons, the record book, the summer in progress, the trade log -- and puts
+    the roster itself back to the committed one. A league that had fast-forwarded
+    through several seasons (which is what a season whose dates were all in the
+    past would do on first boot) is otherwise stuck: its history file blocks the
+    reseed forever, so nothing short of clearing it brings the league home.
+
     Returns the files actually written.
     """
     target = Path(target) if target else data_dir()
@@ -160,13 +182,27 @@ def seed_data_dir(target: Path | None = None) -> list[Path]:
         return []
 
     target.mkdir(parents=True, exist_ok=True)
+    reset = _reset_requested()
     written = []
+
+    if reset:
+        # Wipe the rolled state so the league truly returns to the seed rather
+        # than reseeding one file on top of years of accumulated history.
+        for name in _ROLLED_FILES:
+            stale = target / name
+            if stale.is_file():
+                stale.unlink()
+                written.append(stale)
+
     for name in ("league.json", "season.json"):
         source = BUNDLED_DATA_DIR / name
         destination = target / name
         if not source.is_file():
             continue
-        if not destination.exists() or _should_replace_season(name, source, destination):
+        # A reset forces both back to committed -- including the roster, which
+        # is otherwise never overwritten because a played league has aged it.
+        if (reset or not destination.exists()
+                or _should_replace_season(name, source, destination)):
             shutil.copyfile(source, destination)
             written.append(destination)
     return written
@@ -176,7 +212,7 @@ def _should_replace_season(name: str, source: Path, destination: Path) -> bool:
     """Whether an existing file on the data directory is now stale."""
     if name != "season.json":
         return False  # the roster is never overwritten; it has no calendar
-    if os.environ.get("BBALLSIM_RESET_SEASON", "").strip().lower() in {"1", "true", "yes"}:
+    if _reset_requested():
         return True
     # A league that has rolled an offseason is playing a calendar it built for
     # itself, which will never match the bundled one -- so the fingerprint test

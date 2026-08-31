@@ -56,6 +56,42 @@ DEFAULT_PORT = int(os.environ.get("PORT") or 8000)
 DEFAULT_HOST = os.environ.get("HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
 
 
+def _reschedule_if_calendar_has_rotted(league: League) -> None:
+    """Rebuild a season that has fully slipped into the past before it is
+    played.
+
+    A committed `season.json` carries absolute dates, and real time keeps
+    moving. A season generated to open tomorrow is fine on the day it ships and
+    a live bug three weeks later: once every one of its games is in the past,
+    the first `tick` plays the entire year -- and the offseason after it -- in a
+    single boot, which is how a fully-simulated league ended up on the live
+    site. So if nothing has been played yet and the last fixture is already
+    behind us, the calendar has rotted: throw it away and lay a fresh one down
+    starting tomorrow. A league that has actually played games is never touched
+    -- that is a real season in progress, not a stale seed.
+    """
+    from bballsim.league.calendar import GameStatus, build_daily_schedule
+
+    if any(g.status == GameStatus.FINAL for g in league.schedule):
+        return
+    if not league.schedule:
+        return
+    now = league.clock.now()
+    if max(g.tipoff_at for g in league.schedule) >= now:
+        return  # still opens in the future, or is mid-slate today -- leave it
+
+    games_per_team = round(2 * len(league.schedule) / max(1, len(league.teams)))
+    league.clock.offset = timedelta()
+    league.set_schedule(build_daily_schedule(
+        team_ids=list(league.teams),
+        start_date=now.date() + timedelta(days=1),
+        games_per_team=max(1, games_per_team),
+        season=league.season,
+    ))
+    print(f"season calendar had fully elapsed -- laid a fresh one opening "
+          f"{now.date() + timedelta(days=1)}")
+
+
 def build_league(team_count: int = 30) -> League:
     """The league and its season, from disk."""
     # On a mounted disk the first boot finds an empty directory; seed it from
@@ -83,6 +119,7 @@ def build_league(team_count: int = 30) -> League:
     if season_exists():
         # Fixtures, results played so far, and the sim date you left on.
         apply_season(league, read_season())
+        _reschedule_if_calendar_has_rotted(league)
     else:
         print(f"no season at {SEASON_PATH} — building a temporary fixture list.\n"
               f"Run `python3 tools/make_season.py` to save one.")

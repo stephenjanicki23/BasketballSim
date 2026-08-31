@@ -104,14 +104,24 @@ configure beyond DNS.
 - **Logs** — a save prints `saved N played of 1230 fixtures … (sim date …)`, so
   the logs tell you the season is being kept.
 - **Resetting the season** — set `BBALLSIM_RESET_SEASON=1` in the service's
-  environment and redeploy: the next boot wipes every result, standing and stat
-  back to the committed fixture list. **Remove the variable afterwards**, or
-  every future deploy wipes the season again. (Deleting
-  `/var/data/season.json` from a Render shell and restarting does the same
-  thing.) The roster is never touched by either; to reset players and coaches,
-  delete `/var/data/league.json` — and to put a multi-season league back to its
-  first year, delete `/var/data/history.json` alongside it, since that is what
-  records the seasons already played.
+  environment and redeploy: the next boot does a **full** reset. It wipes every
+  result, standing and stat back to the committed fixture list, resets the
+  roster to the committed one, and clears the rolled state a played league
+  leaves behind — `history.json`, `records.json`, `offseason.json`,
+  `trades.json`, `allstar.json`. That last part matters: a league that has
+  rolled even one offseason writes a `history.json`, and its presence otherwise
+  blocks the reseed forever, so before this a drifted league could not be
+  brought home by the variable alone. **Remove the variable after the reset
+  boot**, or every future deploy resets the season again.
+- **A rotted calendar heals itself.** The committed `season.json` carries
+  absolute dates, and real time keeps moving. If a deploy finds a season that
+  has *never been played* and whose every game is already in the past, it
+  throws that calendar away and lays a fresh one opening tomorrow, rather than
+  fast-forwarding through a whole simulated year on the first tick. (A season
+  with even one game played is a real season in progress and is never touched.)
+  This is the safety net; the belt is regenerating `data/season.json` with
+  `python3 tools/make_season.py --force` before a deploy so it opens in the
+  future to begin with.
 - **The clock is real time, and so is the tracker.** Games tip off at their
   real 8am, 1pm and 7pm Pacific slots, three a day per team, and reveal their
   play-by-play at real speed — a game runs about 48 minutes, so the three

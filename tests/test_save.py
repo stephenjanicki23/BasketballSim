@@ -17,6 +17,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -635,3 +636,129 @@ class TestTheCommittedSeason(unittest.TestCase):
     def test_fixtures_are_in_chronological_order(self):
         tipoffs = [g.tipoff_at for g in self.saved.games]
         self.assertEqual(tipoffs, sorted(tipoffs))
+
+
+class TestSeedingAndReset(unittest.TestCase):
+    """First boot seeds an empty disk; a deploy leaves a played season alone;
+    a reset brings a drifted league all the way home.
+
+    The bug this guards against shipped to a live site: a committed season
+    whose dates had all slipped into the past fast-forwarded through the whole
+    year -- and the offseason -- on first boot, wrote a history file, and the
+    history file then blocked every future reseed. Nothing short of a full reset
+    could recover it, so a full reset is what `BBALLSIM_RESET_SEASON` now does.
+    """
+
+    def setUp(self):
+        from bballsim import save
+        self.save = save
+        self.tmp = Path(tempfile.mkdtemp())
+        for name in ("league.json", "season.json"):
+            shutil.copyfile(save.BUNDLED_DATA_DIR / name, self.tmp / name)
+        os.environ.pop("BBALLSIM_RESET_SEASON", None)
+
+    def tearDown(self):
+        os.environ.pop("BBALLSIM_RESET_SEASON", None)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _season_label(self):
+        return json.loads((self.tmp / "season.json").read_text())["season"]
+
+    def _drift(self):
+        """Make the disk look like a league that has rolled seasons."""
+        data = json.loads((self.tmp / "season.json").read_text())
+        data["season"] = "2030-31"
+        data["schedule"] = "0000deadbeef0000"
+        (self.tmp / "season.json").write_text(json.dumps(data))
+        (self.tmp / "history.json").write_text(
+            '{"version": 1, "seasons": [{"season": "2026-27"}]}')
+        (self.tmp / "records.json").write_text("{}")
+
+    def test_first_boot_seeds_an_empty_directory(self):
+        empty = Path(tempfile.mkdtemp())
+        try:
+            written = self.save.seed_data_dir(empty)
+            self.assertTrue((empty / "season.json").is_file())
+            self.assertTrue((empty / "league.json").is_file())
+            self.assertTrue(written)
+        finally:
+            shutil.rmtree(empty, ignore_errors=True)
+
+    def test_a_rolled_league_is_left_alone(self):
+        self._drift()
+        self.save.seed_data_dir(self.tmp)
+        self.assertEqual(self._season_label(), "2030-31",
+                         "a history file must block the reseed")
+        self.assertTrue((self.tmp / "history.json").is_file())
+
+    def test_reset_wipes_the_drift_and_reseeds(self):
+        self._drift()
+        os.environ["BBALLSIM_RESET_SEASON"] = "true"
+        self.save.seed_data_dir(self.tmp)
+        self.assertEqual(self._season_label(),
+                         json.loads((self.save.BUNDLED_DATA_DIR / "season.json")
+                                    .read_text())["season"])
+        for name in self.save._ROLLED_FILES:
+            self.assertFalse((self.tmp / name).is_file(),
+                             f"{name} should be cleared on reset")
+
+    def test_the_committed_season_has_not_already_been_played(self):
+        """The regression itself: the shipped season must not carry results, or
+        every fresh deploy starts mid-way through a simulated year."""
+        saved = self.save.read_season(self.save.BUNDLED_DATA_DIR / "season.json")
+        played = sum(1 for g in saved.games if g.status.value == "final")
+        self.assertEqual(played, 0, "the committed season ships already played")
+
+    def test_a_fully_elapsed_calendar_is_rebuilt_on_boot(self):
+        """The self-heal, and the real defence against the bug recurring: a
+        committed season whose dates have all slipped into the past is thrown
+        away and laid fresh, rather than fast-forwarded through on the first
+        tick. Time-relative on purpose -- the dates are built against *now*, so
+        this stays true whatever the calendar says, unlike a check that the
+        shipped file opens in the future (which rots the day after it ships)."""
+        import run
+        from bballsim.league.calendar import build_daily_schedule, GameStatus
+
+        saved = load_teams()
+        league = League(name=saved.name, season=saved.season)
+        for team in saved.teams:
+            league.add_team(team)
+        # A calendar that opened a year ago and finished months back, unplayed.
+        league.set_schedule(build_daily_schedule(
+            [t.id for t in saved.teams],
+            start_date=date.today() - timedelta(days=365),
+            games_per_team=6, season=league.season))
+        rotted_last = max(g.tipoff_at for g in league.schedule)
+
+        run._reschedule_if_calendar_has_rotted(league)
+
+        self.assertFalse(any(g.status == GameStatus.FINAL for g in league.schedule))
+        first = min(g.tipoff_at for g in league.schedule)
+        self.assertGreater(first, datetime.now(timezone.utc),
+                           "the rotted calendar was not moved forward")
+        self.assertGreater(first, rotted_last)
+
+    def test_a_league_mid_season_is_not_rebuilt(self):
+        """Self-heal must never touch a real season in progress -- a played
+        game is the signal that this is not a stale seed."""
+        import run
+        from bballsim.league.calendar import build_daily_schedule, GameStatus
+
+        saved = load_teams()
+        league = League(name=saved.name, season=saved.season)
+        for team in saved.teams:
+            league.add_team(team)
+        league.set_schedule(build_daily_schedule(
+            [t.id for t in saved.teams],
+            start_date=date.today() - timedelta(days=365),
+            games_per_team=6, season=league.season))
+        league.schedule[0].status = GameStatus.FINAL   # one game played
+        before = [g.id for g in league.schedule]
+
+        run._reschedule_if_calendar_has_rotted(league)
+        self.assertEqual([g.id for g in league.schedule], before,
+                         "a season with a played game was rebuilt")
+
+
+if __name__ == "__main__":
+    unittest.main()
