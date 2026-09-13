@@ -1,0 +1,273 @@
+/**
+ * COURSE 2 — Desert Classic.
+ *
+ * Wide corridors of overseeded turf cut through hardpan and scrub, at 100°F,
+ * with 40-foot elevation changes and greens that sit hard against water on the
+ * closing stretch. The ball flies and the ground is baked, so the long hitters
+ * are not giving anything back — but the desert on both sides is a genuine
+ * hazard you can be in and still have to play.
+ */
+
+import type { Course, HoleSpec } from '../../simulation/types';
+
+const holes: HoleSpec[] = [
+  {
+    number: 1, name: 'Sunrise Wash', par: 4, yards: 420, bearing: 90, index: 11,
+    dogleg: 16, doglegAt: 0.6, fairwayWidth: 24,
+    elevation: { landing: -14, green: -22 }, greenSize: 16, pin: { x: 4, y: 5 },
+    greenSlope: { x: -1.6, y: -1.2 }, trees: 0.1,
+    bunkers: [
+      { along: 292, lateral: 26, size: 8, kind: 'fairway' },
+      { along: 408, lateral: -20, size: 8, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 60, to: 440, side: -1, offset: 44, width: 60 }, { from: 60, to: 440, side: 1, offset: 46, width: 60 }],
+    strategy: 'Downhill and wide open. Let it go and wedge it — the only trouble is the desert, and you have to be badly off line to find it.',
+  },
+  {
+    number: 2, name: 'Saguaro Run', par: 5, yards: 571, bearing: 150, index: 13,
+    dogleg: -26, doglegAt: 0.42, fairwayWidth: 25,
+    elevation: { landing: 8, green: -6 }, greenSize: 17, pin: { x: -5, y: 6 },
+    greenSlope: { x: 1.4, y: -1.8 }, trees: 0.14,
+    bunkers: [
+      { along: 300, lateral: -28, size: 9, kind: 'fairway' },
+      { along: 470, lateral: 24, size: 8, kind: 'fairway' },
+      { along: 562, lateral: 21, size: 8, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 80, to: 560, side: 1, offset: 48, width: 70 }],
+    strategy: 'Reachable for anyone who carries it 290. The green sits beyond a shelf, so the layup wants to be left for the best angle in.',
+  },
+  {
+    number: 3, name: 'Copper Ridge', par: 4, yards: 455, bearing: 30, index: 5,
+    dogleg: 20, doglegAt: 0.55, fairwayWidth: 22,
+    elevation: { landing: 24, green: 38 }, greenSize: 15, pin: { x: 3, y: -5 },
+    greenSlope: { x: -1.2, y: -2.4 }, trees: 0.08,
+    bunkers: [
+      { along: 286, lateral: 25, size: 8, kind: 'fairway' },
+      { along: 310, lateral: -24, size: 7, kind: 'fairway' },
+      { along: 444, lateral: -19, size: 8, kind: 'greenside', deep: true },
+    ],
+    water: [],
+    waste: [{ from: 60, to: 470, side: -1, offset: 50, width: 80 }],
+    strategy: 'Uphill the whole way — 38 feet of climb makes 455 play 468. Two clubs more than the number and accept the front of the green.',
+  },
+  {
+    number: 4, name: 'Cactus Shelf', par: 3, yards: 197, bearing: 260, index: 14,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 14,
+    elevation: { landing: 0, green: -26 }, greenSize: 15, pin: { x: -4, y: 3 },
+    greenSlope: { x: 1.8, y: -1.4 }, trees: 0.2,
+    bunkers: [
+      { along: 180, lateral: 17, size: 7, kind: 'greenside' },
+      { along: 200, lateral: -18, size: 7, kind: 'greenside', deep: true },
+    ],
+    water: [],
+    waste: [{ from: 20, to: 170, side: -1, offset: 26, width: 60 }, { from: 20, to: 170, side: 1, offset: 26, width: 60 }],
+    strategy: '26 feet downhill to a shelf green with desert short and both sides. It plays 185 — the mistake is taking too much club.',
+  },
+  {
+    number: 5, name: 'Mesa Turn', par: 4, yards: 438, bearing: 340, index: 7,
+    dogleg: -30, doglegAt: 0.5, fairwayWidth: 21,
+    elevation: { landing: -10, green: 6 }, greenSize: 15, pin: { x: 5, y: 4 },
+    greenSlope: { x: -2.0, y: -1.0 }, trees: 0.12,
+    bunkers: [
+      { along: 268, lateral: -26, size: 8, kind: 'fairway' },
+      { along: 296, lateral: 22, size: 7, kind: 'fairway' },
+      { along: 428, lateral: 19, size: 8, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 140, to: 330, side: -1, offset: 36, width: 70 }],
+    strategy: 'A hard dogleg left with waste on the inside. Take on the corner and you have a wedge; bail right and it is a long iron.',
+  },
+  {
+    number: 6, name: 'Dry Creek', par: 4, yards: 403, bearing: 65, index: 16,
+    dogleg: 14, doglegAt: 0.62, fairwayWidth: 26,
+    elevation: { landing: -18, green: -30 }, greenSize: 18, pin: { x: -6, y: -4 },
+    greenSlope: { x: 2.2, y: 1.4 }, trees: 0.06,
+    bunkers: [
+      { along: 274, lateral: 27, size: 7, kind: 'fairway' },
+      { along: 396, lateral: 21, size: 7, kind: 'greenside' },
+    ],
+    water: [{ along: 350, lateral: -30, size: 24, stretch: 2.2 }],
+    strategy: 'The widest fairway on the course, 30 feet downhill. Only the wash left of the green asks a question, and only of a pulled wedge.',
+  },
+  {
+    number: 7, name: 'Furnace', par: 3, yards: 232, bearing: 200, index: 4,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 15,
+    elevation: { landing: 0, green: 12 }, greenSize: 16, pin: { x: 4, y: 6 },
+    greenSlope: { x: -1.4, y: -2.2 }, trees: 0.05,
+    bunkers: [
+      { along: 206, lateral: -18, size: 8, kind: 'greenside', deep: true },
+      { along: 228, lateral: 19, size: 7, kind: 'greenside' },
+      { along: 244, lateral: -16, size: 6, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 20, to: 200, side: 1, offset: 30, width: 70 }],
+    strategy: '232 yards uphill in the hottest part of the afternoon. Long iron, middle of the green, move on.',
+  },
+  {
+    number: 8, name: 'Arroyo', par: 5, yards: 561, bearing: 115, index: 12,
+    dogleg: 24, doglegAt: 0.45, fairwayWidth: 24,
+    elevation: { landing: 14, green: 4 }, greenSize: 17, pin: { x: 5, y: -5 },
+    greenSlope: { x: -1.8, y: -1.6 }, trees: 0.1,
+    bunkers: [
+      { along: 300, lateral: 26, size: 8, kind: 'fairway' },
+      { along: 476, lateral: -22, size: 8, kind: 'fairway', deep: true },
+      { along: 552, lateral: -20, size: 8, kind: 'greenside' },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 430, to: 520, side: 1, offset: 30, width: 46 } }],
+    strategy: 'The arroyo cuts in from the right between 430 and 520, which is exactly where a good drive leaves a long second. Going for it means carrying it.',
+  },
+  {
+    number: 9, name: 'High Camp', par: 4, yards: 468, bearing: 15, index: 2,
+    dogleg: -18, doglegAt: 0.55, fairwayWidth: 21,
+    elevation: { landing: 18, green: 34 }, greenSize: 15, pin: { x: -4, y: 5 },
+    greenSlope: { x: 1.2, y: -2.6 }, trees: 0.1,
+    bunkers: [
+      { along: 300, lateral: -24, size: 8, kind: 'fairway' },
+      { along: 326, lateral: 22, size: 7, kind: 'fairway' },
+      { along: 458, lateral: 20, size: 8, kind: 'greenside', deep: true },
+      { along: 474, lateral: -19, size: 7, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 100, to: 480, side: -1, offset: 46, width: 70 }],
+    strategy: '468 yards and 34 feet of climb: the longest second shot of the day. Distance is worth two shots a week on this hole alone.',
+  },
+  {
+    number: 10, name: 'Rattler', par: 4, yards: 444, bearing: 285, index: 8,
+    dogleg: 26, doglegAt: 0.52, fairwayWidth: 22,
+    elevation: { landing: -12, green: -20 }, greenSize: 16, pin: { x: 4, y: 4 },
+    greenSlope: { x: -1.6, y: 1.2 }, trees: 0.12,
+    bunkers: [
+      { along: 288, lateral: 24, size: 8, kind: 'fairway', deep: true },
+      { along: 430, lateral: -20, size: 8, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 180, to: 380, side: 1, offset: 40, width: 70 }],
+    strategy: 'Bends right, downhill, with the desert on the inside of the turn. A 3 wood to the corner leaves 170 and takes the sand out of play.',
+  },
+  {
+    number: 11, name: 'Long Mesa', par: 5, yards: 588, bearing: 175, index: 10,
+    dogleg: -22, doglegAt: 0.44, fairwayWidth: 24,
+    elevation: { landing: -16, green: -28 }, greenSize: 17, pin: { x: 5, y: 5 },
+    greenSlope: { x: -2.0, y: -1.4 }, trees: 0.08,
+    bunkers: [
+      { along: 306, lateral: -26, size: 8, kind: 'fairway' },
+      { along: 498, lateral: 22, size: 8, kind: 'fairway' },
+      { along: 580, lateral: -20, size: 7, kind: 'greenside' },
+    ],
+    water: [{ along: 578, lateral: 30, size: 28, stretch: 1.8 }],
+    strategy: '588 downhill, so the big hitters can get there. The lake sits right of the green and the whole complex tilts toward it.',
+  },
+  {
+    number: 12, name: 'Oasis', par: 3, yards: 172, bearing: 60, index: 17,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 13,
+    elevation: { landing: 0, green: -8 }, greenSize: 14, pin: { x: -3, y: -3 },
+    greenSlope: { x: 1.6, y: 1.8 }, trees: 0.18,
+    bunkers: [{ along: 162, lateral: -15, size: 7, kind: 'greenside' }],
+    water: [{ along: 140, lateral: 22, size: 26, stretch: 1.7 }],
+    strategy: 'A short iron over the corner of the lake. Simple, until the pin is cut on the right and the water is four paces away.',
+  },
+  {
+    number: 13, name: 'Bell Rock', par: 4, yards: 478, bearing: 320, index: 3,
+    dogleg: 18, doglegAt: 0.55, fairwayWidth: 21,
+    elevation: { landing: 10, green: 24 }, greenSize: 15, pin: { x: -5, y: -4 },
+    greenSlope: { x: 1.4, y: -2.0 }, trees: 0.1,
+    bunkers: [
+      { along: 310, lateral: 25, size: 8, kind: 'fairway' },
+      { along: 336, lateral: -23, size: 7, kind: 'fairway' },
+      { along: 470, lateral: 19, size: 8, kind: 'greenside', deep: true },
+    ],
+    water: [],
+    waste: [{ from: 120, to: 500, side: 1, offset: 48, width: 80 }],
+    strategy: '478 uphill into the rock face. A drive that carries the right-hand bunker leaves a mid iron; anything else is a fairway wood.',
+  },
+  {
+    number: 14, name: 'Short Straw', par: 4, yards: 372, bearing: 130, index: 18,
+    dogleg: -16, doglegAt: 0.62, fairwayWidth: 20,
+    elevation: { landing: -8, green: -4 }, greenSize: 14, pin: { x: 4, y: -3 },
+    greenSlope: { x: -1.8, y: 1.6 }, trees: 0.14,
+    bunkers: [
+      { along: 250, lateral: -20, size: 7, kind: 'fairway', deep: true },
+      { along: 352, lateral: 16, size: 7, kind: 'greenside', deep: true },
+      { along: 372, lateral: -16, size: 6, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 240, to: 340, side: 1, offset: 34, width: 60 }],
+    strategy: 'Drivable at 372 with a small green and sand on both sides. The percentage play is a 5 iron and a wedge; the leaders will not be playing the percentage.',
+  },
+  {
+    number: 15, name: 'Coyote', par: 4, yards: 450, bearing: 235, index: 6,
+    dogleg: 22, doglegAt: 0.5, fairwayWidth: 21,
+    elevation: { landing: 6, green: -12 }, greenSize: 15, pin: { x: -4, y: 4 },
+    greenSlope: { x: 1.8, y: -1.6 }, trees: 0.1,
+    bunkers: [
+      { along: 292, lateral: 24, size: 8, kind: 'fairway' },
+      { along: 440, lateral: -18, size: 7, kind: 'greenside' },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 380, to: 470, side: 1, offset: 26, width: 50 } }],
+    strategy: 'Water down the right of the green complex for the last eighty yards. A drive up the right side shortens the hole and brings it into play.',
+  },
+  {
+    number: 16, name: 'Amphitheatre', par: 3, yards: 214, bearing: 10, index: 9,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 15,
+    elevation: { landing: 0, green: -16 }, greenSize: 16, pin: { x: 5, y: -4 },
+    greenSlope: { x: -1.4, y: 1.8 }, trees: 0.06,
+    bunkers: [
+      { along: 192, lateral: -18, size: 8, kind: 'greenside', deep: true },
+      { along: 216, lateral: 18, size: 7, kind: 'greenside' },
+    ],
+    water: [],
+    waste: [{ from: 20, to: 190, side: -1, offset: 28, width: 60 }],
+    strategy: 'Downhill into a natural bowl with thirty thousand people in it. Plays 200 — the noise makes it feel like 240.',
+  },
+  {
+    number: 17, name: 'Gamble', par: 5, yards: 546, bearing: 290, index: 15,
+    dogleg: 28, doglegAt: 0.46, fairwayWidth: 23,
+    elevation: { landing: -6, green: -14 }, greenSize: 16, pin: { x: -5, y: 4 },
+    greenSlope: { x: 2.0, y: -1.2 }, trees: 0.08,
+    bunkers: [
+      { along: 296, lateral: 26, size: 8, kind: 'fairway' },
+      { along: 536, lateral: -19, size: 7, kind: 'greenside' },
+    ],
+    water: [{ along: 540, lateral: 28, size: 30, stretch: 2.0 }],
+    strategy: '546 downhill and downwind with a lake wrapped around the right of the green. Eagles and sevens, all afternoon.',
+  },
+  {
+    number: 18, name: 'Last Light', par: 4, yards: 462, bearing: 355, index: 1,
+    dogleg: -20, doglegAt: 0.55, fairwayWidth: 20,
+    elevation: { landing: 8, green: 18 }, greenSize: 15, pin: { x: 4, y: 5 },
+    greenSlope: { x: -1.6, y: -2.0 }, trees: 0.12,
+    bunkers: [
+      { along: 296, lateral: -24, size: 8, kind: 'fairway', deep: true },
+      { along: 320, lateral: 22, size: 7, kind: 'fairway' },
+      { along: 452, lateral: -18, size: 8, kind: 'greenside', deep: true },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 390, to: 480, side: 1, offset: 24, width: 54 } }],
+    strategy: 'Uphill, into the breeze, water tight down the right of the green. The safe miss is long-left, and it is a very hard up-and-down.',
+  },
+];
+
+export const DESERT_CLASSIC: Course = {
+  id: 'desert',
+  name: 'Desert Classic',
+  location: 'Vela Verde',
+  style: 'desert',
+  par: holes.reduce((sum, h) => sum + h.par, 0),
+  yards: holes.reduce((sum, h) => sum + h.yards, 0),
+  blurb: 'Wide, long and baking. The turf runs, the ball flies, and only the closing stretch asks you to be precise.',
+  identity: [
+    'Fairways 44–52 yards wide — driver is playable almost everywhere',
+    'Temperatures of 95–105°F; heat endurance decides Sunday',
+    'Elevation changes of up to 38 feet on a single hole',
+    'Hardpan waste areas rather than rough — playable, but unpredictable',
+    'Water tight against the green on five of the last eight holes',
+    'The longest par 72 on tour at 7,471 yards',
+  ],
+  difficulty: 74,
+  fit: {
+    distance: 1.00, accuracy: 0.40, rough: 0.25, wind: 0.35, greens: 0.55,
+    water: 0.70, elevation: 0.85, strategy: 0.50, heat: 1.00, rain: 0.05,
+  },
+  holes,
+};

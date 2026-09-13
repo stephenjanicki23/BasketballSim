@@ -1,0 +1,277 @@
+/**
+ * COURSE 1 — Coastal Championship.
+ *
+ * A links. Firm ground, revetted pot bunkers, rough you cannot advance the ball
+ * out of, greens running at 11.5 and a wind that never stops. The holes fan out
+ * around the compass on purpose: one forecast plays as a helping wind on the 4th
+ * and a two-club headwind on the 8th.
+ */
+
+import type { Course, HoleSpec } from '../../simulation/types';
+
+const holes: HoleSpec[] = [
+  {
+    number: 1, name: 'Harbour Mouth', par: 4, yards: 402, bearing: 20, index: 12,
+    dogleg: 14, doglegAt: 0.6, fairwayWidth: 20,
+    elevation: { landing: -6, green: 2 }, greenSize: 15, pin: { x: 3, y: 4 },
+    greenSlope: { x: -1.4, y: -1.8 }, trees: 0,
+    bunkers: [
+      { along: 258, lateral: 22, size: 6, kind: 'fairway' },
+      { along: 286, lateral: 26, size: 5, kind: 'fairway' },
+      { along: 392, lateral: -20, size: 7, kind: 'greenside' },
+    ],
+    water: [],
+    strategy: 'A kind opener. The two right-hand pots sit exactly where a tired drive goes; anything up the left half leaves a mid iron to a green that falls away at the back.',
+  },
+  {
+    number: 2, name: 'The Wreck', par: 4, yards: 458, bearing: 355, index: 4,
+    dogleg: -20, doglegAt: 0.55, fairwayWidth: 18,
+    elevation: { landing: 4, green: -8 }, greenSize: 14, pin: { x: -4, y: -3 },
+    greenSlope: { x: 1.8, y: 1.2 }, trees: 0,
+    bunkers: [
+      { along: 272, lateral: -18, size: 5, kind: 'fairway', deep: true },
+      { along: 300, lateral: 20, size: 6, kind: 'fairway' },
+      { along: 446, lateral: 19, size: 8, kind: 'greenside' },
+      { along: 462, lateral: -17, size: 6, kind: 'greenside' },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 120, to: 470, side: -1, offset: 63, width: 90 } }],
+    strategy: 'The beach runs the whole left side and the ground tilts toward it. Long and right of the bunkers is the play, which is also the longest way home.',
+  },
+  {
+    number: 3, name: 'Gull Rock', par: 3, yards: 186, bearing: 300, index: 14,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 12,
+    elevation: { landing: 0, green: 14 }, greenSize: 13, pin: { x: 5, y: -2 },
+    greenSlope: { x: -2.2, y: -1.4 }, trees: 0,
+    bunkers: [
+      { along: 172, lateral: -15, size: 6, kind: 'greenside', deep: true },
+      { along: 190, lateral: 16, size: 5, kind: 'greenside', deep: true },
+    ],
+    water: [{ along: 96, lateral: -4, size: 40, stretch: 1.8, label: 'the cove' }],
+    strategy: 'Across the cove and fourteen feet uphill, so it plays nearer 200. The front-left pot is six feet deep — miss right and putt back down the slope.',
+  },
+  {
+    number: 4, name: 'Long Dune', par: 5, yards: 548, bearing: 45, index: 10,
+    dogleg: 26, doglegAt: 0.42, fairwayWidth: 21,
+    elevation: { landing: 10, green: 4 }, greenSize: 16, pin: { x: -5, y: 6 },
+    greenSlope: { x: 1.1, y: -2.2 }, trees: 0,
+    bunkers: [
+      { along: 268, lateral: 24, size: 6, kind: 'fairway' },
+      { along: 296, lateral: -22, size: 5, kind: 'fairway', deep: true },
+      { along: 452, lateral: 18, size: 7, kind: 'fairway' },
+      { along: 472, lateral: -20, size: 6, kind: 'fairway' },
+      { along: 540, lateral: -18, size: 7, kind: 'greenside' },
+    ],
+    water: [],
+    strategy: 'Downwind it is two shots and a putt. The cross bunkers at 460 are the whole hole: lay back to 90 yards or carry them and have a wedge.',
+  },
+  {
+    number: 5, name: 'Tide Line', par: 4, yards: 437, bearing: 110, index: 6,
+    dogleg: 30, doglegAt: 0.58, fairwayWidth: 17,
+    elevation: { landing: -4, green: -10 }, greenSize: 14, pin: { x: 4, y: 3 },
+    greenSlope: { x: -2.0, y: 1.5 }, trees: 0,
+    bunkers: [
+      { along: 252, lateral: 20, size: 5, kind: 'fairway', deep: true },
+      { along: 424, lateral: -18, size: 7, kind: 'greenside' },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 230, to: 470, side: 1, offset: 51, width: 80 } }],
+    strategy: 'Bends right along the shoreline. Cutting the corner shortens it by thirty yards and puts the sea directly behind the miss.',
+  },
+  {
+    number: 6, name: 'Pot Bunker', par: 4, yards: 366, bearing: 170, index: 16,
+    dogleg: -12, doglegAt: 0.62, fairwayWidth: 19,
+    elevation: { landing: 6, green: 12 }, greenSize: 13, pin: { x: -3, y: -4 },
+    greenSlope: { x: 1.6, y: -1.1 }, trees: 0,
+    bunkers: [
+      { along: 232, lateral: 8, size: 4, kind: 'fairway', deep: true },
+      { along: 258, lateral: -12, size: 4, kind: 'fairway', deep: true },
+      { along: 276, lateral: 14, size: 4, kind: 'fairway', deep: true },
+      { along: 352, lateral: -14, size: 6, kind: 'greenside', deep: true },
+      { along: 366, lateral: 15, size: 5, kind: 'greenside', deep: true },
+    ],
+    water: [],
+    strategy: 'Short enough to drive, mined with pots at exactly driver distance. A 5 iron to 120 yards is the boring, correct play.',
+  },
+  {
+    number: 7, name: 'The Gap', par: 3, yards: 208, bearing: 265, index: 8,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 13,
+    elevation: { landing: 0, green: -6 }, greenSize: 15, pin: { x: 0, y: 5 },
+    greenSlope: { x: -1.2, y: -2.4 }, trees: 0,
+    bunkers: [
+      { along: 178, lateral: -16, size: 7, kind: 'greenside' },
+      { along: 200, lateral: 18, size: 6, kind: 'greenside', deep: true },
+    ],
+    water: [],
+    strategy: 'Straight into the prevailing wind through a gap in the dunes. The front of the green is open — land it short and let the firm ground do the work.',
+  },
+  {
+    number: 8, name: 'Shipyard', par: 4, yards: 471, bearing: 250, index: 2,
+    dogleg: -18, doglegAt: 0.5, fairwayWidth: 17,
+    elevation: { landing: 8, green: 16 }, greenSize: 14, pin: { x: -4, y: 5 },
+    greenSlope: { x: 1.4, y: -1.6 }, trees: 0,
+    bunkers: [
+      { along: 264, lateral: -20, size: 6, kind: 'fairway', deep: true },
+      { along: 288, lateral: 22, size: 6, kind: 'fairway' },
+      { along: 448, lateral: 20, size: 7, kind: 'greenside', deep: true },
+      { along: 466, lateral: -19, size: 7, kind: 'greenside' },
+    ],
+    water: [],
+    strategy: 'The hardest hole on the card: 471 into the wind and uphill all the way. Two putts from the front edge is a good score.',
+  },
+  {
+    number: 9, name: 'Quarry Turn', par: 5, yards: 523, bearing: 200, index: 18,
+    dogleg: -34, doglegAt: 0.5, fairwayWidth: 20,
+    elevation: { landing: -8, green: -16 }, greenSize: 16, pin: { x: 6, y: 2 },
+    greenSlope: { x: -1.8, y: 1.8 }, trees: 0.05,
+    bunkers: [
+      { along: 282, lateral: -24, size: 6, kind: 'fairway' },
+      { along: 430, lateral: 22, size: 6, kind: 'fairway' },
+      { along: 512, lateral: 20, size: 7, kind: 'greenside' },
+    ],
+    water: [{ along: 498, lateral: -34, size: 26, stretch: 1.5 }],
+    strategy: 'Downhill and downwind, the shortest par 5 here. The old quarry pool guards the left of the green, so the second shot wants to finish right of centre.',
+  },
+  {
+    number: 10, name: 'Beacon', par: 4, yards: 415, bearing: 15, index: 13,
+    dogleg: 16, doglegAt: 0.6, fairwayWidth: 19,
+    elevation: { landing: 12, green: 22 }, greenSize: 14, pin: { x: 2, y: -5 },
+    greenSlope: { x: -1.0, y: -2.6 }, trees: 0,
+    bunkers: [
+      { along: 268, lateral: 21, size: 6, kind: 'fairway' },
+      { along: 402, lateral: -17, size: 7, kind: 'greenside', deep: true },
+      { along: 418, lateral: 18, size: 5, kind: 'greenside' },
+    ],
+    water: [],
+    strategy: 'Climbs 22 feet to a green perched by the old light. Play a club more than the number and keep it below the hole.',
+  },
+  {
+    number: 11, name: 'Salt Pan', par: 3, yards: 164, bearing: 95, index: 17,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 11,
+    elevation: { landing: 0, green: -12 }, greenSize: 11, pin: { x: -3, y: 3 },
+    greenSlope: { x: 2.4, y: -1.0 }, trees: 0,
+    bunkers: [
+      { along: 150, lateral: 13, size: 5, kind: 'greenside', deep: true },
+      { along: 158, lateral: -13, size: 5, kind: 'greenside', deep: true },
+      { along: 172, lateral: 12, size: 4, kind: 'greenside' },
+    ],
+    water: [{ along: 138, lateral: -26, size: 20 }],
+    strategy: 'The smallest green on the property, fully exposed, twelve feet below you. A three-quarter 8 iron in a crosswind is a nervier shot than it looks.',
+  },
+  {
+    number: 12, name: 'The Stretch', par: 4, yards: 485, bearing: 340, index: 1,
+    dogleg: 22, doglegAt: 0.48, fairwayWidth: 18,
+    elevation: { landing: -4, green: 6 }, greenSize: 15, pin: { x: 5, y: 4 },
+    greenSlope: { x: -1.6, y: -1.2 }, trees: 0,
+    bunkers: [
+      { along: 292, lateral: 23, size: 6, kind: 'fairway', deep: true },
+      { along: 318, lateral: -21, size: 5, kind: 'fairway' },
+      { along: 470, lateral: -20, size: 8, kind: 'greenside' },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 330, to: 500, side: 1, offset: 59, width: 70 } }],
+    strategy: 'Stroke index one. 485 yards, a crosswind off the sea, and a long iron to a green with the dunes tight left and the water right.',
+  },
+  {
+    number: 13, name: "Fisherman's Walk", par: 4, yards: 349, bearing: 130, index: 15,
+    dogleg: -24, doglegAt: 0.55, fairwayWidth: 16,
+    elevation: { landing: 4, green: -4 }, greenSize: 13, pin: { x: -4, y: -3 },
+    greenSlope: { x: 1.2, y: 1.6 }, trees: 0,
+    bunkers: [
+      { along: 244, lateral: -18, size: 5, kind: 'fairway', deep: true },
+      { along: 262, lateral: 16, size: 5, kind: 'fairway', deep: true },
+      { along: 340, lateral: 14, size: 6, kind: 'greenside', deep: true },
+    ],
+    water: [{ along: 336, lateral: -26, size: 22, stretch: 1.6 }],
+    strategy: 'Driveable, and the reward is a putt for three. The tidal creek sits left of the green and the two pots pinch the layup zone.',
+  },
+  {
+    number: 14, name: 'Three Pots', par: 5, yards: 571, bearing: 55, index: 9,
+    dogleg: 30, doglegAt: 0.4, fairwayWidth: 20,
+    elevation: { landing: 6, green: 10 }, greenSize: 16, pin: { x: 4, y: 6 },
+    greenSlope: { x: -1.4, y: -2.0 }, trees: 0,
+    bunkers: [
+      { along: 276, lateral: 22, size: 6, kind: 'fairway' },
+      { along: 402, lateral: -6, size: 5, kind: 'fairway', deep: true },
+      { along: 424, lateral: 10, size: 5, kind: 'fairway', deep: true },
+      { along: 446, lateral: -14, size: 5, kind: 'fairway', deep: true },
+      { along: 560, lateral: 19, size: 7, kind: 'greenside' },
+      { along: 576, lateral: -18, size: 6, kind: 'greenside', deep: true },
+    ],
+    water: [],
+    strategy: 'Three pots sit across the fairway between 400 and 450. Go past them or stay short — being between them is how a five becomes a seven.',
+  },
+  {
+    number: 15, name: 'Cliff Edge', par: 4, yards: 444, bearing: 285, index: 5,
+    dogleg: -16, doglegAt: 0.55, fairwayWidth: 17,
+    elevation: { landing: 10, green: 18 }, greenSize: 14, pin: { x: 4, y: -4 },
+    greenSlope: { x: -2.2, y: -1.4 }, trees: 0,
+    bunkers: [
+      { along: 276, lateral: -19, size: 6, kind: 'fairway' },
+      { along: 430, lateral: -18, size: 7, kind: 'greenside', deep: true },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 300, to: 470, side: 1, offset: 45, width: 90 } }],
+    strategy: 'The green sits on the cliff top with nothing but air right of it. Everything about this hole says aim left; the bunker left says otherwise.',
+  },
+  {
+    number: 16, name: 'The Anvil', par: 3, yards: 223, bearing: 240, index: 3,
+    dogleg: 0, doglegAt: 0.5, fairwayWidth: 14,
+    elevation: { landing: 0, green: -8 }, greenSize: 15, pin: { x: -5, y: 4 },
+    greenSlope: { x: 1.8, y: -1.8 }, trees: 0,
+    bunkers: [
+      { along: 196, lateral: -17, size: 8, kind: 'greenside', deep: true },
+      { along: 214, lateral: 18, size: 6, kind: 'greenside' },
+      { along: 232, lateral: -16, size: 5, kind: 'greenside' },
+    ],
+    water: [],
+    strategy: '223 yards, usually into it, to a green ringed with sand. Long and left is the only place you cannot go.',
+  },
+  {
+    number: 17, name: "Widow's Point", par: 4, yards: 465, bearing: 170, index: 7,
+    dogleg: -28, doglegAt: 0.52, fairwayWidth: 17,
+    elevation: { landing: -6, green: -14 }, greenSize: 14, pin: { x: 3, y: 4 },
+    greenSlope: { x: -1.6, y: 2.0 }, trees: 0,
+    bunkers: [
+      { along: 286, lateral: -22, size: 6, kind: 'fairway', deep: true },
+      { along: 308, lateral: 20, size: 5, kind: 'fairway' },
+      { along: 452, lateral: -18, size: 7, kind: 'greenside' },
+    ],
+    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 260, to: 500, side: 1, offset: 47, width: 100 } }],
+    strategy: 'Doglegs left with the ocean the entire way down the right. Downhill, downwind, and a green that runs toward the water.',
+  },
+  {
+    number: 18, name: 'Home', par: 4, yards: 452, bearing: 30, index: 11,
+    dogleg: 18, doglegAt: 0.6, fairwayWidth: 19,
+    elevation: { landing: 4, green: 12 }, greenSize: 16, pin: { x: -4, y: 5 },
+    greenSlope: { x: 1.4, y: -2.2 }, trees: 0,
+    bunkers: [
+      { along: 280, lateral: 22, size: 6, kind: 'fairway', deep: true },
+      { along: 306, lateral: -20, size: 5, kind: 'fairway' },
+      { along: 438, lateral: 20, size: 7, kind: 'greenside' },
+      { along: 456, lateral: -19, size: 6, kind: 'greenside', deep: true },
+    ],
+    water: [{ along: 392, lateral: 0, size: 13, stretch: 2.9, label: 'the burn' }],
+    strategy: 'The burn crosses forty yards short of the green and catches anything mishit from the fairway. A par here wins tournaments.',
+  },
+];
+
+export const COASTAL_CHAMPIONSHIP: Course = {
+  id: 'coastal',
+  name: 'Coastal Championship',
+  location: 'Ardmore Point',
+  style: 'links',
+  par: holes.reduce((sum, h) => sum + h.par, 0),
+  yards: holes.reduce((sum, h) => sum + h.yards, 0),
+  blurb: 'Links golf on an exposed headland. Firm, fast, windy, and unforgiving of a ball struck without a plan.',
+  identity: [
+    'Prevailing wind of 15–25 mph, gusting higher off the water',
+    'Fairways running at 1.4× normal — a drive can chase 40 yards',
+    'Revetted pot bunkers you play sideways out of',
+    'Deep marram rough that only advances the ball 60%',
+    'Greens at 11.5 on the stimp, open at the front, falling away behind',
+    'Sea, beach or tidal creek in play on seven holes',
+  ],
+  difficulty: 77,
+  fit: {
+    distance: 0.45, accuracy: 0.70, rough: 0.75, wind: 1.00, greens: 0.70,
+    water: 0.55, elevation: 0.30, strategy: 0.85, heat: 0.05, rain: 0.55,
+  },
+  holes,
+};
