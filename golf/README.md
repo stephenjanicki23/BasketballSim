@@ -317,6 +317,34 @@ shadows turn with it.
 - **Trees are sprites.** A few hundred of them on a wooded hole, painted once per
   kind into a small canvas and stamped from there — which is what makes the soft
   shadow under each one affordable. The whole thing holds 60 fps.
+- **Every hole starts on a mown pad.** The teeing ground is real geometry, not a
+  decal: a rounded pad square to the line the hole opens on, cut *across* the
+  play line rather than up it — which is how a tee is mown and what tells you at
+  a glance that it is a tee — standing a little proud of the ground around it,
+  with the markers at its front edge in the colour of the set being played. It is
+  ground the engine knows about too, so a ball that trickles back onto it sits on
+  cut grass. Before this, a par 3 whose corridor does not start for seventy yards
+  opened with the ball apparently teed up in the hay.
+
+## Sound
+
+Synthesised, not sampled. The game ships as one page with no assets beside it, so
+every sound in `src/audio/sfx.ts` is built out of oscillators and filtered noise
+at the moment it plays: a driver is a hard crack with a low body under it, an iron
+is that crack pitched up and cut shorter, a wedge has the divot in it a moment
+later, a putt is a soft click. Landings are what the ball landed in — a splash
+that sweeps its filter down, sand, a swish through rough, a woody knock off a
+trunk — and a holed putt rattles the cup. A birdie gets applause and an eagle gets
+the gallery; a par gets nothing, because applause on all eighteen wears out inside
+a round.
+
+Two things that matter more than the sounds themselves: it is a **reaction to the
+session state** rather than a second set of callbacks threaded through the
+engine — `useShotSounds` watches the shot list and the status, so the simulation
+stays silent and pure — and **nothing there can throw**. No Web Audio, an autoplay
+policy that will not start a context, no output device: all of them end up quiet
+instead of broken. The speaker in the top bar toggles it, and the choice is
+remembered.
 
 ## The fourth course: Revere Concord
 

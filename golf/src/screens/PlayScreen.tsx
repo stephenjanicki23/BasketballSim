@@ -22,6 +22,7 @@ import { benchmarkRound } from '../simulation/benchmark';
 import { DebugPanel } from '../components/DebugPanel';
 import type { DebugOptions } from '../components/render/holeRenderer';
 import { roundTotal } from '../game/session';
+import { useShotSounds } from '../audio/useShotSounds';
 
 export function PlayScreen(): JSX.Element {
   const store = useStore();
@@ -31,6 +32,9 @@ export function PlayScreen(): JSX.Element {
   } = store;
 
   const golfer = session ? lookup(session.golferId) : undefined;
+
+  // Struck balls, splashes, rattles in the cup and the gallery.
+  useShotSounds(session ?? null);
 
   const plan = useMemo(() => (session && golfer ? currentPlan(session, golfer) : null), [session, golfer]);
   const hole = useMemo(() => (session ? sessionHole(session) : null), [session]);

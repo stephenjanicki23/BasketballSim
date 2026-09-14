@@ -406,6 +406,87 @@ function speckles(hole: HoleGeometry): SpeckleLayer {
   return layer;
 }
 
+/** Tee markers are painted in the colour of the set being played. */
+const MARKER_COLOURS: Record<string, string> = {
+  black: '#23262b', gold: '#d8a622', blue: '#2f6fd0', white: '#eceff2',
+  red: '#c83f38', green: '#2f8f4e', silver: '#b9c0c8',
+};
+
+/**
+ * The teeing ground: a pad cut tighter than the fairway, mown across the line of
+ * play rather than up it, standing a little proud of the ground around it, with
+ * the markers at its front edge.
+ */
+function drawTeeBox(ctx: CanvasRenderingContext2D, options: RenderOptions): void {
+  const { hole, camera } = options;
+  const pad = hole.teeBox;
+  const palette = hole.style.palette;
+
+  // The step up onto the pad.
+  const step = clampOffset(shadowOffset(camera, 1.5), 10);
+  ctx.save();
+  ctx.translate(step.x, step.y);
+  path(ctx, camera, pad.outline);
+  ctx.fillStyle = 'rgba(10, 24, 12, 0.3)';
+  ctx.fill();
+  ctx.restore();
+
+  path(ctx, camera, pad.outline);
+  ctx.fillStyle = palette.fairway;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const { tangent } = pointAlongPolyline(hole.centerline, 0);
+  const across = { x: -tangent.y, y: tangent.x };
+
+  // Mown across the pad, which is how a tee is cut and what tells you at a
+  // glance that it is a tee rather than a patch of fairway.
+  if (camera.scale > 0.5) {
+    ctx.save();
+    path(ctx, camera, pad.outline);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.055)';
+    for (let back = 0; back < 20; back += 4) {
+      const stripe = [
+        add2(hole.tee, tangent, 3.2 - back, across, -9),
+        add2(hole.tee, tangent, 3.2 - back, across, 9),
+        add2(hole.tee, tangent, 1.2 - back, across, 9),
+        add2(hole.tee, tangent, 1.2 - back, across, -9),
+      ];
+      path(ctx, camera, stripe);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // The markers themselves, once they would be more than a couple of pixels.
+  if (camera.scale > 0.42) {
+    const colour = MARKER_COLOURS[hole.course.teeId ?? ''] ?? '#eceff2';
+    const radius = Math.max(1.6, 0.9 * camera.scale);
+    for (const side of [-1, 1]) {
+      const at = toScreen(camera, add2(hole.tee, tangent, 0.6, across, side * 3.4));
+      ctx.beginPath();
+      ctx.arc(at.x + radius * 0.5, at.y + radius * 0.6, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(10, 22, 12, 0.35)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = colour;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+  }
+}
+
+/** A point at `along` down one axis and `lateral` across the other. */
+function add2(origin: Vec2, along: Vec2, a: number, across: Vec2, l: number): Vec2 {
+  return { x: origin.x + along.x * a + across.x * l, y: origin.y + along.y * a + across.y * l };
+}
+
 // ---------------------------------------------------------------------------
 // Main draw
 // ---------------------------------------------------------------------------
@@ -465,6 +546,9 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
     }
     ctx.restore();
   }
+
+  // --- The teeing ground ---------------------------------------------------
+  drawTeeBox(ctx, options);
 
   // --- Desert waste --------------------------------------------------------
   for (const waste of hole.waste) {

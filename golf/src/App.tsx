@@ -1,5 +1,7 @@
 /** Shell: navigation, the busy indicator, and the profile overlay. */
 
+import { useState } from 'react';
+
 import { HomeScreen } from './screens/HomeScreen';
 import { PlayScreen } from './screens/PlayScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
@@ -11,6 +13,7 @@ import { PlayerProfile } from './components/PlayerProfile';
 import { useCurrentTournament, useStore, type ScreenId } from './state/store';
 import { COURSE_BY_ID } from './data/courses';
 import { ordinal } from './components/ui';
+import { playSfx, setSoundOn, soundOn } from './audio/sfx';
 
 const NAV: { id: ScreenId; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -27,6 +30,7 @@ export function App(): JSX.Element {
   const { screen, setScreen, universe, session, busy, message, dismissMessage, profileId, golfer, userGolfer, openProfile, resetUniverse, saveNow } = store;
   const tournament = useCurrentTournament();
   const profile = profileId ? golfer(profileId) : null;
+  const [sound, setSound] = useState(soundOn());
 
   return (
     <div className="app">
@@ -67,6 +71,21 @@ export function App(): JSX.Element {
               Choose a golfer
             </button>
           )}
+          <button
+            type="button"
+            className="ghost ghost--small"
+            aria-pressed={sound}
+            title={sound ? 'Sound on — struck balls, splashes, the crowd' : 'Sound off'}
+            onClick={() => {
+              const next = !sound;
+              setSoundOn(next);
+              setSound(next);
+              // Say so out loud, so the toggle confirms itself.
+              if (next) playSfx('putt');
+            }}
+          >
+            {sound ? '🔊' : '🔇'}
+          </button>
           <button type="button" className="ghost ghost--small" onClick={saveNow} title="Save to browser storage">Save</button>
           <button
             type="button"

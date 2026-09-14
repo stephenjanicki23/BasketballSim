@@ -621,6 +621,12 @@ export interface HoleGeometry {
   /** The exact height field, used to build the interpolation grid. */
   exactElevationAt: (p: Vec2) => number;
   bounds: Bounds;
+  /**
+   * The teeing ground: a mown pad square to the opening line, with the markers
+   * at its front edge. Real ground, not decoration — a ball that finishes on it
+   * sits on cut grass.
+   */
+  teeBox: Shape;
   /** Outline of the mown corridor, for rendering. */
   bands: { fairway: Vec2[]; firstCut: Vec2[]; lightRough: Vec2[]; heavyRough: Vec2[]; deepRough: Vec2[] };
 }

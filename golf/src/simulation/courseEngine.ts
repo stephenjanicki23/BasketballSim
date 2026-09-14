@@ -448,6 +448,13 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     }
   }
 
+  // --- The teeing ground ---------------------------------------------------
+  // Every hole is played from a mown pad, and on a par 3 the corridor does not
+  // start for seventy yards, so without one the round opens with the ball
+  // apparently teed up in the hay. The markers sit at its front edge, which is
+  // the tee point itself: the pad runs back from there.
+  const teeBox = teePad(tee, pointAlongPolyline(centerline, 0).tangent, spec.par === 3 ? 6.4 : 6.0, spec.par === 3 ? 16 : 14);
+
   // --- Render bands and bounds --------------------------------------------
   const b = style.bands;
   const bands = {
@@ -459,6 +466,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   };
 
   let bounds = expandBounds(boundsOf(bands.deepRough), 22);
+  bounds = unionBounds(bounds, expandBounds(teeBox.bounds, 10));
   bounds = unionBounds(bounds, expandBounds(green.bounds, green.radius * 1.6));
   for (const area of [...water, ...waste, ...ob, ...paths]) bounds = unionBounds(bounds, expandBounds(area.shape.bounds, 8));
   for (const t of trees) bounds = unionBounds(bounds, expandBounds(boundsOf([t.position]), t.radius + 4));
@@ -472,6 +480,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     pin,
     centerline,
     centerlineLength: length,
+    teeBox,
     fairwayHalfWidth: halfWidth,
     corridorHalfWidth: (along: number) => authored(along / length),
     green,
@@ -490,6 +499,35 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   // itself is built from the exact one, so this cannot become self-referential.
   built.elevationAt = (p: Vec2) => gridElevationAt(built, p);
   return built;
+}
+
+/**
+ * A teeing ground: a rounded rectangle whose front edge is the tee itself and
+ * which runs back from there, square to the line the hole opens on.
+ */
+function teePad(tee: Vec2, forward: Vec2, halfWidth: number, depth: number): Shape {
+  const across = perp(forward);
+  const radius = Math.min(2.6, halfWidth * 0.5, depth * 0.3);
+  const front = 3.2;
+  const back = -depth;
+  // Four quarter-circles, walked in order: up the right edge, across the back,
+  // down the left, and home along the front.
+  const corners = [
+    { x: front - radius, y: halfWidth - radius, from: 0 },
+    { x: back + radius, y: halfWidth - radius, from: Math.PI / 2 },
+    { x: back + radius, y: -halfWidth + radius, from: Math.PI },
+    { x: front - radius, y: -halfWidth + radius, from: Math.PI * 1.5 },
+  ];
+  const outline: Vec2[] = [];
+  for (const corner of corners) {
+    for (let i = 0; i <= 4; i++) {
+      const angle = corner.from + (Math.PI / 2) * (i / 4);
+      const along = corner.x + Math.cos(angle) * radius;
+      const lateral = corner.y + Math.sin(angle) * radius;
+      outline.push(add(add(tee, scale(forward, along)), scale(across, lateral)));
+    }
+  }
+  return shapeFromPolygon(outline);
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +633,12 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
       info.lie = 'ob';
       return info;
     }
+  }
+
+  // The teeing ground is cut as tight as a fairway.
+  if (hole.teeBox.contains(p)) {
+    info.lie = 'fairway';
+    return info;
   }
 
   for (const bunker of hole.bunkers) {
