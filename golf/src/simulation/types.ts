@@ -493,6 +493,19 @@ export interface Course {
   blurb: string;
   /** Free text shown on the course screen. */
   identity: string[];
+  /**
+   * Height of the property above sea level, in feet. Thin air is worth real
+   * yards — about two per cent of carry per thousand feet — which is why a
+   * Las Vegas course plays shorter than its card and a links at sea level does
+   * not.
+   */
+  altitude: number;
+  /**
+   * How far the scrub outside the corridor runs before the ball is out of
+   * bounds, overriding the style. A course cut through housing has boundaries
+   * much closer in than open desert.
+   */
+  surroundWidth?: number;
   holes: HoleSpec[];
   /** 60–90ish scratch scoring difficulty, used for display and course fit. */
   difficulty: number;
@@ -523,6 +536,12 @@ export interface HoleGeometry {
   centerlineLength: number;
   /** Fairway half-width as a function of arc length. */
   fairwayHalfWidth: (along: number) => number;
+  /**
+   * The mown corridor before the tee ramp and the green apron are applied.
+   * Zero means the architect put no turf here at all — the carry on a desert
+   * par 3 — which is a different thing from the fairway not having started yet.
+   */
+  corridorHalfWidth: (along: number) => number;
   green: Blob;
   bunkers: { blob: Blob; kind: 'fairway' | 'greenside'; deep: boolean }[];
   water: { blob?: Blob; polygon?: Vec2[]; bounds: Bounds }[];

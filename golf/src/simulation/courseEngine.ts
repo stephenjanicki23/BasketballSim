@@ -188,7 +188,11 @@ function corridorPolygon(
     const along = (i / steps) * length;
     const { point, tangent } = pointAlongPolyline(centerline, along);
     const r = perp(tangent);
-    const w = halfWidth(along) + extra;
+    // Where the hole has no corridor at all — the carry on a desert par 3 — it
+    // has no rough either. Grass grows on the bit they irrigate.
+    const base = halfWidth(along);
+    if (base <= 0.2) continue;
+    const w = base + extra;
     if (w <= 0.2) continue;
     right.push(add(point, scale(r, w)));
     left.push(add(point, scale(r, -w)));
@@ -223,7 +227,9 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     // thinking — unless the hole says where it is wide and where it is not.
     const landing = shaped ? 1 : 1 + 0.10 * Math.exp(-(((along - landingAt) / 90) ** 2));
     const texture = 1 + 0.11 * Math.sin(along * 0.042 + widthPhase) + 0.06 * Math.sin(along * 0.017 + widthPhase * 1.7);
-    const width = spec.par === 3 ? baseWidth : authored(along / length);
+    // Par 3s authored with a width profile are taken at their word: it is how a
+    // desert hole says "there is no fairway, only the carry and the green".
+    const width = authored(along / length);
     return width * open * close * landing * texture;
   };
 
@@ -418,6 +424,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     centerline,
     centerlineLength: length,
     fairwayHalfWidth: halfWidth,
+    corridorHalfWidth: (along: number) => authored(along / length),
     green,
     bunkers,
     water,
@@ -566,7 +573,11 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
     info.lie = 'fairway';
     return info;
   }
-  const fromFairway = offLine - Math.max(halfWidth, 0);
+  // Same again for the ball: where the hole has no corridor, the only thing
+  // under it is whatever the course puts outside the mown grass. Before the
+  // fairway starts and past the green the corridor still exists — it is the
+  // ramp that has closed — so those keep their rough.
+  const fromFairway = hole.corridorHalfWidth(proj.along) > 0.2 ? offLine - Math.max(halfWidth, 0) : 1e4;
   const edges = [
     bands.firstCut,
     bands.firstCut + bands.lightRough,
@@ -587,7 +598,7 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
   else if (effective <= edges[1]) info.lie = 'lightRough';
   else if (effective <= edges[2]) info.lie = 'heavyRough';
   else if (effective <= edges[3]) info.lie = 'deepRough';
-  else if (effective <= edges[3] + hole.style.surroundWidth) {
+  else if (effective <= edges[3] + (hole.course.surroundWidth ?? hole.style.surroundWidth)) {
     info.lie = hole.style.surround === 'recovery' ? 'pineStraw' : hole.style.surround;
   } else {
     info.lie = 'ob';

@@ -370,6 +370,7 @@ export const DESERT_CLASSIC: Course = {
     'Water tight against the green on five of the last eight holes',
     'The longest par 72 on tour at 7,471 yards',
   ],
+  altitude: 1000,
   difficulty: 74,
   fit: {
     distance: 1.00, accuracy: 0.40, rough: 0.25, wind: 0.35, greens: 0.55,

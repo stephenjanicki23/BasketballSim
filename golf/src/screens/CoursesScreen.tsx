@@ -78,6 +78,11 @@ export function CoursesScreen(): JSX.Element {
           <Stat label="Length" value={`${course.yards.toLocaleString()} yd`} />
           <Stat label="Difficulty" value={`${course.difficulty}/100`} />
           <Stat label="Typical wind" value={`${style.baseWind} mph`} hint={`${style.baseTemp}°F`} />
+          <Stat
+            label="Altitude"
+            value={`${course.altitude.toLocaleString()} ft`}
+            hint={`${((course.altitude / 1000) * 2).toFixed(1)}% more carry`}
+          />
           <Stat label="Green speed" value={style.greenSpeed.toFixed(1)} hint={`firmness ${style.greenFirmness}`} />
           <Stat label="Fairway roll" value={`${style.firmness.toFixed(2)}×`} hint={`rough severity ${style.roughSeverity.toFixed(2)}×`} />
         </div>

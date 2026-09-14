@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict';
 
 import { COURSES, COURSE_BY_ID } from '../src/data/courses';
+import { SCHEDULE } from '../src/data/tournaments';
 import { createTour, TOUR_SIZE } from '../src/data/golfers';
 import { holeGeometry, onGreen, pinForRound, terrainAt, withPin } from '../src/simulation/courseEngine';
 import { bagFor, dailyTouch, driverCarry, groupScores } from '../src/simulation/golferEngine';
@@ -126,8 +127,10 @@ test('driver distances span a tour-realistic range', () => {
 console.log('\nThe courses');
 // ---------------------------------------------------------------------------
 
-test('exactly three courses, eighteen holes each', () => {
-  assert.equal(COURSES.length, 3);
+test('four courses, eighteen holes each', () => {
+  // Three invented venues carry the tour schedule; the Concord is the real
+  // course, traced from its overhead tour, and plays from its own card.
+  assert.equal(COURSES.length, 4);
   for (const course of COURSES) {
     assert.equal(course.holes.length, 18);
     assert.equal(new Set(course.holes.map((h) => h.index)).size, 18, `${course.name} stroke indexes`);
@@ -135,8 +138,11 @@ test('exactly three courses, eighteen holes each', () => {
     const pars = course.holes.map((h) => h.par);
     assert.ok(pars.includes(3) && pars.includes(4) && pars.includes(5), `${course.name} lacks hole variety`);
     between(course.par, 70, 73, `${course.name} par`);
-    between(course.yards, 6800, 7600, `${course.name} yardage`);
+    between(course.yards, 5600, 7600, `${course.name} yardage`);
+    between(course.altitude, 0, 8000, `${course.name} altitude`);
   }
+  const tour = COURSES.filter((course) => SCHEDULE.some((event) => event.courseId === course.id));
+  assert.equal(tour.length, 3, 'the schedule should still be the three tour venues');
 });
 
 test('every hole builds with a pin on the green', () => {

@@ -370,6 +370,7 @@ export const COASTAL_CHAMPIONSHIP: Course = {
     'Greens at 11.5 on the stimp, open at the front, falling away behind',
     'Sea, beach or tidal creek in play on seven holes',
   ],
+  altitude: 30,
   difficulty: 77,
   fit: {
     distance: 0.45, accuracy: 0.70, rough: 0.75, wind: 1.00, greens: 0.70,

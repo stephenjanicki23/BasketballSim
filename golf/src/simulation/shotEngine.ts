@@ -42,6 +42,7 @@ import {
 import {
   type DailyTouch,
   NEUTRAL_TOUCH,
+  altitudeFactor,
   bagFor,
   effective,
   effectiveFatigue,
@@ -381,7 +382,9 @@ export function planShot(
     spin = club.spin * profile.spin * lie.spin;
   } else {
     // --- Full swing -------------------------------------------------------
-    const distanceMods = lie.distance * weatherMods.distance * fatigueMods.distance * pressureMods.distance * profile.distance;
+    const distanceMods =
+      lie.distance * weatherMods.distance * fatigueMods.distance * pressureMods.distance * profile.distance *
+      altitudeFactor(hole.course.altitude);
     const fullCarry = bag[club.id].carry * distanceMods;
     const landingFirmness = weather.firmness;
     const fullRoll = bag[club.id].roll * profile.roll * landingFirmness * lie.rollAfter;
@@ -503,6 +506,7 @@ export function reachTable(ctx: ShotContext, direction: Vec2, shotType: ShotType
     weatherEffect(golfer, weather).distance *
     fatigueEffect(golfer).distance *
     pressureEffect(golfer, ctx.pressure, 'approach').distance *
+    altitudeFactor(ctx.hole.course.altitude) *
     profile.distance;
   const bag = bagFor(golfer);
   const ballElevation = hole.elevationAt(ball);

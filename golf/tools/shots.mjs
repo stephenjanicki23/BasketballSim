@@ -18,6 +18,7 @@ const NAMES = {
   woodland: 'Woodland National',
   coastal: 'Coastal Championship',
   desert: 'Desert Classic',
+  concord: 'Revere Concord',
 };
 
 const args = process.argv.slice(2);

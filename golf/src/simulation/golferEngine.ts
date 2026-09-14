@@ -353,6 +353,11 @@ export interface ConditionEffect {
  * What today's weather does to this golfer. The ratings matter twice: a poor
  * wind player both loses more distance control and gets pushed around more.
  */
+/** Carry multiplier for thin air. Flat ground at altitude is still altitude. */
+export function altitudeFactor(feet: number): number {
+  return 1 + (feet / 1000) * TUNING.carryPerThousandFeet;
+}
+
 export function weatherEffect(golfer: Golfer, weather: Weather): ConditionEffect {
   let distance = 1;
   let sigma = 1;

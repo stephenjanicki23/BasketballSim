@@ -318,6 +318,41 @@ shadows turn with it.
   kind into a small canvas and stamped from there — which is what makes the soft
   shadow under each one affordable. The whole thing holds 60 fps.
 
+## The fourth course: Revere Concord
+
+Three of the venues are invented. The fourth is real — the Concord course at The
+Revere Golf Club in Henderson, Nevada — and it is traced hole by hole from the
+overhead course tour: tee marker to pin, off the satellite imagery, with the
+bunkering, the water and the desert where the map puts them. Compass bearings are
+measured off the same images, so the wind hits each hole from the direction it
+really would.
+
+Three things about it are stated rather than traced, and the course file says so
+at the top:
+
+- **The card is the forward tee set** — the yardages printed on those overheads
+  (432-yard par 5s, a 285-yard par 4), 5,769 yards in total. One constant at the
+  top of `concord.ts` scales the whole course — yardages, bends, bunker
+  positions, hazards — to the 7,034-yard championship card. It matters: the field
+  averages 67.9 from the forward tees and 71.9 from the tips.
+- **Holes 1, 17 and 18 are reconstructed** from the neighbouring holes' overheads,
+  where they appear in frame. Par is fixed by the card, the shapes are right, the
+  yardages are estimates.
+- **Elevation is inferred** from tee pads standing above washes, retaining walls
+  and the fall of the desert between holes. No topographic survey was to hand.
+
+What is not inferred is the **altitude**: the Anthem bench sits at about 2,600
+feet, and thin air is worth about two per cent of carry per thousand feet, so the
+course plays roughly five per cent shorter than its card. That is now modelled for
+every venue — sea-level links at 30 feet, Woodland at 620, the Desert Classic at
+1,000 — and it is on the course screen beside the wind.
+
+The engine needed two things it did not have. A course can now override how far
+its scrub runs before the ball is out of bounds, because a hole cut through
+housing has boundaries much closer in than open desert. And a hole can now have
+**no corridor at all** over a stretch: the carry on a desert par 3 is desert, not
+a ribbon of rough with a fairway missing from the middle of it.
+
 ## Calibration
 
 Every number below is asserted by `npm test`, and the reports behind them are in

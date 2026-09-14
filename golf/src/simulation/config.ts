@@ -261,6 +261,13 @@ export const TUNING = {
 
   /** Green: how firm a green has to be before an approach bounces through it. */
   greenRollBase: 0.055,
+  /**
+   * Carry gained per thousand feet of altitude. Thin air both reduces drag and
+   * costs the ball a little spin, and the usual working number on tour is about
+   * two per cent a thousand — the reason a 7,000-yard course in Las Vegas plays
+   * like 6,650 at sea level.
+   */
+  carryPerThousandFeet: 0.020,
 } as const;
 
 // ---------------------------------------------------------------------------

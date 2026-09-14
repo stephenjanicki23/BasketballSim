@@ -398,6 +398,7 @@ export const WOODLAND_NATIONAL: Course = {
     'Eleven genuine doglegs; driver is the wrong club on five of them',
     'Sheltered, so rain matters far more than wind',
   ],
+  altitude: 620,
   difficulty: 79,
   fit: {
     distance: 0.20, accuracy: 1.00, rough: 1.00, wind: 0.20, greens: 0.90,
