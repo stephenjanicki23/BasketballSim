@@ -360,6 +360,36 @@ housing has boundaries much closer in than open desert. And a hole can now have
 **no corridor at all** over a stretch: the carry on a desert par 3 is desert, not
 a ribbon of rough with a fairway missing from the middle of it.
 
+## Is the game easy?
+
+It is a fair question to ask of a golf game, and it is answerable rather than
+arguable. `test/playerPath.ts` plays the same golfer over the same course in the
+same conditions three ways: the tournament AI as it actually plays, the AI with
+the full candidate set, and **a player who accepts the caddie's club, aim and
+putt every single time**. If the played game were easier than the simulated one,
+the third column would be lower. It is not — it is 0.6 to 4.4 strokes *higher*
+at every venue:
+
+| Luca Brennan, 30 rounds | Tournament AI | Caddie-following player |
+|---|---|---|
+| Concord, calm | 68.9 | 70.2 |
+| Desert Classic, real weather | 70.7 | 72.7 |
+| Woodland, real weather | 73.0 | 74.0 |
+| Coastal, real weather | 74.7 | 79.2 |
+
+So there is no thumb on the scale for the human. What makes a round feel easy is
+which course and which day: the same player averages −3 at Concord in still air
+and +8 at the Coastal Championship in a 30 mph wind. Two things follow from that,
+and both are now in the game:
+
+- **Practice rounds get real weather.** They used to be played in dead calm,
+  which is the fastest way to conclude the game is soft.
+- **A finished practice round is scored against the field.** Twenty-four golfers
+  spread across the ranking play the same holes, the same pins and the same
+  weather through the same engine, and the panel says what they averaged, what
+  the best of them shot, and where the round would have finished. Seven under at
+  Concord in still air is a good round — and fourth of twenty-five.
+
 ## Calibration
 
 Every number below is asserted by `npm test`, and the reports behind them are in

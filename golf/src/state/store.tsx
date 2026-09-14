@@ -23,7 +23,8 @@ import {
   nudgeDistance, puttWith, selectClub, selectShotType, setTarget, settle, standingFor,
   toPlayerRound,
 } from '../game/session';
-import { calmWeather, conditionsFor } from '../simulation/weatherEngine';
+import { conditionsFor, generateWeather } from '../simulation/weatherEngine';
+import { createRng } from '../simulation/rng';
 import { COURSE_BY_ID } from '../data/courses';
 import type { Vec2 } from '../simulation/geometry';
 import type { ClubId, Golfer } from '../simulation/types';
@@ -202,7 +203,10 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       const chosen = universe.userGolferId ?? universe.golfers[0].id;
       const player = universe.golfers.find((g) => g.id === chosen)!;
       const course = COURSE_BY_ID[courseId];
-      const conditions = conditionsFor(calmWeather(course), `practice:${Date.now()}`);
+      // A real day, not a windless one. Practising in a vacuum is the fastest
+      // way to think the game is easy: the tour plays in whatever turns up.
+      const seed = `practice:${Date.now()}`;
+      const conditions = conditionsFor(generateWeather(course, createRng(seed)), seed);
       setSession(
         createSession({
           mode: 'practice',

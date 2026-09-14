@@ -13,11 +13,13 @@ import { Panel, Stat, toPar, toParClass, yards } from '../components/ui';
 import { useStore } from '../state/store';
 import { COURSE_BY_ID } from '../data/courses';
 import { LIES } from '../simulation/config';
-import { currentPlan, holesPlayed, roundToPar, scoreName, sessionHole } from '../game/session';
+import { currentPlan, holesPlayed, ordinal, roundToPar, scoreName, sessionHole } from '../game/session';
 import { choosePuttIntent } from '../simulation/puttingEngine';
 import { sessionContext } from '../game/session';
 import { describeWeather } from '../simulation/weatherEngine';
 import { dist } from '../simulation/geometry';
+import { benchmarkRound } from '../simulation/benchmark';
+import { roundTotal } from '../game/session';
 
 export function PlayScreen(): JSX.Element {
   const store = useStore();
@@ -30,6 +32,23 @@ export function PlayScreen(): JSX.Element {
 
   const plan = useMemo(() => (session && golfer ? currentPlan(session, golfer) : null), [session, golfer]);
   const hole = useMemo(() => (session ? sessionHole(session) : null), [session]);
+
+  // A score means nothing on its own. When a practice round finishes, play a
+  // slice of the tour over the same holes, the same pins and the same weather,
+  // and say where the round would have stood. In a tournament the leaderboard
+  // is already doing this job.
+  const benchmark = useMemo(() => {
+    if (!session || session.status !== 'roundComplete' || session.mode !== 'practice') return null;
+    if (session.holesToPlay.length < 18) return null;
+    return benchmarkRound(
+      COURSE_BY_ID[session.courseId],
+      session.conditions,
+      session.round,
+      store.universe.golfers,
+      roundTotal(session),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.status, session?.seed]);
 
   // Space plays the shot, arrows nudge the aim.
   useEffect(() => {
@@ -142,6 +161,14 @@ export function PlayScreen(): JSX.Element {
               {session.stats.birdies + session.stats.eagles} birdies or better, {session.stats.bogeys} bogeys,
               {' '}{session.stats.putts} putts, {session.stats.girHit}/{session.stats.girAttempts} greens.
             </p>
+            {benchmark && (
+              <p className="hint">
+                {benchmark.sample} of the tour played the same holes in the same weather today: they averaged{' '}
+                <strong>{benchmark.average.toFixed(1)}</strong>, the best of them shot{' '}
+                <strong>{benchmark.best}</strong>. Your round would have been{' '}
+                <strong>{benchmark.position === 1 ? 'the low round' : `${ordinal(benchmark.position)} of ${benchmark.sample + 1}`}</strong>.
+              </p>
+            )}
             <button type="button" className="hit" onClick={finishSessionRound}>
               {session.mode === 'tournament' ? 'Post the score and play the field' : 'Back to the clubhouse'}
             </button>
