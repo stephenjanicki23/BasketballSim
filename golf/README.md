@@ -360,6 +360,42 @@ housing has boundaries much closer in than open desert. And a hole can now have
 **no corridor at all** over a stretch: the carry on a desert par 3 is desert, not
 a ribbon of rough with a fairway missing from the middle of it.
 
+## The fifth course: The Ranch
+
+The second real one — The Ranch Golf Club in Southwick, Massachusetts, a dairy
+farm on the shoulder of Sodom Mountain that Damian Pascuzzo turned into golf in
+2001 and left as steep as he found it. It is built from the club's own
+hole-by-hole overheads, and the file is explicit about which parts of it are
+measurements and which are not:
+
+- **The card is measured.** Par and yardage for holes 1–16 are the Gold-tee
+  numbers printed on the overheads, and so are the two intermediate distances on
+  each one — tee to the fairway marker, marker to the green. Front nine 3,478,
+  holes 10 to 16 3,037.
+- **The splits place every corner.** Both printed legs are measured along the
+  line of play, so they add up to the card and say nothing about how far a hole
+  moves sideways. What they fix exactly is *where* it turns: the marker on the
+  6th is 63% of the way down it, on the 11th it is halfway. `test/ranch.ts`
+  holds every corner in the file to its own printed fraction, checks the legs
+  against the card, and fails any hole that bends harder than a card measured
+  along it could allow. That check is the new, reusable part — any course whose
+  source prints intermediate distances gets it for free.
+- **Which way each hole turns is authored**, because that lives in the image
+  rather than in the numbers. Drop a trace into `TRACES` in the course file and
+  the photograph replaces it, at the card's own scale, with nothing else to
+  change.
+- **The 17th and the 18th are provisional.** Their overheads have not arrived;
+  the two holes close the loop at par 72 and say so on the course screen and in
+  their own strategy notes.
+- **Elevation is inferred**, as it was at the Concord: plan-view overheads carry
+  no contours. The property runs from about 250 feet to better than 600, so the
+  7th climbs 38 feet, and the 10th and the 15th fall 40.
+
+It plays like what it is — 7,088 yards of hillside corridor through hardwood.
+The field averages **+0.8 a round**, which puts it third of the five venues,
+between Woodland National at +2.4 and the Desert Classic at −0.3; it hits 50% of
+fairways and 66% of greens there, against 73% of greens at the Concord.
+
 ## Is the game easy?
 
 It is a fair question to ask of a golf game, and it is answerable rather than

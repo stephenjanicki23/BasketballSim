@@ -1,7 +1,7 @@
 # Adding a real course
 
-The pipeline that put the Revere Concord in the game, written down so the next
-one is data entry rather than engineering. Nothing here is course-specific: the
+The pipeline that put the Revere Concord and The Ranch in the game, written down
+so the next one is data entry rather than engineering. Nothing here is course-specific: the
 engine, the shot model, the lies and the AI are the same ones every venue uses.
 
 ## What you need
@@ -98,8 +98,26 @@ node tools/tsrun.mjs test/scorecard.ts        # par, yardage, index, nines, tota
 node tools/tsrun.mjs test/courseCheck.ts      # every hole builds, pins on greens, terrain shares
 node tools/tsrun.mjs test/card.ts somewhere   # the card as the game has it
 node tools/tsrun.mjs test/venueCheck.ts       # a full tournament: what the course is worth
+node tools/tsrun.mjs test/ranch.ts            # the printed marker distances, hole by hole
 npm test                                      # the engine's own regression suite
 ```
+
+### When the source prints intermediate distances
+
+Most hole-by-hole overheads print two numbers besides the card: tee to the
+fairway marker, marker to the green. They are measured along the line of play, so
+they add up to the card and carry nothing about how far the hole moves sideways —
+but they fix *where* it turns, exactly, and that is worth testing. `test/ranch.ts`
+is the pattern, and it is three assertions:
+
+1. the legs agree with the card, within the slack a corner measurement allows;
+2. every corner in the file sits at `first / (first + second)` of the hole;
+3. no hole bends so hard that the tee-to-green chord falls below 90% of a card
+   measured along the line of play.
+
+Copy it for the next course whose source prints them. Where a hole is traced
+rather than authored the first check still applies and the rest come for free,
+because a traced centreline *is* the line the numbers were measured along.
 
 Then look at it. Press **D** in a round for the trace check: the source
 photograph laid over the hole at the alignment the trace recorded, with the
