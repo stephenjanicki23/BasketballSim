@@ -23,7 +23,10 @@ function shapeOf(spec: HoleSpec): string {
 /** Fairways are no longer one width from tee to green, so quote the range. */
 function fairwayWidth(spec: HoleSpec): string {
   if (spec.par === 3 || !spec.widths?.length) return `${Math.round(spec.fairwayWidth * 2)} yd`;
-  const halves = spec.widths.map((w) => w.half);
+  // A zero in the profile is a stretch with no fairway at all — a desert carry —
+  // not a fairway nought yards wide.
+  const halves = spec.widths.map((w) => w.half).filter((half) => half > 0);
+  if (halves.length === 0) return 'carry';
   return `${Math.round(Math.min(...halves) * 2)}–${Math.round(Math.max(...halves) * 2)} yd`;
 }
 

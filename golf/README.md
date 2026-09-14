@@ -330,16 +330,23 @@ really would.
 Three things about it are stated rather than traced, and the course file says so
 at the top:
 
-- **The card is the forward tee set** — the yardages printed on those overheads
-  (432-yard par 5s, a 285-yard par 4), 5,848 yards in total. One constant at the
-  top of `concord.ts` scales the whole course — yardages, bends, bunker
-  positions, hazards — to the 7,034-yard championship card. It matters: the field
-  averages 67.8 from the forward tees and 71.9 from the tips.
+- **The holes are authored at the yardages printed on the overheads** — a
+  shorter tee set — because that is what the traced geometry was measured
+  against. The card played is the club's own **Black card: par 72, 6,946 yards,
+  rating 73.5, slope 140**, stroke indexes included, and each hole is stretched to
+  its Black number by moving the tee back: distances from the tee move with it,
+  distances from the green stay put. The stretch is per hole, because the shorter
+  set is not a uniform fraction of the Black one — it runs from 8% shorter on the
+  1st to 37% on the 12th, whose par 3 goes from 177 yards to 242.
 - **The 1st is the one hole without a yardage.** Its overhead arrived as a crop
   with no banner on it, so 370 yards is an estimate; the shape, the bend and the
   bearing are traced like every other hole, and par is fixed by the card.
 - **Elevation is inferred** from tee pads standing above washes, retaining walls
   and the fall of the desert between holes. No topographic survey was to hand.
+
+From the Black tees the field averages +0.1 in a 13 mph wind and −2.5 dead calm
+at 97°F, which is about right for a tour field turned loose on a desert course at
+altitude.
 
 What is not inferred is the **altitude**: the Anthem bench sits at about 2,600
 feet, and thin air is worth about two per cent of carry per thousand feet, so the

@@ -9,10 +9,14 @@
  *
  * Three things are honest to state, because they are not traced:
  *
- * 1. **The card is the forward tee set** — the yardages printed on those
- *    overheads (432-yard par 5s, a 285-yard par 4). The Concord plays 7,034
- *    from the championship tees; set `SCALE` to `CHAMPIONSHIP` below and the
- *    whole course — yardages, bends, bunker positions, hazards — scales to it.
+ * 1. **The holes are authored at the yardages on the overheads** — a shorter
+ *    tee set — because that is what the traced geometry was measured against.
+ *    The card played is the club's own Black card (par 72, 6,946 yards, rating
+ *    73.5, slope 140), and each hole is stretched to its Black number by moving
+ *    the tee back: everything measured from the tee moves with it, everything
+ *    measured from the green stays where it is. The stretch is per hole, because
+ *    the shorter set is not a uniform fraction of the Black one — it runs from
+ *    8% shorter on the 1st to 37% on the 12th.
  * 2. **The 1st is the one hole without a yardage.** Its overhead arrived as a
  *    crop with no banner on it, so 370 yards is an estimate; the shape, the
  *    bend and the bearing are traced like every other hole, and par is fixed by
@@ -27,12 +31,6 @@
  */
 
 import type { Course, HoleSpec } from '../../simulation/types';
-
-/** 1 plays the card on the overheads; 1.2193 plays the 7,034-yard championship card. */
-const FORWARD = 1;
-const CHAMPIONSHIP = 7034 / 5769;
-const SCALE: number = FORWARD;
-void CHAMPIONSHIP;
 
 const holes: HoleSpec[] = [
   {
@@ -71,7 +69,7 @@ const holes: HoleSpec[] = [
     ],
     water: [],
     waste: [{ from: 130, to: 420, side: 1, offset: 34, width: 70 }],
-    strategy: 'A short par 5 straight up the corridor with the desert the whole way down the right. Everybody has a go; the fairway narrows to 32 yards where the second shot wants to land.',
+    strategy: 'Straight up the corridor with the desert the whole way down the right. Reachable, and the fairway narrows to 32 yards exactly where the second shot wants to land.',
   },
   {
     number: 3, name: 'Copper Line', par: 4, yards: 404, bearing: 320, index: 1,
@@ -122,10 +120,10 @@ const holes: HoleSpec[] = [
     ],
     water: [{ along: 98, lateral: -4, size: 24, stretch: 1.4 }],
     waste: [],
-    strategy: 'A short iron across the water to a green cut into the bank behind it. Long is dead, short is wet, and the pin is usually on the right.',
+    strategy: 'A hundred and eighty-three across the water to a green cut into the bank behind it. Long is dead, short is wet, and the pin is usually on the right.',
   },
   {
-    number: 6, name: 'Short Reward', par: 4, yards: 285, bearing: 141, index: 15,
+    number: 6, name: 'Long Fall', par: 4, yards: 285, bearing: 141, index: 15,
     dogleg: 16, doglegAt: 0.55, fairwayWidth: 19,
     bends: [{ at: 0.55, shift: 16, turn: 0.18 }],
     widths: [{ at: 0.10, half: 20 }, { at: 0.50, half: 19 }, { at: 0.80, half: 16 }, { at: 1, half: 18 }],
@@ -139,7 +137,7 @@ const holes: HoleSpec[] = [
     ],
     water: [],
     waste: [{ from: 0, to: 110, side: 1, offset: 15, width: 55 }],
-    strategy: 'Downhill and drivable. The bunker at 236 catches the drive that leaks right; laying back to 90 leaves a flat wedge, which most of the field takes.',
+    strategy: 'Downhill all the way, which is the only reason 375 yards plays short. The bunker at 326 is the one that catches the drive leaking right off the slope.',
   },
   {
     number: 7, name: 'Boundary Run', par: 4, yards: 327, bearing: 150, index: 7,
@@ -176,7 +174,7 @@ const holes: HoleSpec[] = [
     ],
     water: [],
     waste: [{ from: 6, to: 104, side: -1, offset: 12, width: 70 }, { from: 6, to: 104, side: 1, offset: 12, width: 70 }],
-    strategy: 'A wedge from a rock-walled pad, all of it across the wash, to a big green with a long serpentine bunker down the left. The easiest hole on the card and still nobody aims at a left pin.',
+    strategy: 'A mid-iron from a rock-walled pad, all of it across the wash, to a big green with a long serpentine bunker down the left. Bail out right and the chip is back toward the desert.',
   },
   {
     number: 9, name: "Clubhouse Turn", par: 5, yards: 427, bearing: 80, index: 5,
@@ -247,7 +245,7 @@ const holes: HoleSpec[] = [
     ],
     water: [{ along: 148, lateral: -17, size: 14 }],
     waste: [{ from: 10, to: 132, side: -1, offset: 11, width: 60 }, { from: 10, to: 132, side: 1, offset: 11, width: 60 }],
-    strategy: 'A mid-iron across the canyon to a green propped above a pond on the left. There is no bail-out that leaves a simple chip.',
+    strategy: 'Two hundred and forty-two yards across the canyon: a 3 wood for most of the field, to a green propped above a pond on the left. There is no bail-out that leaves a simple chip.',
   },
   {
     number: 13, name: 'Between the Walls', par: 4, yards: 343, bearing: 283, index: 8,
@@ -285,7 +283,7 @@ const holes: HoleSpec[] = [
     strategy: 'A wash crosses at 200 and the ground rises to the green from there. The number is never the number: it plays a full club longer than the card.',
   },
   {
-    number: 15, name: 'Wide Open', par: 4, yards: 281, bearing: 70, index: 16,
+    number: 15, name: 'The Sandhill', par: 4, yards: 281, bearing: 70, index: 16,
     dogleg: 12, doglegAt: 0.5, fairwayWidth: 22,
     bends: [{ at: 0.50, shift: 12, turn: 0.2 }],
     widths: [{ at: 0.10, half: 22 }, { at: 0.50, half: 23 }, { at: 0.80, half: 20 }, { at: 1, half: 21 }],
@@ -300,7 +298,7 @@ const holes: HoleSpec[] = [
     ],
     water: [],
     waste: [{ from: 0, to: 118, side: -1, offset: 16, width: 60 }, { from: 0, to: 118, side: 1, offset: 16, width: 60 }],
-    strategy: 'The widest fairway out here, uphill, with one enormous bunker sitting in the middle of it at 238. Drive it past, lay up short, or take the sand on.',
+    strategy: 'The widest fairway out here, uphill, with one enormous bunker sitting in the middle of it forty yards short of the green. Drive it past, lay up short, or take the sand on.',
   },
   {
     number: 16, name: 'Sunken Green', par: 3, yards: 165, bearing: 131, index: 6,
@@ -342,7 +340,7 @@ const holes: HoleSpec[] = [
     ],
     water: [{ along: 404, lateral: -30, size: 28 }],
     waste: [{ from: 0, to: 95, side: -1, offset: 12, width: 60 }, { from: 0, to: 95, side: 1, offset: 12, width: 60 }],
-    strategy: 'From beside the 16th green, ninety yards of desert to a fairway that bends right and then back left, to a green propped on the corner of the lake. Long and left is in the water the 11th plays down.',
+    strategy: 'Stroke index one. A hundred and fifty yards of desert off the Black tee to a fairway that bends right and then back left, to a green propped on the corner of the lake. Long and left is in the water the 11th plays down.',
   },
   {
     number: 18, name: 'Home Climb', par: 5, yards: 499, bearing: 15, index: 2,
@@ -365,32 +363,61 @@ const holes: HoleSpec[] = [
     ],
     water: [],
     waste: [{ from: 120, to: 430, side: 1, offset: 30, width: 70 }],
-    strategy: 'Five hundred yards uphill, houses down the left and open desert on the right. The green sits on a bench above the fairway: short of it is a wall, not an apron.',
+    strategy: 'Five hundred and forty-eight yards uphill, houses down the left and open desert on the right. The green sits on a bench above the fairway: short of it is a wall, not an apron.',
   },
 ];
 
-/** Apply the tee-set scale to everything measured in yards. */
-function scaled(spec: HoleSpec): HoleSpec {
-  if (SCALE === 1) return spec;
-  const k = SCALE;
+/**
+ * The Black card, off the club's scorecard: par 72, 6,946 yards, 73.5 / 140.
+ * Stroke indexes are theirs too — the front nine takes the even numbers and the
+ * back nine the odd ones, which is how the club splits them.
+ */
+const BLACK_YARDS: readonly number[] = [
+  401, 525, 459, 394, 183, 375, 417, 171, 500,
+  366, 477, 242, 441, 442, 354, 220, 431, 548,
+];
+const STROKE_INDEX: readonly number[] = [
+  12, 18, 2, 8, 16, 14, 6, 10, 4,
+  11, 17, 9, 15, 3, 13, 5, 1, 7,
+];
+
+/**
+ * Move the tee back to the Black plate. Distances from the tee — bunkers,
+ * hazards, where the grass starts — all move back with it; fractions along the
+ * hole are remapped onto the longer hole; lateral shifts, green sizes and
+ * elevations do not change, because moving a tee does not move a fairway
+ * sideways or lift a green.
+ */
+function stretch(spec: HoleSpec, index: number): HoleSpec {
+  const target = BLACK_YARDS[index];
+  const extra = target - spec.yards;
+  const at = (fraction: number) => (fraction * spec.yards + extra) / target;
+  const along = (yards: number) => Math.round(yards + extra);
   return {
     ...spec,
-    yards: Math.round(spec.yards * k),
-    bends: spec.bends?.map((bend) => ({ ...bend, shift: Math.round(bend.shift * k) })),
-    bunkers: spec.bunkers.map((b) => ({ ...b, along: Math.round(b.along * k), lateral: Math.round(b.lateral * k * 0.6) })),
-    water: spec.water.map((w) => ({
-      ...w,
-      along: Math.round(w.along * k),
-      strip: w.strip && { ...w.strip, from: Math.round(w.strip.from * k), to: Math.round(w.strip.to * k) },
+    yards: target,
+    index: STROKE_INDEX[index],
+    bends: spec.bends?.map((bend) => ({
+      ...bend,
+      at: at(bend.at),
+      turn: (bend.turn ?? 0.16) * (spec.yards / target),
     })),
-    waste: spec.waste?.map((w) => ({ ...w, from: Math.round(w.from * k), to: Math.round(w.to * k) })),
-    groves: spec.groves?.map((g) => ({ ...g, from: Math.round(g.from * k), to: Math.round(g.to * k) })),
-    specimens: spec.specimens?.map((t) => ({ ...t, along: Math.round(t.along * k) })),
-    landforms: spec.landforms?.map((l) => ({ ...l, length: Math.round(l.length * k) })),
+    doglegAt: at(spec.doglegAt),
+    widths: spec.widths?.map((width) => ({ ...width, at: at(width.at) })),
+    landforms: spec.landforms?.map((form) => ({ ...form, at: at(form.at) })),
+    bunkers: spec.bunkers.map((bunker) => ({ ...bunker, along: along(bunker.along) })),
+    water: spec.water.map((water) => ({
+      ...water,
+      along: water.strip ? water.along : along(water.along),
+      strip: water.strip && { ...water.strip, from: along(water.strip.from), to: along(water.strip.to) },
+    })),
+    waste: spec.waste?.map((waste) => ({ ...waste, from: along(waste.from), to: along(waste.to) })),
+    groves: spec.groves?.map((grove) => ({ ...grove, from: along(grove.from), to: along(grove.to) })),
+    specimens: spec.specimens?.map((tree) => ({ ...tree, along: along(tree.along) })),
   };
 }
 
-const card = holes.map(scaled);
+const card = holes.map(stretch);
 
 export const REVERE_CONCORD: Course = {
   id: 'concord',
@@ -403,18 +430,19 @@ export const REVERE_CONCORD: Course = {
     'The real one. Billy Casper and Greg Nash cut it through the Anthem foothills in 2002: turf corridors between desert washes and housing, tees standing well above their fairways, and half the round played from a hanging lie.',
   identity: [
     'Traced hole by hole from the overhead course tour',
+    'The Black card: 6,946 yards, rating 73.5, slope 140',
     'Anthem bench at about 2,600 feet — thin air is worth 5% of your carry',
     'Desert wash and hardpan outside the corridor, housing beyond it',
     'Elevated tees: four holes drop more than fifteen feet from the tee',
-    'Water on the 5th, the 11th, the 12th, the 17th and short of the 18th green',
-    'Played from the forward card at 5,769 yards; the championship tees are 7,034',
+    'Water on the 5th, the 11th, the 12th and the 17th',
+    'Par 3s of 183, 171, 242 and 220 yards — the 12th is a 3 wood',
   ],
   altitude: 2600,
   surroundWidth: 45,
-  difficulty: 68,
+  difficulty: 76,
   fit: {
-    distance: 0.55, accuracy: 0.75, rough: 0.35, wind: 0.35, greens: 0.60,
-    water: 0.55, elevation: 0.95, strategy: 0.70, heat: 1.00, rain: 0.05,
+    distance: 0.80, accuracy: 0.75, rough: 0.35, wind: 0.35, greens: 0.65,
+    water: 0.50, elevation: 0.95, strategy: 0.70, heat: 1.00, rain: 0.05,
   },
   holes: card,
 };
