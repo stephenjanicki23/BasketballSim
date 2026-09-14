@@ -1,20 +1,22 @@
 /**
- * The tour: fifty golfers, none of them real.
+ * The tour: fifty golfers authored by hand, none of them real, and the rest of a
+ * full 156-player field generated onto the same attribute system (see rookies).
  *
- * Each one is authored as a *seed* — a level, an archetype, an age, a
- * personality and the handful of ratings that define them specifically — and the
- * builder below fills in the rest. That keeps every player distinct without
- * hand-typing thirty numbers fifty times, and it means "elite putter" is a fact
- * about the golfer rather than a label on a spreadsheet.
+ * Each authored one is a *seed* — a level, an archetype, an age, a personality
+ * and the handful of ratings that define them specifically — and the builder
+ * below fills in the rest. That keeps every player distinct without hand-typing
+ * thirty numbers fifty times, and it means "elite putter" is a fact about the
+ * golfer rather than a label on a spreadsheet.
  *
- * Distribution: 5 elite, 10 very good, 15 solid tour players, 10 average,
- * 7 fringe and 3 high-potential prospects.
+ * Distribution of the authored fifty: 5 elite, 10 very good, 15 solid tour
+ * players, 10 average, 7 fringe and 3 high-potential prospects.
  */
 
 import {
   ARCHETYPES, PUTTING_STYLES, blankRatings, currentAbility, emptyCareer, emptySeason,
 } from '../simulation/golferEngine';
 import { clamp, createRng } from '../simulation/rng';
+import { createTourPlayer } from './rookies';
 import type { ArchetypeId, Golfer, PuttingStyleId, RatingKey, Ratings } from '../simulation/types';
 
 export interface GolferSeed {
@@ -696,8 +698,16 @@ export function buildGolfer(seed: GolferSeed): Golfer {
   return golfer;
 }
 
-export function createTour(): Golfer[] {
+/** How many golfers hold a card. Fifty are authored; the rest are generated. */
+export const TOUR_SIZE = 156;
+
+export function createTour(size = TOUR_SIZE, seed = 'tour'): Golfer[] {
   const golfers = SEEDS.map(buildGolfer);
+  const taken = new Set(golfers.map((g) => g.name));
+  const rng = createRng(seed);
+  for (let i = golfers.length; i < size; i++) {
+    golfers.push(createTourPlayer(rng.fork(`player:${i}`), i, taken));
+  }
   golfers.sort((a, b) => b.rankingPoints - a.rankingPoints);
   golfers.forEach((g, i) => {
     g.worldRank = i + 1;

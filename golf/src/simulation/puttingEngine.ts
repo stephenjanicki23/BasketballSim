@@ -175,7 +175,7 @@ export function puttSigmaFactor(rating: number): number {
   const delta = rating - PUTTING.referenceRating;
   return delta >= 0
     ? Math.exp(-delta * PUTTING.sigmaDecayAbove)
-    : Math.exp(-delta * PUTTING.sigmaGrowthBelow);
+    : saturate(-delta, PUTTING.sigmaGrowthBelow, PUTTING.sigmaCeiling);
 }
 
 /** Speed control scales much harder: it is where putting skill actually shows. */
@@ -183,7 +183,17 @@ export function puttSpeedFactor(rating: number): number {
   const delta = rating - PUTTING.referenceRating;
   return delta >= 0
     ? Math.exp(-delta * PUTTING.speedDecayAbove)
-    : Math.exp(-delta * PUTTING.speedGrowthBelow);
+    : saturate(-delta, PUTTING.speedGrowthBelow, PUTTING.speedCeiling);
+}
+
+/**
+ * Grows at `rate` per rating point below the reference to begin with, then
+ * flattens out towards `ceiling` instead of running away. The bad putter on tour
+ * is measurably worse than the good one and never a different species.
+ */
+function saturate(shortfall: number, rate: number, ceiling: number): number {
+  const room = ceiling - 1;
+  return 1 + room * (1 - Math.exp((-shortfall * rate) / room));
 }
 
 // ---------------------------------------------------------------------------

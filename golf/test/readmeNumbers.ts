@@ -6,9 +6,9 @@ import { makeProbability } from '../src/simulation/puttingEngine';
 
 const tour = createTour();
 const totals = tour.map((g) => bagFor(g).D.total).sort((a, b) => a - b);
-console.log(`driver totals: ${totals[0].toFixed(0)}–${totals[49].toFixed(0)}, field ${(totals.reduce((a, b) => a + b, 0) / 50).toFixed(0)}`);
+console.log(`driver totals: ${totals[0].toFixed(0)}–${totals[totals.length - 1].toFixed(0)}, field ${(totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(0)}`);
 const acc = tour.map((g) => g.ratings.driverAccuracy).sort((a, b) => a - b);
-console.log(`driver accuracy ratings: ${acc[0]}–${acc[49]}`);
+console.log(`driver accuracy ratings: ${acc[0]}–${acc[acc.length - 1]}`);
 console.log('make %: ' + [3, 10, 20, 30].map((f) => `${f}ft ${(makeProbability(f, 76) * 100).toFixed(0)}`).join(' / '));
 for (const course of COURSES) {
   const widths = course.holes.filter((h) => h.par !== 3).map((h) => h.fairwayWidth * 2).sort((a, b) => a - b);

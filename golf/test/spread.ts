@@ -18,7 +18,7 @@ import { dailyTouch } from '../src/simulation/golferEngine';
 const tour = createTour().sort((a, b) => b.hidden.currentAbility - a.hidden.currentAbility);
 const course = COURSE_BY_ID[process.argv[2] ?? 'desert'];
 const ROUNDS = Number(process.argv[3] ?? 20);
-const sample = [0, 4, 9, 17, 27, 37, 44, 49].map((i) => tour[i]);
+const sample = [0, 4, 9, 17, 40, 70, 110, 155].map((i) => tour[i]);
 
 const rows: { name: string; ability: number; mean: number; sd: number; low: number; high: number }[] = [];
 const start = performance.now();

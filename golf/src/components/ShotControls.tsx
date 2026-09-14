@@ -9,7 +9,7 @@
  */
 
 import { CLUB_BY_ID, LIES, SHOT_TYPES } from '../simulation/config';
-import { availableShotTypes, legalClubs, sigmaForShare } from '../simulation/shotEngine';
+import { availableShotTypes, legalClubs, sigmaForShare, strikeCost } from '../simulation/shotEngine';
 import { bagFor } from '../simulation/golferEngine';
 import { sessionContext, type PlaySession } from '../game/session';
 import type { ShotPlan } from '../simulation/shotEngine';
@@ -55,6 +55,11 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
               value={`${Math.round(plan.swingScale * 100)}%`}
               hint={plan.swingScale > 0.98 ? 'full' : 'controlled'}
             />
+            <Stat
+              label="Strike"
+              value={plan.smash.expected.toFixed(2)}
+              hint={`smash, best ${plan.smash.ceiling.toFixed(2)}`}
+            />
           </div>
           <div className="dispersion-summary">
             <div>
@@ -62,6 +67,10 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
               <strong>
                 {plan.sigmaLong.toFixed(1)} yd long · {plan.sigmaLat.toFixed(1)} yd wide
               </strong>
+            </div>
+            <div>
+              <span className="label">A poor strike costs</span>
+              <strong>{Math.round(strikeCost(plan))} yd</strong>
             </div>
             <div>
               <span className="label">50% of shots finish inside</span>

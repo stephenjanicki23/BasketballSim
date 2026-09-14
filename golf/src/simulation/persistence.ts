@@ -1,7 +1,7 @@
 /**
  * Saving the universe.
  *
- * A season of full results — fifty golfers, four rounds, eighteen hole scores
+ * A season of full results — a full field, four rounds, eighteen hole scores
  * and a stat line each — is about a megabyte of JSON, and localStorage gives you
  * five. So completed events are pruned down to what the game actually reads back:
  * the finished leaderboard, the cut line, the recaps and the winner. Live events

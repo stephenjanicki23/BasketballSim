@@ -6,7 +6,7 @@
  * much pressure bites — can be retuned in one file.
  */
 
-import type { ClubDefinition, ClubId, LieProfile, LieType } from './types';
+import type { ClubDefinition, ClubFamily, ClubId, LieProfile, LieType } from './types';
 
 // ---------------------------------------------------------------------------
 // The bag
@@ -45,81 +45,81 @@ export const LIES: Record<LieType, LieProfile> = {
   tee: {
     id: 'tee', name: 'Teeing Ground', short: 'Tee',
     distance: 1.02, accuracy: 0.96, distanceControl: 0.95, rollAfter: 1, spin: 1,
-    mishit: 0.010, maxCarryRatio: 1, directionalBias: 0,
+    mishit: 0.015, maxCarryRatio: 1, directionalBias: 0,
     note: 'Perched on a peg. As good as it gets.',
   },
   fairway: {
     id: 'fairway', name: 'Fairway', short: 'Fwy',
     distance: 1.00, accuracy: 1.00, distanceControl: 1.00, rollAfter: 1, spin: 1,
-    mishit: 0.016, maxCarryRatio: 1, directionalBias: 0,
+    mishit: 0.023, maxCarryRatio: 1, directionalBias: 0,
     note: 'Clean lie. Full control of flight and spin.',
   },
   firstCut: {
     id: 'firstCut', name: 'First Cut', short: '1st',
     distance: 0.98, accuracy: 1.05, distanceControl: 1.06, rollAfter: 1.05, spin: 0.92,
-    mishit: 0.022, maxCarryRatio: 1, directionalBias: 0,
+    mishit: 0.031, maxCarryRatio: 1, directionalBias: 0,
     note: 'Barely off line. Slightly less spin than a fairway lie.',
   },
   lightRough: {
     id: 'lightRough', name: 'Light Rough', short: 'Lt Rgh',
     distance: 0.95, accuracy: 1.10, distanceControl: 1.16, rollAfter: 1.15, spin: 0.78,
-    mishit: 0.035, maxCarryRatio: 1, directionalBias: 0,
+    mishit: 0.047, maxCarryRatio: 1, directionalBias: 0,
     skill: 'difficultLies',
     note: 'Sitting up. Flyers are possible — the ball comes out hot.',
   },
   heavyRough: {
     id: 'heavyRough', name: 'Heavy Rough', short: 'Hvy Rgh',
     distance: 0.90, accuracy: 1.25, distanceControl: 1.35, rollAfter: 1.05, spin: 0.55,
-    mishit: 0.075, maxCarryRatio: 0.90, directionalBias: 1.1,
+    mishit: 0.096, maxCarryRatio: 0.90, directionalBias: 1.1,
     skill: 'difficultLies',
     note: 'Grass will grab the hosel. Advancing it is the goal.',
   },
   deepRough: {
     id: 'deepRough', name: 'Deep Grass', short: 'Deep',
     distance: 0.85, accuracy: 1.40, distanceControl: 1.55, rollAfter: 0.95, spin: 0.40,
-    mishit: 0.130, maxCarryRatio: 0.74, directionalBias: 2.2,
+    mishit: 0.165, maxCarryRatio: 0.74, directionalBias: 2.2,
     skill: 'difficultLies',
     note: 'Buried. Wedge it back to grass and take your medicine.',
   },
   fairwayBunker: {
     id: 'fairwayBunker', name: 'Fairway Bunker', short: 'Fwy Bkr',
     distance: 0.88, accuracy: 1.30, distanceControl: 1.30, rollAfter: 1.0, spin: 0.70,
-    mishit: 0.090, maxCarryRatio: 0.82, directionalBias: 0.6,
+    mishit: 0.118, maxCarryRatio: 0.82, directionalBias: 0.6,
     skill: 'bunkerPlay',
     note: 'Clean it off the sand or you lose thirty yards.',
   },
   greensideBunker: {
     id: 'greensideBunker', name: 'Greenside Bunker', short: 'Bunker',
     distance: 0.55, accuracy: 1.45, distanceControl: 1.50, rollAfter: 0.55, spin: 0.85,
-    mishit: 0.070, maxCarryRatio: 0.44, directionalBias: 0,
+    mishit: 0.092, maxCarryRatio: 0.44, directionalBias: 0,
     skill: 'bunkerPlay',
     note: 'Splash it out on a cushion of sand.',
   },
   pineStraw: {
     id: 'pineStraw', name: 'Pine Straw', short: 'Straw',
     distance: 0.96, accuracy: 1.22, distanceControl: 1.20, rollAfter: 1.20, spin: 0.62,
-    mishit: 0.060, maxCarryRatio: 0.95, directionalBias: 2.6,
+    mishit: 0.082, maxCarryRatio: 0.95, directionalBias: 2.6,
     skill: 'difficultLies',
     note: 'The ball can skid off the straw — the club wants to slide under it.',
   },
   waste: {
     id: 'waste', name: 'Desert Waste', short: 'Waste',
     distance: 0.92, accuracy: 1.32, distanceControl: 1.28, rollAfter: 1.25, spin: 0.65,
-    mishit: 0.085, maxCarryRatio: 0.88, directionalBias: 1.4,
+    mishit: 0.108, maxCarryRatio: 0.88, directionalBias: 1.4,
     skill: 'difficultLies',
     note: 'Hardpan, gravel and scrub. Playable, but nothing is guaranteed.',
   },
   recovery: {
     id: 'recovery', name: 'Recovery Lie', short: 'Trees',
     distance: 0.78, accuracy: 1.60, distanceControl: 1.45, rollAfter: 1.10, spin: 0.55,
-    mishit: 0.150, maxCarryRatio: 0.68, directionalBias: 1.8,
+    mishit: 0.185, maxCarryRatio: 0.68, directionalBias: 1.8,
     skill: 'recovery',
     note: 'Trees in the way. Find a gap, keep it low, get back in play.',
   },
   fringe: {
     id: 'fringe', name: 'Fringe', short: 'Fringe',
     distance: 0.97, accuracy: 1.03, distanceControl: 1.04, rollAfter: 1.0, spin: 0.90,
-    mishit: 0.018, maxCarryRatio: 1, directionalBias: 0,
+    mishit: 0.025, maxCarryRatio: 1, directionalBias: 0,
     skill: 'chipping',
     note: 'Collar of the green. Putt it or bump it.',
   },
@@ -264,6 +264,48 @@ export const TUNING = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Strike quality
+// ---------------------------------------------------------------------------
+
+/**
+ * Smash factor: ball speed divided by club head speed, which is really a
+ * measure of how close to the middle of the face the ball was struck.
+ *
+ * The important property is that it is **one-sided**. You cannot beat the centre
+ * of the clubface, so every strike is the ceiling minus something, and the
+ * distribution of carry that falls out is left-skewed: most shots cluster near
+ * the golfer's full number and the misses are all short, occasionally very
+ * short. That is what a bag of drives actually looks like — 290, 292, 287, 288,
+ * 264 — and a symmetric normal never produces it.
+ *
+ * An off-centre strike also turns the ball, because the club twists about its
+ * centre of gravity and the ball comes off with sidespin. So the same miss that
+ * costs distance costs direction, which is why a thin one out of the toe is bad
+ * twice.
+ */
+export const SMASH = {
+  /** Best smash factor available with each club family. */
+  ceiling: {
+    driver: 1.50, wood: 1.48, longIron: 1.42, midIron: 1.38, shortIron: 1.33, wedge: 1.24, putter: 1,
+  } as Record<ClubFamily, number>,
+  /** 1σ of the shortfall from that ceiling, for a reference golfer. */
+  lossSigma: {
+    driver: 0.0420, wood: 0.0385, longIron: 0.0335, midIron: 0.0290, shortIron: 0.0240, wedge: 0.0190, putter: 0,
+  } as Record<ClubFamily, number>,
+  /** Carry responds to smash a little more than proportionally. */
+  carryExponent: 1.25,
+  /** Strike quality tightens this fast above a rating of 72, and loosens this fast below. */
+  skillDecayAbove: 0.0135,
+  skillGrowthBelow: 0.0165,
+  /** Yards of sideways push per 0.01 of smash lost, per 100 yards of carry. */
+  gearEffect: 0.95,
+  /** Below this fraction of the ceiling, a strike is bad enough to be called one. */
+  mishitFloor: 0.955,
+  /** How much of the old symmetric carry error survives alongside the smash model. */
+  residualShare: 0.84,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Putting
 // ---------------------------------------------------------------------------
 
@@ -347,6 +389,15 @@ export const PUTTING = {
    */
   speedDecayAbove: 0.0130,
   speedGrowthBelow: 0.0145,
+  /**
+   * How far that growth is allowed to run. Tour golf has no truly bad putters in
+   * it — the worst stroke on the money list still three-putts under once a round
+   * — so the penalty for a poor rating saturates rather than compounding. Without
+   * a ceiling a player rated in the forties putts like an amateur and gives away
+   * four strokes a round, which no professional does.
+   */
+  sigmaCeiling: 1.12,
+  speedCeiling: 1.20,
 
   /** Effective capture width of a 4.25-inch hole, in feet, at the best pace. */
   holeCapture: 0.210,

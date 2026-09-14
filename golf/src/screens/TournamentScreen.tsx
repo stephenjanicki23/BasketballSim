@@ -65,7 +65,7 @@ export function TournamentScreen(): JSX.Element {
         <div className="stat-row">
           <Stat label="Course" value={course.name} hint={`${course.location} · par ${course.par}`} />
           <Stat label="Purse" value={money(tournament.purse)} hint={tournament.tier === 'major' ? 'Major — double points' : tournament.tier === 'invitational' ? 'Invitational' : 'Full field'} />
-          <Stat label="Cut" value={tournament.cutLine === null ? 'After round 2' : toPar(tournament.cutLine)} hint={tournament.cutLine === null ? 'low 30 and ties' : `${tournament.madeCut.length} made it`} />
+          <Stat label="Cut" value={tournament.cutLine === null ? 'After round 2' : toPar(tournament.cutLine)} hint={tournament.cutLine === null ? 'low 65 and ties' : `${tournament.madeCut.length} made it`} />
           <Stat label="Round" value={`${tournament.roundsPlayed} of ${ROUNDS} played`} />
         </div>
         <div className="button-row">

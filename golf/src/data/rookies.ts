@@ -1,10 +1,13 @@
 /**
- * New players joining the tour.
+ * The rest of the tour.
  *
- * When somebody retires the field has to stay at fifty, so a rookie comes up.
- * They are generated the same way the original fifty were — a level, an
- * archetype, a country, a potential — so a graduate is just another golfer, not
- * a special case the rest of the engine has to know about.
+ * Fifty golfers are authored by hand, with written personalities and the
+ * ratings that define them. A real tour is three times that, and the other
+ * hundred are generated here — the same way, through the same builder, from a
+ * level, an archetype, a country and a potential. A generated player is just
+ * another golfer; nothing downstream knows the difference.
+ *
+ * The same function supplies graduates when somebody retires.
  */
 
 import { buildGolfer } from './golfers';
@@ -44,9 +47,9 @@ const PUTTING_STYLES: PuttingStyleId[] = [
 ];
 
 const ARCHETYPES: ArchetypeId[] = [
-  'prospect', 'prospect', 'power', 'bomber', 'precision', 'ballStriker',
-  'shortGame', 'elitePutter', 'allRounder', 'grinder', 'scrambler', 'volatile',
-  'windSpecialist', 'courseManager',
+  'power', 'bomber', 'precision', 'precision', 'ballStriker', 'shortGame',
+  'elitePutter', 'allRounder', 'allRounder', 'grinder', 'grinder', 'scrambler',
+  'volatile', 'windSpecialist', 'courseManager', 'veteran', 'prospect',
 ];
 
 const PERSONALITIES = [
@@ -86,11 +89,25 @@ const CONDITIONS_PREF = [
   'Wind — he grew up playing in it.',
 ];
 
-/** A tour graduate. Good enough to be here, not yet good enough to matter. */
-export function createRookie(rng: Rng, season: number, index: number): Golfer {
+/** A name nobody on tour already has. */
+function uniqueName(rng: Rng, taken: Set<string>): { name: string; country: string; flag: string } {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const region = rng.pick(REGIONS);
+    const name = `${rng.pick(region.first)} ${rng.pick(region.last)}`;
+    if (!taken.has(name)) {
+      taken.add(name);
+      return { name, country: region.country, flag: region.flag };
+    }
+  }
   const region = rng.pick(REGIONS);
-  const name = `${rng.pick(region.first)} ${rng.pick(region.last)}`;
-  const archetype = rng.pick(ARCHETYPES);
+  const name = `${rng.pick(region.first)} ${rng.pick(region.last)} ${taken.size}`;
+  taken.add(name);
+  return { name, country: region.country, flag: region.flag };
+}
+
+/** A tour graduate. Good enough to be here, not yet good enough to matter. */
+export function createRookie(rng: Rng, season: number, index: number, taken = new Set<string>()): Golfer {
+  const who = uniqueName(rng, taken);
   const age = rng.int(20, 25);
   // Most graduates are fringe players. A few are something else entirely.
   const roll = rng.next();
@@ -99,11 +116,9 @@ export function createRookie(rng: Rng, season: number, index: number): Golfer {
 
   return buildGolfer({
     id: `rookie-${season}-${index}`,
-    name,
-    country: region.country,
-    flag: region.flag,
+    ...who,
     age,
-    archetype,
+    archetype: rng.pick(ARCHETYPES),
     puttingStyle: rng.pick(PUTTING_STYLES),
     level: Math.round(level),
     potential: Math.round(potential),
@@ -112,6 +127,53 @@ export function createRookie(rng: Rng, season: number, index: number): Golfer {
     preferredConditions: rng.pick(CONDITIONS_PREF),
     weakness: rng.pick(WEAKNESSES),
     career: { wins: 0, majors: 0, seasons: 1 },
+  });
+}
+
+/**
+ * An established tour player: any age, any standard, with a career behind them.
+ *
+ * The level distribution is deliberately bottom-heavy. A tour is a pyramid —
+ * a handful of players who win, a tier who contend, and a long tail grinding to
+ * keep a card — and if the generated hundred were all average the authored fifty
+ * would look like a different sport.
+ */
+export function createTourPlayer(rng: Rng, index: number, taken = new Set<string>()): Golfer {
+  const who = uniqueName(rng, taken);
+  const age = rng.int(21, 42);
+  const roll = rng.next();
+  // Weighted towards the middle of the tour. Even the last card on the money
+  // list belongs to somebody who shoots 72 for a living, so the bottom of the
+  // field is ordinary rather than hopeless.
+  const level =
+    roll < 0.06 ? rng.range(77, 85)
+    : roll < 0.24 ? rng.range(71, 77)
+    : roll < 0.62 ? rng.range(65, 71)
+    : rng.range(60, 65);
+  const seasons = Math.max(1, Math.min(age - 20, rng.int(1, 16)));
+  const potential = clampRange(
+    level + rng.range(2, 30) - Math.max(0, age - 24) * 1.5,
+    level,
+    96,
+  );
+
+  return buildGolfer({
+    id: `tour-${index}`,
+    ...who,
+    age,
+    archetype: rng.pick(ARCHETYPES),
+    puttingStyle: rng.pick(PUTTING_STYLES),
+    level: Math.round(level),
+    potential: Math.round(potential),
+    personality: rng.pick(PERSONALITIES),
+    playingStyle: rng.pick(STYLES),
+    preferredConditions: rng.pick(CONDITIONS_PREF),
+    weakness: rng.pick(WEAKNESSES),
+    career: {
+      wins: level > 74 && seasons > 3 ? rng.int(0, Math.round((level - 72) * 0.5)) : 0,
+      majors: 0,
+      seasons,
+    },
   });
 }
 

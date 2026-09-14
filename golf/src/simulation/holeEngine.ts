@@ -1,8 +1,8 @@
 /**
  * Playing a hole.
  *
- * This is the module that makes the simulated tour honest: the fifty golfers in
- * the field do not roll dice against a rating, they stand over the ball, decide
+ * This is the module that makes the simulated tour honest: the golfers in the
+ * field do not roll dice against a rating, they stand over the ball, decide
  * what to hit and where to aim, and then play the shot through exactly the same
  * `planShot` / `resolveShot` pair the human player uses.
  *

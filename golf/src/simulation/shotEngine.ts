@@ -1,6 +1,6 @@
 /**
  * The shot engine. Everything that puts a golf ball somewhere it did not used
- * to be goes through here — the player's shots and all fifty simulated golfers'.
+ * to be goes through here — the player's shots and the whole field's alike.
  *
  * Two halves:
  *
@@ -34,6 +34,7 @@ import {
   LANDING_ROLL,
   LIES,
   SHOT_TYPES,
+  SMASH,
   SWING_CLUBS,
   TUNING,
   type ShotTypeId,
@@ -55,6 +56,7 @@ import { gustedWind, windComponents } from './weatherEngine';
 import { abilityScaleFor, strokesToHoleOut } from './strokesBaseline';
 import type {
   ClubDefinition,
+  LieProfile,
   ClubId,
   Conditions,
   Golfer,
@@ -142,6 +144,8 @@ export interface ShotPlan {
   apex: number;
   spin: number;
   descent: number;
+  /** Strike quality this golfer can expect with this club. */
+  smash: { ceiling: number; expected: number; sigma: number };
   shortGame: boolean;
   /** Notes for the UI: "cannot reach", "flyer likely", "club not playable from sand". */
   warnings: string[];
@@ -149,6 +153,10 @@ export interface ShotPlan {
 }
 
 export interface ShotResult {
+  /** How well it was struck: ball speed over club speed. */
+  smash: number;
+  /** Carry as a fraction of what a middled strike would have produced. */
+  strikeShare: number;
   start: Vec2;
   landing: Vec2;
   final: Vec2;
@@ -181,6 +189,49 @@ const SHORT_GAME_TYPES: ShotTypeId[] = ['chip', 'pitch', 'flop', 'explosion'];
 
 export function isShortGame(shotType: ShotTypeId): boolean {
   return SHORT_GAME_TYPES.includes(shotType);
+}
+
+/**
+ * How well this golfer strikes this club: the ceiling they are aiming at, the
+ * average they achieve, and how far a bad one falls off it.
+ */
+export function smashProfile(golfer: Golfer, club: ClubDefinition, lie: LieProfile, shotType: ShotTypeId): {
+  ceiling: number;
+  expected: number;
+  sigma: number;
+} {
+  const tail = tailProbability(golfer);
+  const ceiling = SMASH.ceiling[club.family];
+  // Centring the clubface is its own skill: mostly ball-striking with the club
+  // in hand, steadied by consistency and hurt by a lie you cannot control.
+  const strike =
+    effective(golfer, club.accuracySkill) * 0.42 +
+    effective(golfer, 'consistency') * 0.28 +
+    effective(golfer, 'ballSpeed') * 0.18 +
+    effective(golfer, 'approachConsistency') * 0.12;
+  const delta = strike - 72;
+  const skill = delta >= 0 ? Math.exp(-delta * SMASH.skillDecayAbove) : Math.exp(-delta * SMASH.skillGrowthBelow);
+  const sigma =
+    SMASH.lossSigma[club.family] * skill * lie.distanceControl * SHOT_TYPES[shotType].longitudinal;
+  // A half-normal's mean is σ√(2/π). The draw has fat tails, which widens it, and
+  // getting this constant wrong would quietly make every golfer hit it shorter
+  // than their own yardages say.
+  const spread = Math.sqrt(1 + tail * (TUNING.tailScale * TUNING.tailScale - 1));
+  return { ceiling, expected: ceiling - sigma * 0.7979 * spread, sigma };
+}
+
+/** Carry as a share of the golfer's own average, for a given strike. */
+function strikeShare(smash: number, profile: { expected: number }): number {
+  return Math.pow(Math.max(0.55, smash) / profile.expected, SMASH.carryExponent);
+}
+
+/**
+ * Yards of carry a strike this far below the middle of the face gives away — the
+ * number the shot panel shows, so the player knows what a bad one costs before
+ * they hit it rather than afterwards.
+ */
+export function strikeCost(plan: ShotPlan, sigmas = 2.2): number {
+  return plan.expectedCarry * (1 - strikeShare(plan.smash.ceiling - sigmas * plan.smash.sigma, plan.smash));
 }
 
 /** Minimum fraction of a full swing that is realistic with each club. */
@@ -412,6 +463,7 @@ export function planShot(
     apex,
     spin,
     descent: club.descent,
+    smash: smashProfile(golfer, club, lie, request.shotType),
     shortGame,
     warnings,
     odds: EMPTY_ODDS,
@@ -634,8 +686,21 @@ export function resolveShot(ctx: ShotContext, plan: ShotPlan, rng: Rng): ShotRes
   const notes: string[] = [];
   const tail = tailProbability(golfer);
 
-  let carry = plan.expectedCarry + heavyNormal(rng, tail, TUNING.tailScale) * plan.sigmaLong;
-  let lateral = heavyNormal(rng, tail, TUNING.tailScale) * plan.sigmaLat;
+  // --- Strike ---------------------------------------------------------------
+  // You cannot beat the middle of the face, so the shortfall is half-normal and
+  // the carry that follows is left-skewed: mostly full numbers, sometimes short.
+  const smashLoss = Math.abs(heavyNormal(rng, tail, TUNING.tailScale)) * plan.smash.sigma;
+  const smash = plan.smash.ceiling - smashLoss;
+  const share = plan.shortGame ? 1 : strikeShare(smash, plan.smash);
+
+  let carry = plan.expectedCarry * share + rng.normal() * plan.sigmaLong * SMASH.residualShare;
+  // Gear effect: the face twists about its centre, so an off-centre strike that
+  // cost distance also turned the ball. Toe or heel is a coin toss.
+  const gearSide = rng.chance(0.5) ? 1 : -1;
+  const gear = plan.shortGame
+    ? 0
+    : gearSide * (smashLoss * 100) * SMASH.gearEffect * (Math.max(plan.expectedCarry, 30) / 100);
+  let lateral = heavyNormal(rng, tail, TUNING.tailScale) * plan.sigmaLat + gear;
 
   // Reduced-control lies push the ball unpredictably one way or the other.
   if (lie.directionalBias > 0) {
@@ -652,8 +717,8 @@ export function resolveShot(ctx: ShotContext, plan: ShotPlan, rng: Rng): ShotRes
     0.001,
     0.5,
   );
-  let mishit = false;
-  let quality = 'Solid';
+  let mishit = smash < plan.smash.ceiling * SMASH.mishitFloor;
+  let quality = describeStrike(smash, plan.smash);
   if (rng.chance(mishitChance)) {
     mishit = true;
     const kind = rng.next();
@@ -673,9 +738,6 @@ export function resolveShot(ctx: ShotContext, plan: ShotPlan, rng: Rng): ShotRes
       quality = 'Blocked — never on line';
       notes.push('Never on line.');
     }
-  } else {
-    const error = Math.hypot(lateral / plan.sigmaLat, (carry - plan.expectedCarry) / plan.sigmaLong);
-    quality = error < 0.5 ? 'Flushed' : error < 1.1 ? 'Solid' : error < 1.9 ? 'Slight miss' : 'Poor strike';
   }
 
   carry = Math.max(2, carry);
@@ -748,6 +810,8 @@ export function resolveShot(ctx: ShotContext, plan: ShotPlan, rng: Rng): ShotRes
   if (holed) notes.push(plan.shortGame ? 'Holed it from off the green!' : 'In the hole!');
 
   return {
+    smash,
+    strikeShare: share,
     start: ball,
     landing,
     final,
@@ -782,6 +846,17 @@ function nearWater(hole: HoleGeometry, from: Vec2, to: Vec2, pad = 6): boolean {
     return true;
   }
   return false;
+}
+
+/** What that strike felt like. */
+function describeStrike(smash: number, profile: { ceiling: number; expected: number }): string {
+  const off = profile.ceiling - smash;
+  const typical = profile.ceiling - profile.expected;
+  if (off <= typical * 0.35) return 'Flushed';
+  if (off <= typical * 0.9) return 'Middled';
+  if (off <= typical * 1.7) return 'Slightly off the centre';
+  if (off <= typical * 2.6) return 'Off the toe';
+  return 'Nowhere near the middle';
 }
 
 /** A ball rolling over the hole drops in. The hole is 4.25 inches across. */

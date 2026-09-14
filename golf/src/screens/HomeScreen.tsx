@@ -41,7 +41,7 @@ export function HomeScreen(): JSX.Element {
             <div className="stat-row">
               <Stat label="Course" value={COURSE_BY_ID[tournament.courseId].name} hint={`par ${COURSE_BY_ID[tournament.courseId].par} · ${COURSE_BY_ID[tournament.courseId].yards.toLocaleString()} yd`} />
               <Stat label="Purse" value={money(tournament.purse)} />
-              <Stat label="Field" value={`${tournament.field.length} players`} hint="low 30 and ties make the cut" />
+              <Stat label="Field" value={`${tournament.field.length} players`} hint="low 65 and ties make the cut" />
               <Stat
                 label={tournament.roundsPlayed === 0 ? 'Round 1 forecast' : `Round ${Math.min(ROUNDS, tournament.roundsPlayed + 1)} forecast`}
                 value={describeWeather(tournament.weather[Math.min(ROUNDS - 1, tournament.roundsPlayed)])}

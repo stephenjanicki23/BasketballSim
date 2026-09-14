@@ -466,8 +466,10 @@ export interface HoleGeometry {
   water: { blob?: Blob; polygon?: Vec2[]; bounds: Bounds }[];
   waste: { polygon: Vec2[]; bounds: Bounds }[];
   trees: { position: Vec2; radius: number; shade: number }[];
-  /** Elevation in feet, relative to the tee. */
+  /** Elevation in feet, relative to the tee — interpolated, and what callers use. */
   elevationAt: (p: Vec2) => number;
+  /** The exact height field, used to build the interpolation grid. */
+  exactElevationAt: (p: Vec2) => number;
   bounds: Bounds;
   /** Outline of the mown corridor, for rendering. */
   bands: { fairway: Vec2[]; firstCut: Vec2[]; lightRough: Vec2[]; heavyRough: Vec2[]; deepRough: Vec2[] };

@@ -1,9 +1,9 @@
 # Golf Universe
 
-A top-down playable golf game wrapped around a fifty-player simulated professional
+A top-down playable golf game wrapped around a 156-player simulated professional
 tour. You aim by clicking on the course, pick a club, read the dispersion, and
-live with the consequences — and the other forty-nine golfers play the same
-tournament through exactly the same engine.
+live with the consequences — and the other 155 golfers play the same tournament
+through exactly the same engine.
 
 ```bash
 npm install
@@ -42,7 +42,7 @@ none.*
 
 ```
 /src/simulation     the engines — no React, no DOM, deterministic, testable
-/src/data           50 golfers, 3 courses, 54 hole specs, 20 tournaments
+/src/data           156 golfers, 3 courses, 54 hole specs, 20 tournaments
 /src/game           the playable session: pure functions over one state object
 /src/components     canvas renderer, shot controls, panels, profile
 /src/screens        Home, Play, Tournament, Players, Courses, Statistics, News
@@ -78,8 +78,9 @@ expected carry   = club carry for this golfer
 σ lateral        = club base × f(accuracy rating for that club)
                  × lie × shot type × conditions × wind × swing scale
 
-sample           = expected + z·σ, where z is normal with a fat tail whose
-                   weight is set by the golfer's Consistency
+strike           = smash ceiling for the club − |half-normal| (see below)
+sample           = expected × f(strike) + z·σ, where z is normal with a fat
+                   tail whose weight is set by the golfer's Consistency
 ```
 
 Then bounce, roll (from the surface it landed on, the spin it carried and the
@@ -101,6 +102,43 @@ A few things the model insists on:
 - **The golfer aims off for a crosswind themselves**, by an amount their Wind
   rating decides. You are not made to do arithmetic the caddie should do — but a
   poor wind player will still get pushed.
+
+## Strike quality, and why a bag of drives is lopsided
+
+Distance does not scatter symmetrically around a number. You cannot beat the
+middle of the clubface, so every strike is the best available **smash factor**
+minus something, and what comes out is left-skewed: most drives cluster near the
+player's full number, the misses are all short, and a few are very short. A bag
+of real drives reads 292, 288, 294, 286, 264 — never a tidy bell curve.
+
+```
+smash          = ceiling(club family) − |z| · σ(strike skill, lie, shot type)
+carry          = expected carry × (smash / ceiling) ^ 1.25
+sideways push  = lost smash × gear effect × carry / 100
+```
+
+The same miss that costs distance also turns the ball, because an off-centre
+strike twists the head about its centre of gravity and the ball leaves with
+sidespin — so a toe hit is bad twice, and the engine names it: *Flushed*,
+*Middled*, *Off the toe*, *Heavy — caught it fat*, *Thin*, *Blocked*.
+
+Where it lands, for a tour-average driver swing:
+
+| Strike | Share | Carry + roll | Offline | Fairway |
+|---|---|---|---|---|
+| Flushed | 24% | 294 yd | 18 yd | 69% |
+| Middled | 32% | 291 yd | 18 yd | 68% |
+| Slightly off centre | 28% | 286 yd | 19 yd | 67% |
+| Off the toe | 12% | 281 yd | 22 yd | 62% |
+| Nowhere near the middle | 4% | 273 yd | 27 yd | 53% |
+| Heavy, thin or blocked | ~1% | 198–268 yd | 29–60 yd | 11–57% |
+
+Strike skill is Consistency, the club's own accuracy rating, ball speed and
+approach consistency, so a wild bomber's drives have a standard deviation of 15
+yards and a metronome's 11, and both are skewed the same way. Rates of a real
+mishit — bad enough that the commentator would say so — run from 7% of drives
+for the best strikers to 18% for the worst, and up from there out of rough,
+sand, straw and trees, where the lie's own mishit chance multiplies in.
 
 ## Putting is a decision, not an aiming exercise
 
@@ -178,9 +216,10 @@ behind on Sunday takes on eighteen.
 
 ## The universe
 
-Twenty events across the three venues, four of them majors, 50-player fields,
-four rounds, a cut to the low 30 and ties, prize money, points, a world ranking
-that decays, form, statistics, a news wire and an off-season.
+Twenty events across the three venues, four of them majors, 156-player fields
+(78 for the invitationals), four rounds, a cut to the low 65 and ties, prize
+money, points, a world ranking that decays, form, statistics, a news wire and an
+off-season.
 
 Rounds are simulated **hole by hole across the whole field in lockstep**. It
 costs nothing and buys the thing that makes tournament golf tournament golf: when
@@ -193,8 +232,11 @@ you, or simulate everything and watch.
 At the end of a season everybody develops: young players move toward their
 potential as fast as their own temperament allows (and plenty stall), the
 thirty-somethings lose a yard at a time while their course management keeps
-improving, the finished ones retire, and graduates come up to keep the field at
-fifty.
+improving, the finished ones retire, and graduates come up to keep the field
+full. Fifty of the 156 are authored by hand — written personalities, archetypes
+and signature ratings — and the rest are generated onto the same attribute
+system, weighted towards the middle of the tour, because even the last card on
+the money list belongs to somebody who shoots 72 for a living.
 
 ## The three courses
 
@@ -224,35 +266,39 @@ Every number below is asserted by `npm test`, and the reports behind them are in
 
 | | This game | Tour |
 |---|---|---|
-| Driving distance | 260–309 yd, field 289 | 270–325, field 299 |
-| Driving accuracy | field 54–62%, best 68% | field 61%, best 73% |
-| Greens in regulation | field 60–73% | ~65% |
-| Scrambling | 38–49% | 58% |
-| Putts per round | field 30.6–31.6 | 29 |
-| Make % at 3 / 5 / 8 / 15 / 30 ft (average putter) | 93 / 72 / 44 / 17 / 4 | 97 / 77 / 50 / 23 / 7 |
-| Make % at 8 ft, elite / poor | 54 / 37 | 57 / 42 |
-| Three-putts per round | 0.30–0.56 | 0.54 |
+| Driving distance | 260–310 yd, field 290 | 270–325, field 299 |
+| Driving accuracy | field 48–61%, best 68% | field 61%, best 73% |
+| Greens in regulation | field 60–72% (49% on a wet, windy links) | ~65% |
+| Scrambling | 40–47% | 58% |
+| Putts per round | field 30.4–31.5 | 29 |
+| Drive distance, one player, standard deviation | 11–15 yd, left-skewed | ~13 yd, left-skewed |
+| Mishit drives | 7–18% by striker | ~10% |
+| Make % at 3 / 5 / 8 / 15 / 30 ft (average putter) | 93 / 75 / 46 / 18 / 4 | 97 / 77 / 50 / 23 / 7 |
+| Make % at 8 ft, elite / poor | 53 / 41 | 57 / 42 |
+| Three-putts per round | 0.37–0.58 | 0.54 |
 | Three-putt from 45 ft, lag / attack | 9% / 18% | 12% (mixed) |
-| Penalty strokes per round | 0.1–0.3 | ~0.25 |
-| Field scoring average (calm) | 0.0 to +0.9 | ~+1 |
-| Field scoring average (links, 19 mph, rain) | +5.9 | +4 to +6 |
-| Winning score | −13.9 average | ~−14 |
-| Different winners in 80 events | 12, best player 40% | 15–20, best player 10–25% |
+| Penalty strokes per round | 0.2–0.4 | ~0.25 |
+| Field scoring average (calm) | −0.4 to +1.4 | ~+1 |
+| Field scoring average (links, 19 mph, rain) | +5.0 | +4 to +6 |
+| Winning score | −12.6 average | ~−14 |
+| Different winners in 40 events | 11, best player 20% | 15–20 a season, best player 10–30% |
 
-One number is out of band and worth naming: **win concentration**. The scoring
-distribution is right — the best player is about 2.2 strokes a round better than
-the field, the whole tour spans 4.3 strokes, and winning scores average −13 — but
-the top two golfers still take about 70% of the events. Two things cause it, and
-only one is a modelling choice. A fifty-player field is small: with a real
-150-player field, the same distribution would produce far more winners, because
-the best of the other 149 is much further out than the best of the other 49. And
-the putting redesign correctly cut three-putts from about one a round to about
-0.4, which is the real tour rate but removes a large source of bad luck for good
-players. Raising day-to-day variance to compensate was tried and made it worse:
-dispersion costs strokes faster than it saves them, so a wider wobble widens the
-gap between the best and the worst rather than closing it.
+The number that took the longest to get right was **win concentration**. At fifty
+players the best golfer won 40% of events, because the best of the other 49 is
+not far out. A full 156-player field fixed most of it without touching a single
+coefficient — the same scoring distribution now produces 11 winners in 40 events
+with the world number one on 20%, which is where the very best real players sit.
+What is still tighter than the tour is the *spread* across the field: a
+fifteen-point ability gap is worth about five strokes a round here against three
+in reality, so the top ten or twelve names win more of the ordinary weeks than
+they should. It is a sensitivity problem in every subsystem at once rather than
+one dial, and it is the next thing worth doing.
 
-Two structural findings came out of getting there, and both are load-bearing:
+Within-player variance is right, and that matters more: a golfer's own scoring
+standard deviation is 3.0 strokes round to round, against about 2.9 on tour.
+
+Four structural findings came out of getting there, and all of them are
+load-bearing:
 
 **Chips were losing their run-out.** A chip is planned as 40% carry and 60% roll,
 but the engine was recomputing roll from the approach-shot green model on
@@ -270,18 +316,34 @@ now spreads roughly twice as hard with rating as the line does, which is where
 the brief said long-range skill should show: not in hole-outs, in whether the
 next one is two feet or six.
 
+**…but it has to stop biting somewhere.** Left uncapped, that same curve turned
+the weakest player in the field into an amateur: 2.6 three-putts a round, 34.6
+putts, four strokes a round given away on the greens alone. Tour golf contains no
+bad putters — the worst stroke on the money list still three-putts under once a
+round — so the penalty below the reference rating now saturates towards a
+ceiling instead of compounding. It cost nothing at the top of the field and took
+the bottom of it from 79.3 to 76.2.
+
 **A single `level` per golfer made every skill correlated.** The best player was
 simultaneously the longest, the straightest, the best iron player and the best
 putter, so he won eleven events out of twenty. Real players are lopsided:
 everybody out here is elite at something and ordinary at something else. The
 authored level is now compressed into the band a tour field actually occupies and
 the variation *between one golfer's own skills* is widened to compensate — which
-is also what makes the fifty feel like fifty people rather than one player at
+is also what makes the field feel like 156 people rather than one player at
 different volumes.
+
+**Loosening dispersion and tightening it are not opposites.** Adding the smash
+model while also widening every club's lateral sigma double-counted the same
+miss: strike quality already pushes the ball sideways through the gear effect, so
+the field lost two strokes a round and the leaderboards stopped looking like
+golf. Lateral sigma went back to where it was, the symmetric longitudinal error
+was cut to make room for the new skewed one, and the mishit rates — the part the
+model was actually missing — stayed raised.
 
 ## Testing
 
-- `npm test` — 30 regression tests: the shape of the field, every hole building
+- `npm test` — 34 regression tests: the shape of the field, every hole building
   with a pin on its green, dispersion behaving, lies costing what they should,
   make percentages in the tour band, a full round, a full season, the payout
   matching the purse, the save round-tripping, and determinism from a seed.
@@ -291,6 +353,11 @@ different volumes.
 - `npm run calibrate` — the reports: club distances and dispersion by player,
   scoring by course and by par, scrambling by lie and distance, a full season
   with standings, statistical leaders and the news wire.
+- the harnesses behind the tables above: `test/smashCheck.ts` (strike quality and
+  the shape of a bag of drives), `test/puttCheck.ts` (make curves, lag against
+  attack, who takes it on), `test/spread.ts` (round-to-round variance against
+  player-to-player difference), `test/strokes.ts` (where a weak player's strokes
+  actually go), `test/concentration.ts` (winners over several seasons).
 
 ## Controls
 

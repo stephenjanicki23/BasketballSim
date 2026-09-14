@@ -7,7 +7,7 @@
  */
 
 import { type Rng, clamp, createRng } from './rng';
-import { createTour } from '../data/golfers';
+import { TOUR_SIZE, createTour } from '../data/golfers';
 import { createRookie } from '../data/rookies';
 import { SCHEDULE } from '../data/tournaments';
 import { COURSE_BY_ID } from '../data/courses';
@@ -16,6 +16,7 @@ import {
   applyResults,
   buildLeaderboard,
   createTournament,
+  fieldFor,
   makeTeeTimes,
   payout,
   ROUNDS,
@@ -28,7 +29,7 @@ import { previewNews, seasonNews, tournamentNews, type NewsItem } from './newsEn
 import { currentAbility, emptySeason, scoringAverage } from './golferEngine';
 import type { Golfer, SeasonRecord } from './types';
 
-export const UNIVERSE_VERSION = 4;
+export const UNIVERSE_VERSION = 5;
 
 export interface SeasonSummary {
   season: number;
@@ -66,7 +67,9 @@ export function golferMap(universe: Universe): Map<string, Golfer> {
 }
 
 export function buildSchedule(season: number, golfers: Golfer[], rng: Rng): Tournament[] {
-  return SCHEDULE.map((definition) => createTournament(definition, season, golfers, rng.fork(definition.id)));
+  return SCHEDULE.map((definition) =>
+    createTournament(definition, season, fieldFor(definition, golfers), rng.fork(definition.id)),
+  );
 }
 
 export function createUniverse(seed = 'golf-universe'): Universe {
@@ -275,7 +278,7 @@ export function advanceSeason(universe: Universe): SeasonSummary {
   const retiring = new Set(notes.filter((n) => n.retired).map((n) => n.golferId));
   universe.golfers = universe.golfers.filter((g) => !retiring.has(g.id));
   let index = 0;
-  while (universe.golfers.length < 50) {
+  while (universe.golfers.length < TOUR_SIZE) {
     universe.golfers.push(createRookie(rng.fork(`rookie:${index}`), universe.season + 1, index));
     index++;
   }

@@ -35,7 +35,7 @@ import {
 import { chooseShot } from '../simulation/holeEngine';
 import { conditionsFor } from '../simulation/weatherEngine';
 import { COURSE_BY_ID } from '../data/courses';
-import { pressureFor, type RoundStats, type Tournament } from '../simulation/tournamentEngine';
+import { CUT_SIZE, pressureFor, type RoundStats, type Tournament } from '../simulation/tournamentEngine';
 import { strokesToHoleOut } from '../simulation/strokesBaseline';
 import { puttBand } from '../simulation/holeEngine';
 import type { ClubId, Conditions, Golfer, HoleGeometry, LieType, PuttingStats } from '../simulation/types';
@@ -659,11 +659,16 @@ function swingLine(stroke: number, club: ClubId, plan: ShotPlan, result: ShotRes
   const lie = LIES[result.finalLie].name.toLowerCase();
   const shapeText = isShortGame(plan.shotType) ? `${shape.name.toLowerCase()} with the ${clubName.toLowerCase()}` : clubName;
   const miss = Math.abs(result.deviation) < 4 ? 'straight' : `${Math.round(Math.abs(result.deviation))} yards ${result.deviation > 0 ? 'right' : 'left'}`;
+  // Only mention the strike when it was worth mentioning.
+  const strike =
+    plan.shortGame || result.strikeShare > 0.985
+      ? ''
+      : ` ${result.quality.toLowerCase()} (smash ${result.smash.toFixed(2)}),`;
   if (result.penalty > 0) {
-    return `${stroke}. ${shapeText}, ${Math.round(result.carry)} yards — ${result.notes.join(' ')}`;
+    return `${stroke}. ${shapeText},${strike} ${Math.round(result.carry)} yards — ${result.notes.join(' ')}`;
   }
   if (result.holed) return `${stroke}. ${shapeText} from ${Math.round(plan.distanceToTarget)} yards — in the hole!`;
-  return `${stroke}. ${shapeText}, ${Math.round(result.total)} yards (${miss}), ${Math.round(dist(result.final, plan.center) + 0)} yards from the target — ${lie}.`;
+  return `${stroke}. ${shapeText},${strike} ${Math.round(result.total)} yards (${miss}), ${Math.round(dist(result.final, plan.center))} yards from the target — ${lie}.`;
 }
 
 function puttLine(stroke: number, intent: PuttIntentId, decision: PuttDecision, result: PuttResult): string {
@@ -687,7 +692,7 @@ export function standingFor(tournament: Tournament, golferId: string, fieldSize:
   const row = board.find((r) => r.golferId === golferId);
   const leader = board.find((r) => r.status === 'active');
   if (!row || !leader) return { behind: 3, position: 20, toCut: null, fieldSize };
-  const cutRow = board.filter((r) => r.status === 'active')[29];
+  const cutRow = board.filter((r) => r.status === 'active')[CUT_SIZE - 1];
   return {
     behind: row.total - leader.total,
     position: row.position,

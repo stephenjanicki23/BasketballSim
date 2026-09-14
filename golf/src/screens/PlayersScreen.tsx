@@ -1,4 +1,4 @@
-/** All fifty golfers, sortable and filterable. */
+/** The whole tour, sortable and filterable. */
 
 import { useMemo, useState } from 'react';
 import { ARCHETYPES, RATING_GROUPS, formLabel, groupScores, scoringAverage } from '../simulation/golferEngine';

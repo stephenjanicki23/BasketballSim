@@ -281,7 +281,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   for (const w of waste) bounds = unionBounds(bounds, expandBounds(w.bounds, 8));
   for (const t of trees) bounds = unionBounds(bounds, expandBounds(boundsOf([t.position]), t.radius + 4));
 
-  return {
+  const built: HoleGeometry = {
     spec,
     course,
     style,
@@ -296,10 +296,15 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     water,
     waste,
     trees,
+    exactElevationAt: elevationAt,
     elevationAt,
     bounds,
     bands,
   };
+  // Once the grid exists, every caller gets the interpolated version; the grid
+  // itself is built from the exact one, so this cannot become self-referential.
+  built.elevationAt = (p: Vec2) => gridElevationAt(built, p);
+  return built;
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +495,8 @@ interface LieGrid {
   cols: number;
   rows: number;
   data: Uint8Array;
+  /** Height in feet at the same cell centres, for interpolation. */
+  elevation: Float32Array;
 }
 
 const gridCache = new Map<string, LieGrid>();
@@ -502,17 +509,52 @@ function gridFor(hole: HoleGeometry): LieGrid {
   const cols = Math.ceil((bounds.maxX - bounds.minX) / GRID_CELL) + 1;
   const rows = Math.ceil((bounds.maxY - bounds.minY) / GRID_CELL) + 1;
   const data = new Uint8Array(cols * rows);
+  const elevation = new Float32Array(cols * rows);
   const point = { x: 0, y: 0 };
+  // terrainAt reports the height under the ball, and the grid is what makes that
+  // cheap — so while the grid is being built it has to read the exact field, or
+  // it would be asking itself for the answer it is in the middle of computing.
+  const exact: HoleGeometry = { ...hole, elevationAt: hole.exactElevationAt };
   for (let row = 0; row < rows; row++) {
     point.y = bounds.minY + row * GRID_CELL;
     for (let col = 0; col < cols; col++) {
       point.x = bounds.minX + col * GRID_CELL;
-      data[row * cols + col] = LIE_ORDER.indexOf(terrainAt(hole, point).lie);
+      const index = row * cols + col;
+      data[index] = LIE_ORDER.indexOf(terrainAt(exact, point).lie);
+      elevation[index] = hole.exactElevationAt(point);
     }
   }
-  const grid = { minX: bounds.minX, minY: bounds.minY, cols, rows, data };
+  const grid = { minX: bounds.minX, minY: bounds.minY, cols, rows, data, elevation };
   gridCache.set(key, grid);
   return grid;
+}
+
+/**
+ * Height above the tee, bilinearly interpolated from the same grid.
+ *
+ * The exact version projects onto the centreline, and the shot engine asks for
+ * elevation about twenty times per shot — once for every club it is considering,
+ * twice per candidate target, four more to find the slope under the ball. Across
+ * a season that was the single most expensive thing in the simulation, for a
+ * height field that is smooth enough to interpolate without anybody noticing.
+ */
+export function gridElevationAt(hole: HoleGeometry, p: Vec2): number {
+  const grid = gridFor(hole);
+  const fx = (p.x - grid.minX) / GRID_CELL;
+  const fy = (p.y - grid.minY) / GRID_CELL;
+  const col = Math.floor(fx);
+  const row = Math.floor(fy);
+  if (col < 0 || row < 0 || col >= grid.cols - 1 || row >= grid.rows - 1) {
+    return hole.exactElevationAt(p);
+  }
+  const tx = fx - col;
+  const ty = fy - row;
+  const base = row * grid.cols + col;
+  const a = grid.elevation[base];
+  const b = grid.elevation[base + 1];
+  const c = grid.elevation[base + grid.cols];
+  const d = grid.elevation[base + grid.cols + 1];
+  return a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
 }
 
 /** Approximate lie, from the grid. Off the edge of the world is out of bounds. */
@@ -548,6 +590,7 @@ export function holeGeometry(course: Course, holeNumber: number): HoleGeometry {
  * geometry and the lie grid are unchanged, so this is a shallow copy.
  */
 export function withPin(hole: HoleGeometry, pin: Vec2): HoleGeometry {
+  // The elevation grid is keyed by course and hole number, so the copy shares it.
   return { ...hole, pin };
 }
 

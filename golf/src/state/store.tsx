@@ -155,13 +155,38 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     });
   }, [runBusy]);
 
+  /**
+   * A hundred and fifty-six players over four rounds is real work, and twenty of
+   * them in a row is a minute of it — so the season is simulated one event at a
+   * time, handing the browser back between each so the label, the leaderboard and
+   * the news wire move while it runs instead of the window going grey.
+   */
   const simulateRestOfSeason = useCallback(() => {
-    runBusy('Simulating the rest of the season…', () => {
-      while (!seasonComplete(universeRef.current)) {
-        simulateTournament(universeRef.current, { fast: true });
+    const step = () => {
+      const universe = universeRef.current;
+      if (seasonComplete(universe)) {
+        setBusy(null);
+        commit();
+        return;
       }
-    });
-  }, [runBusy]);
+      const event = currentTournament(universe);
+      const index = universe.schedule.filter((t) => t.status === 'complete').length + 1;
+      setBusy(`Simulating the season — event ${index} of ${universe.schedule.length}: ${event?.name ?? ''}…`);
+      window.setTimeout(() => {
+        try {
+          simulateTournament(universe, { fast: true });
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : String(error));
+          setBusy(null);
+          commit();
+          return;
+        }
+        commit();
+        step();
+      }, 30);
+    };
+    step();
+  }, [commit]);
 
   const rollSeason = useCallback(() => {
     runBusy('Off-season: development, retirements and next year’s schedule…', () => {

@@ -88,34 +88,49 @@ export interface Tournament extends TournamentDefinition {
   recaps: string[];
 }
 
-export const FIELD_SIZE = 50;
 const ROUNDS = 4;
 const CUT_AFTER = 2;
-const CUT_SIZE = 30;
+/** The low this many and ties play the weekend. */
+const CUT_SIZE = 65;
+/** An invitational takes the top of the world ranking rather than the whole tour. */
+const INVITATIONAL_FIELD = 78;
 
 // ---------------------------------------------------------------------------
 // Money and points
 // ---------------------------------------------------------------------------
 
 /**
- * Share of the purse by finishing position, 1st through 30th. The raw weights
- * below are the shape of a tour payout; they are normalised at load so the
- * whole purse is actually paid out rather than 88% of it.
+ * Share of the purse by finishing position, first through sixty-fifth — the
+ * shape of a tour payout. The weights are normalised at load so the whole purse
+ * is paid out rather than most of it.
  */
 const MONEY_WEIGHTS = [
-  0.180, 0.109, 0.069, 0.049, 0.041, 0.036, 0.0335, 0.031, 0.029, 0.027,
-  0.025, 0.023, 0.021, 0.0195, 0.018, 0.0168, 0.0157, 0.0147, 0.0138, 0.0130,
-  0.0122, 0.0114, 0.0107, 0.0100, 0.0094, 0.0088, 0.0083, 0.0078, 0.0074, 0.0070,
+  0.1800, 0.1090, 0.0690, 0.0490, 0.0410, 0.03625, 0.03375, 0.03125, 0.02925, 0.02725,
+  0.02525, 0.02325, 0.02125, 0.01975, 0.01825, 0.01675, 0.01575, 0.01475, 0.01375, 0.01275,
+  0.01175, 0.01075, 0.00995, 0.00915, 0.00835, 0.00755, 0.00725, 0.00695, 0.00670, 0.00645,
+  0.00620, 0.00595, 0.00570, 0.00545, 0.00525, 0.00505, 0.00485, 0.00465, 0.00445, 0.00425,
+  0.00405, 0.00385, 0.00365, 0.00345, 0.00325, 0.00305, 0.00285, 0.00265, 0.00252, 0.00246,
+  0.00240, 0.00234, 0.00228, 0.00222, 0.00216, 0.00210, 0.00204, 0.00198, 0.00192, 0.00186,
+  0.00180, 0.00174, 0.00168, 0.00162, 0.00156,
 ];
 
 const MONEY_TOTAL = MONEY_WEIGHTS.reduce((sum, share) => sum + share, 0);
 const MONEY_SHARE = MONEY_WEIGHTS.map((share) => share / MONEY_TOTAL);
 
-const POINTS_BASE = [
-  500, 300, 190, 135, 110, 100, 90, 85, 80, 75,
-  70, 65, 60, 57, 54, 51, 48, 46, 44, 42,
-  40, 38, 36, 34, 32.5, 31, 29.5, 28, 26.5, 25,
-];
+/** Points by finishing position: 500 for a win, down to a single point at 65th. */
+const POINTS_BASE = (() => {
+  const head = [
+    500, 300, 190, 135, 110, 100, 90, 85, 80, 75,
+    70, 65, 60, 57, 54, 51, 48, 46, 44, 42,
+    40, 38, 36, 34, 32.5, 31, 29.5, 28, 26.5, 25,
+  ];
+  const tail: number[] = [];
+  for (let position = 31; position <= 65; position++) {
+    // Smooth decay from 24 down to 1 across the rest of the field.
+    tail.push(Math.round((24 * Math.pow(0.9, position - 31) + 1) * 10) / 10);
+  }
+  return [...head, ...tail];
+})();
 
 export function tierMultiplier(tier: TournamentDefinition['tier']): number {
   return tier === 'major' ? 2 : tier === 'invitational' ? 1.4 : 1;
@@ -124,6 +139,16 @@ export function tierMultiplier(tier: TournamentDefinition['tier']): number {
 // ---------------------------------------------------------------------------
 // Creating a tournament
 // ---------------------------------------------------------------------------
+
+/**
+ * Who is in this week. Full-field events take everybody with a card; an
+ * invitational takes the top of the world ranking, which is how those weeks get
+ * the best field of the regular season.
+ */
+export function fieldFor(definition: TournamentDefinition, tour: Golfer[]): Golfer[] {
+  if (definition.tier !== 'invitational') return [...tour];
+  return [...tour].sort((a, b) => a.worldRank - b.worldRank).slice(0, INVITATIONAL_FIELD);
+}
 
 export function createTournament(
   definition: TournamentDefinition,
@@ -425,7 +450,7 @@ export function buildLeaderboard(tournament: Tournament, roundsComplete: number)
   return [...active, ...cutRows];
 }
 
-/** Apply the cut after two rounds: the low 30 and ties play the weekend. */
+/** Apply the cut after two rounds: the low 65 and ties play the weekend. */
 export function applyCut(tournament: Tournament): { line: number; missed: string[] } {
   const course = COURSE_BY_ID[tournament.courseId];
   const scores = tournament.field
@@ -601,4 +626,4 @@ export function roundSeed(tournament: Tournament, round: number): Rng {
   return createRng(`${tournament.season}:${tournament.id}:${round}`);
 }
 
-export { ROUNDS, CUT_AFTER, CUT_SIZE };
+export { ROUNDS, CUT_AFTER, CUT_SIZE, INVITATIONAL_FIELD };

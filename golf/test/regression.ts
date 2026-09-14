@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 
 import { COURSES, COURSE_BY_ID } from '../src/data/courses';
-import { createTour } from '../src/data/golfers';
+import { createTour, TOUR_SIZE } from '../src/data/golfers';
 import { holeGeometry, onGreen, pinForRound, terrainAt, withPin } from '../src/simulation/courseEngine';
 import { bagFor, dailyTouch, driverCarry, groupScores } from '../src/simulation/golferEngine';
 import { calmWeather, conditionsFor, windComponents } from '../src/simulation/weatherEngine';
@@ -67,10 +67,10 @@ const byName = (name: string): Golfer => {
 console.log('\nThe tour');
 // ---------------------------------------------------------------------------
 
-test('fifty golfers, all distinct', () => {
-  assert.equal(tour.length, 50);
-  assert.equal(new Set(tour.map((g) => g.id)).size, 50);
-  assert.equal(new Set(tour.map((g) => g.name)).size, 50);
+test('a full field of golfers, all distinct', () => {
+  assert.equal(tour.length, TOUR_SIZE);
+  assert.equal(new Set(tour.map((g) => g.id)).size, TOUR_SIZE);
+  assert.equal(new Set(tour.map((g) => g.name)).size, TOUR_SIZE);
   assert.ok(tour.every((g) => !/^player\s*\d+$/i.test(g.name)), 'placeholder names');
 });
 
@@ -512,7 +512,7 @@ test('a season is twenty events over three courses, with four majors', () => {
   assert.equal(universe.schedule.length, 20);
   assert.equal(universe.schedule.filter((t) => t.tier === 'major').length, 4);
   assert.equal(new Set(universe.schedule.map((t) => t.courseId)).size, 3);
-  assert.equal(universe.golfers.length, 50);
+  assert.equal(universe.golfers.length, TOUR_SIZE);
 });
 
 test('a tournament cuts, pays and ranks correctly', () => {
@@ -520,7 +520,9 @@ test('a tournament cuts, pays and ranks correctly', () => {
   assert.ok(tournament, 'no tournament played');
   assert.equal(tournament.status, 'complete');
   assert.equal(tournament.roundsPlayed, 4);
-  assert.ok(tournament.madeCut.length >= 30 && tournament.madeCut.length <= 40, `cut left ${tournament.madeCut.length}`);
+  // Low sixty-five and ties: the line itself is shared, so the weekend field
+  // is sixty-five plus however many players are level with the last qualifier.
+  assert.ok(tournament.madeCut.length >= 65 && tournament.madeCut.length <= 90, `cut left ${tournament.madeCut.length}`);
 
   const board = buildLeaderboard(tournament, 4);
   const active = board.filter((r) => r.status === 'active');
@@ -585,18 +587,18 @@ test('the news wire reports what happened', () => {
 test('the save round-trips and stays inside localStorage', () => {
   const payload = serializeUniverse(universe);
   const parsed = JSON.parse(payload);
-  assert.equal(parsed.golfers.length, 50);
+  assert.equal(parsed.golfers.length, TOUR_SIZE);
   assert.equal(parsed.schedule.length, 20);
   assert.equal(parsed.season, universe.season);
   assert.ok(payload.length < 2_500_000, `save is ${(payload.length / 1024 / 1024).toFixed(2)} MB`);
 });
 
-test('the season rolls over and the field stays at fifty', () => {
+test('the season rolls over and the field stays full', () => {
   const before = universe.season;
   const abilities = new Map(universe.golfers.map((g) => [g.id, g.hidden.currentAbility]));
   const summary = advanceSeason(universe);
   assert.equal(universe.season, before + 1);
-  assert.equal(universe.golfers.length, 50);
+  assert.equal(universe.golfers.length, TOUR_SIZE);
   assert.equal(universe.eventIndex, 0);
   assert.ok(summary.championName.length > 0, 'no Player of the Year');
   assert.equal(summary.majorWinners.length, 4, 'majors were not recorded');
