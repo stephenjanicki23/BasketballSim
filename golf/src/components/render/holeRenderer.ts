@@ -11,7 +11,7 @@
  */
 
 import { type Camera, toScreen } from './camera';
-import { type Vec2, blobOutline } from '../../simulation/geometry';
+import { type Vec2, blobOutline, pointAlongPolyline } from '../../simulation/geometry';
 import { createRng } from '../../simulation/rng';
 import { dispersionContour, sigmaForShare, type ShotPlan } from '../../simulation/shotEngine';
 import type { GreenRead } from '../../simulation/puttingEngine';
@@ -109,22 +109,70 @@ function elevationLayer(hole: HoleGeometry): ShadeLayer {
       const height = here * 0.9;
       const value = light * 16 + height * 1.1;
       const index = ((rows - 1 - row) * cols + col) * 4;
+      // Fade the bitmap out at its own edges. Without this the hole sits inside
+      // a visible rectangle of shading, which is the one thing that gives away
+      // that the ground is a texture rather than ground.
+      const edge = Math.min(
+        1,
+        Math.min(col, cols - 1 - col) / (cols * 0.16),
+        Math.min(row, rows - 1 - row) / (rows * 0.12),
+      );
+      const fade = edge * edge * (3 - 2 * edge);
       if (value >= 0) {
         image.data[index] = 255;
         image.data[index + 1] = 255;
         image.data[index + 2] = 236;
-        image.data[index + 3] = Math.min(70, value * 3.2);
+        image.data[index + 3] = Math.min(70, value * 3.2) * fade;
       } else {
         image.data[index] = 12;
         image.data[index + 1] = 24;
         image.data[index + 2] = 14;
-        image.data[index + 3] = Math.min(80, -value * 3.4);
+        image.data[index + 3] = Math.min(80, -value * 3.4) * fade;
       }
     }
   }
   ctx.putImageData(image, 0, 0);
   const layer = { canvas, minX, minY, spanX, spanY };
   shadeCache.set(key, layer);
+  return layer;
+}
+
+interface StripeLayer {
+  stripes: Vec2[][];
+}
+const stripeCache = new Map<string, StripeLayer>();
+
+/**
+ * Mowing lines. A fairway is cut in passes up and down the hole, and the grass
+ * lies with the mower, so alternate passes catch the light differently. They
+ * follow the corridor rather than running straight, which is most of why a
+ * curving hole reads as curving from above.
+ */
+function fairwayStripes(hole: HoleGeometry): StripeLayer {
+  const key = `${hole.course.id}:${hole.spec.number}`;
+  const cached = stripeCache.get(key);
+  if (cached) return cached;
+  const stripes: Vec2[][] = [];
+  const passes = 6;
+  const samples = Math.max(28, Math.round(hole.centerlineLength / 10));
+  for (let pass = 0; pass < passes; pass += 2) {
+    const inner: Vec2[] = [];
+    const outer: Vec2[] = [];
+    for (let i = 0; i <= samples; i++) {
+      const along = (i / samples) * hole.centerlineLength;
+      const { point, tangent } = pointAlongPolyline(hole.centerline, along);
+      const width = hole.fairwayHalfWidth(along);
+      if (width <= 0.4) continue;
+      const right = { x: -tangent.y, y: tangent.x };
+      const a = -width + ((2 * width) / passes) * pass;
+      const b = a + (2 * width) / passes;
+      inner.push({ x: point.x + right.x * a, y: point.y + right.y * a });
+      outer.push({ x: point.x + right.x * b, y: point.y + right.y * b });
+    }
+    if (inner.length > 2) stripes.push([...inner, ...outer.reverse()]);
+  }
+  const layer = { stripes };
+  stripeCache.set(key, layer);
   return layer;
 }
 
@@ -179,6 +227,19 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
     path(ctx, camera, points);
     ctx.fillStyle = colour;
     ctx.fill();
+  }
+
+  // --- Mowing lines on the fairway ----------------------------------------
+  if (camera.scale > 0.55) {
+    ctx.save();
+    path(ctx, camera, hole.bands.fairway);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    for (const stripe of fairwayStripes(hole).stripes) {
+      path(ctx, camera, stripe);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // --- Desert waste --------------------------------------------------------
@@ -268,23 +329,7 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
 
   // --- Trees ---------------------------------------------------------------
   for (const tree of hole.trees) {
-    const centre = toScreen(camera, tree.position);
-    const r = tree.radius * camera.scale;
-    if (centre.x < -r || centre.x > camera.width + r || centre.y < -r || centre.y > camera.height + r) continue;
-    ctx.beginPath();
-    ctx.arc(centre.x + r * 0.22, centre.y + r * 0.3, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(centre.x, centre.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = tree.shade > 0.5 ? palette.tree : palette.treeDark;
-    ctx.fill();
-    if (r > 5) {
-      ctx.beginPath();
-      ctx.arc(centre.x - r * 0.25, centre.y - r * 0.28, r * 0.55, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
-      ctx.fill();
-    }
+    drawTree(ctx, options, tree);
   }
 
   // --- Yardage arcs from the ball -----------------------------------------
@@ -316,6 +361,112 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
   drawBallAndFlight(ctx, options);
 
   ctx.restore();
+}
+
+/**
+ * A tree from above. What kind of tree matters: a stand of pines reads as dark
+ * rosettes, hardwoods as lumpy clumps of two or three canopies, gorse as a low
+ * olive cushion with flower on it, and a cactus as a pale column with arms. Same
+ * circle in the simulation, three different places to be in trouble.
+ */
+function drawTree(
+  ctx: CanvasRenderingContext2D,
+  options: RenderOptions,
+  tree: { position: Vec2; radius: number; shade: number },
+): void {
+  const { camera, hole } = options;
+  const palette = hole.style.palette;
+  const centre = toScreen(camera, tree.position);
+  const r = tree.radius * camera.scale;
+  if (centre.x < -r * 2 || centre.x > camera.width + r * 2 || centre.y < -r * 2 || centre.y > camera.height + r * 2) return;
+
+  // Everything is lit from the north-west, so every shadow falls the same way.
+  ctx.beginPath();
+  ctx.ellipse(centre.x + r * 0.28, centre.y + r * 0.34, r * 1.02, r * 0.88, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
+  ctx.fill();
+
+  const dark = tree.shade > 0.5 ? palette.treeDark : palette.tree;
+  const light = tree.shade > 0.5 ? palette.tree : palette.treeDark;
+
+  const rosette = (radius: number, lobes: number, depth: number, fill: string) => {
+    ctx.beginPath();
+    const steps = lobes * 6;
+    for (let i = 0; i <= steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const rad = radius * (1 - depth + depth * Math.abs(Math.cos((a * lobes) / 2)));
+      const x = centre.x + Math.cos(a) * rad;
+      const y = centre.y + Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+
+  if (hole.style.id === 'desert') {
+    // Saguaro: a column with an arm or two, pale and spiny.
+    ctx.fillStyle = tree.shade > 0.4 ? '#5e7a4e' : '#4d6742';
+    ctx.beginPath();
+    ctx.ellipse(centre.x, centre.y, r * 0.52, r * 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(centre.x - r * 0.62, centre.y + r * 0.1, r * 0.34, 0, Math.PI * 2);
+    ctx.arc(centre.x + r * 0.58, centre.y - r * 0.24, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    if (r > 4) {
+      ctx.strokeStyle = 'rgba(226, 240, 208, 0.45)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(centre.x, centre.y - r * 0.5);
+      ctx.lineTo(centre.x, centre.y + r * 0.5);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (hole.style.id === 'links') {
+    // Gorse: a low cushion, and in flower it is unmistakable.
+    rosette(r, 5, 0.3, dark);
+    if (r > 3) {
+      const rng = createRng(`gorse:${Math.round(tree.position.x)}:${Math.round(tree.position.y)}`);
+      ctx.fillStyle = 'rgba(232, 197, 62, 0.75)';
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc(centre.x + rng.range(-r * 0.6, r * 0.6), centre.y + rng.range(-r * 0.6, r * 0.6), Math.max(0.6, r * 0.14), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    return;
+  }
+
+  if (tree.radius >= 6.5) {
+    // Conifer: layered whorls, almost black from above.
+    rosette(r, 7, 0.26, light);
+    rosette(r * 0.66, 7, 0.3, dark);
+    if (r > 6) {
+      ctx.beginPath();
+      ctx.arc(centre.x, centre.y, Math.max(0.8, r * 0.1), 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(58, 42, 28, 0.8)';
+      ctx.fill();
+    }
+    return;
+  }
+
+  // Hardwood: two or three canopies bunched together.
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.arc(centre.x, centre.y, r, 0, Math.PI * 2);
+  ctx.arc(centre.x - r * 0.52, centre.y + r * 0.3, r * 0.62, 0, Math.PI * 2);
+  ctx.arc(centre.x + r * 0.46, centre.y + r * 0.36, r * 0.54, 0, Math.PI * 2);
+  ctx.fill();
+  if (r > 4) {
+    ctx.beginPath();
+    ctx.arc(centre.x - r * 0.24, centre.y - r * 0.28, r * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+    ctx.fill();
+  }
 }
 
 function drawElevation(ctx: CanvasRenderingContext2D, options: RenderOptions): void {

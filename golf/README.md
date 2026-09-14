@@ -244,20 +244,55 @@ the money list belongs to somebody who shoots 72 for a living.
 |---|---|---|---|
 | Style | Links | Desert | Parkland |
 | Card | Par 71, 7,167 yd | Par 72, 7,471 yd | Par 72, 7,175 yd |
-| Fairways | 32–42 yd | 40–52 yd | 26–32 yd |
+| Fairways | 25–46 yd | 29–56 yd | 23–38 yd |
 | Roll-out | 1.42× | 1.50× | 0.92× |
 | Greens | 11.5 stimp, firm | 11.0 stimp | 12.5 stimp, small |
 | Weather | 15–25 mph, rain, cold | 95–105°F | Sheltered, wet |
 | Outside the corridor | Deep marram rough | Playable hardpan waste | Pine straw, then trees |
 | Rewards | Wind play, flighting it | Distance, heat endurance | Accuracy, management |
 
-Holes are authored as *specs* — par, yardage, where the dogleg turns, where the
-bunkers sit relative to the landing zone, how the green tilts — and realised as
-geometry in yards. The grass gradient (fairway → first cut → light → heavy →
-deep) is not five nested polygons; it falls out of the distance from the
+Holes are authored as *specs* — par, yardage, how it bends, how wide it is where,
+where the bunkers sit relative to the landing zone, how the green tilts — and
+realised as geometry in yards. The grass gradient (fairway → first cut → light →
+heavy → deep) is not five nested polygons; it falls out of the distance from the
 centreline compared with the fairway's width at that point, which is cheaper and
 gives an organic edge for free. Green complexes get their own apron, so missing a
 green leaves you in greenside rough rather than instantly in the deep stuff.
+
+### What makes a hole a hole
+
+Five things are authored per hole, and each of them is a decision you have to
+play around rather than scenery:
+
+- **Bends.** Each one turns the line of play by so many yards over a stretch of
+  the hole, sharply or gently, and they compose: one makes a dogleg, two the same
+  way make a hole that keeps turning, two opposite make an S. A real dogleg moves
+  the corridor sixty to a hundred yards, which is a 30–45° turn — enough that the
+  tee shot cannot see the green and driver is a question rather than a default.
+- **Width, along the hole.** The fairway is not one number from tee to green. A
+  hole either pinches where the drive lands and opens up afterwards, or runs wide
+  off the tee and narrows where the second shot has to land. Which one it is, is
+  the hole's whole character.
+- **Groves.** Stands of timber, gorse or cactus, placed where they change the
+  shot. The tree line proper starts about twenty-five yards off the fairway,
+  outside the rough bands, because a fifteen-yard miss belongs in rough; the ones
+  that sit tight are deliberate corner stands, blocking the shortcut on a dogleg
+  for a hundred yards and no further.
+- **Specimens.** Single trees in play — the oak short of a green that decides
+  which side of the fairway you want, the pine on the inside of the turn.
+- **Landforms.** Ridges you drive over blind, hollows the ball gathers into,
+  plateaus that leave a hanging lie, dunes and mesas off to one side. They sit on
+  top of the tee-to-green slope and change what the shot plays like.
+
+Two geometry notes that stop the shapes going wrong: a band offset toward the
+inside of a bend is held back before it folds through itself (a folded water
+polygon decides penalties wrongly, not just badly), and waste and coastline taper
+away at their ends rather than stopping at a straight cut.
+
+The renderer draws what that produces: mowing lines that follow the corridor,
+conifers as dark rosettes, hardwoods as bunched canopies, gorse as low cushions
+in flower, saguaro as pale columns with arms — and every shadow falling the same
+way, from a light in the north-west.
 
 ## Calibration
 
@@ -266,10 +301,10 @@ Every number below is asserted by `npm test`, and the reports behind them are in
 
 | | This game | Tour |
 |---|---|---|
-| Driving distance | 260–310 yd, field 290 | 270–325, field 299 |
-| Driving accuracy | field 48–61%, best 68% | field 61%, best 73% |
-| Greens in regulation | field 60–72% (49% on a wet, windy links) | ~65% |
-| Scrambling | 40–47% | 58% |
+| Driving distance (driver only, as the tour measures it) | 260–310 yd, field 290 | 270–325, field 299 |
+| Driving accuracy | field 54–61%, best 68% | field 61%, best 73% |
+| Greens in regulation | field 60–73% (52% on a wet, windy links) | ~65% |
+| Scrambling | 44–50% | 58% |
 | Putts per round | field 30.4–31.5 | 29 |
 | Drive distance, one player, standard deviation | 11–15 yd, left-skewed | ~13 yd, left-skewed |
 | Mishit drives | 7–18% by striker | ~10% |
@@ -278,8 +313,8 @@ Every number below is asserted by `npm test`, and the reports behind them are in
 | Three-putts per round | 0.37–0.58 | 0.54 |
 | Three-putt from 45 ft, lag / attack | 9% / 18% | 12% (mixed) |
 | Penalty strokes per round | 0.2–0.4 | ~0.25 |
-| Field scoring average (calm) | −0.4 to +1.4 | ~+1 |
-| Field scoring average (links, 19 mph, rain) | +5.0 | +4 to +6 |
+| Field scoring average (calm) | −0.4 to +1.0 | ~+1 |
+| Field scoring average (links, 19 mph, rain) | +4.0 | +4 to +6 |
 | Winning score | −12.6 average | ~−14 |
 | Different winners in 40 events | 11, best player 20% | 15–20 a season, best player 10–30% |
 

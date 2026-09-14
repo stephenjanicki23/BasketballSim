@@ -11,7 +11,12 @@ const acc = tour.map((g) => g.ratings.driverAccuracy).sort((a, b) => a - b);
 console.log(`driver accuracy ratings: ${acc[0]}–${acc[acc.length - 1]}`);
 console.log('make %: ' + [3, 10, 20, 30].map((f) => `${f}ft ${(makeProbability(f, 76) * 100).toFixed(0)}`).join(' / '));
 for (const course of COURSES) {
-  const widths = course.holes.filter((h) => h.par !== 3).map((h) => h.fairwayWidth * 2).sort((a, b) => a - b);
+  // Fairways vary along a hole now, so quote the narrowest pinch and the widest
+  // landing area rather than one number per hole.
+  const widths = course.holes
+    .filter((h) => h.par !== 3)
+    .flatMap((h) => (h.widths?.length ? h.widths.map((w) => w.half * 2) : [h.fairwayWidth * 2]))
+    .sort((a, b) => a - b);
   const greens = course.holes.map((h) => h.greenSize * 2).sort((a, b) => a - b);
   console.log(`${course.name}: par ${course.par}, ${course.yards} yd, fairways ${widths[0]}–${widths[widths.length - 1]} yd, greens ${greens[0]}–${greens[greens.length - 1]} yd`);
 }

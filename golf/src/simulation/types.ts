@@ -350,6 +350,54 @@ export interface WasteSpec {
   width: number;
 }
 
+/**
+ * One turn in the line of play. `shift` is how many yards the corridor moves
+ * sideways (positive right), spread over a stretch of the hole centred on `at`
+ * as a fraction of its length. `turn` is how abruptly: 0.06 is an elbow you have
+ * to lay up short of, 0.30 a long bow you can follow with a driver. A list of
+ * these makes doglegs, S-curves and holes that bend twice out of one mechanism.
+ */
+export interface BendSpec {
+  at: number;
+  shift: number;
+  turn?: number;
+}
+
+/** A stand of trees, placed where it changes the shot rather than as scenery. */
+export interface GroveSpec {
+  /** Yards along the centreline the stand covers. */
+  from: number;
+  to: number;
+  /** -1 left of the line of play, 1 right, 0 straddling the centreline. */
+  side: -1 | 0 | 1;
+  /**
+   * Yards from the edge of the fairway to the first trunks — or from the
+   * centreline itself when `side` is 0, which is how a stand gets in front of a
+   * dogleg corner you would otherwise cut.
+   */
+  offset: number;
+  /** How far back the stand runs, in yards. */
+  depth: number;
+  /** 0..1. Above about 0.7 there is no gap to punch through. */
+  density?: number;
+  /** Canopy radius range in yards: big timber, scrub, gorse or cactus. */
+  canopy?: [number, number];
+}
+
+/**
+ * A ridge, hollow, plateau or mound laid over the tee-to-green slope. `rise` is
+ * feet (negative digs a hollow), `length` how many yards of the hole it covers,
+ * and `width` how far across the corridor it reaches — leave it out for a
+ * landform that spans the whole hole, set it for a single mound.
+ */
+export interface LandformSpec {
+  at: number;
+  rise: number;
+  length: number;
+  lateral?: number;
+  width?: number;
+}
+
 export interface HoleSpec {
   number: number;
   name: string;
@@ -378,6 +426,20 @@ export interface HoleSpec {
   waste?: WasteSpec[];
   /** Density of trees along the corridor, 0..1. */
   trees: number;
+  /**
+   * The shape of the hole. When present this defines the line of play entirely
+   * and `dogleg`/`doglegAt` only mark where the landing area is; when absent the
+   * hole is a single bend of `dogleg` yards around `doglegAt`.
+   */
+  bends?: BendSpec[];
+  /** Fairway half-width in yards at fractions along the hole: pinches and widenings. */
+  widths?: { at: number; half: number }[];
+  /** Authored stands of trees, gorse or cactus. */
+  groves?: GroveSpec[];
+  /** Single trees in play, placed in yards along the centreline and across it. */
+  specimens?: { along: number; lateral: number; radius?: number }[];
+  /** Landforms over the tee-to-green slope. */
+  landforms?: LandformSpec[];
   /** Strategic note shown to the player on the tee. */
   strategy: string;
 }

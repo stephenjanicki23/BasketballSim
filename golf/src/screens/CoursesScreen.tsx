@@ -6,6 +6,26 @@ import { COURSE_STYLES } from '../data/courseStyles';
 import { courseFit, fitVerdict } from '../simulation/courseFit';
 import { Bar, Panel, Stat, pct } from '../components/ui';
 import { useStore } from '../state/store';
+import type { HoleSpec } from '../simulation/types';
+
+/** How the hole is shaped, read off the bends the architect authored. */
+function shapeOf(spec: HoleSpec): string {
+  const bends = spec.bends?.length ? spec.bends : [{ at: spec.doglegAt, shift: spec.dogleg }];
+  const total = bends.reduce((sum, bend) => sum + Math.abs(bend.shift), 0);
+  if (total < 25) return 'Straight';
+  const major = [...bends].sort((a, b) => Math.abs(b.shift) - Math.abs(a.shift))[0];
+  const against = bends.some((bend) => Math.sign(bend.shift) !== Math.sign(major.shift) && Math.abs(bend.shift) > 22);
+  const side = major.shift > 0 ? 'right' : 'left';
+  if (against) return `S-bend, ${side} last`;
+  return `${Math.abs(major.shift) >= 70 ? 'Dogleg' : 'Bends'} ${side}`;
+}
+
+/** Fairways are no longer one width from tee to green, so quote the range. */
+function fairwayWidth(spec: HoleSpec): string {
+  if (spec.par === 3 || !spec.widths?.length) return `${Math.round(spec.fairwayWidth * 2)} yd`;
+  const halves = spec.widths.map((w) => w.half);
+  return `${Math.round(Math.min(...halves) * 2)}–${Math.round(Math.max(...halves) * 2)} yd`;
+}
 
 export function CoursesScreen(): JSX.Element {
   const { universe, revision, startPractice, openProfile } = useStore();
@@ -79,6 +99,7 @@ export function CoursesScreen(): JSX.Element {
                 <th>Yards</th>
                 <th>SI</th>
                 <th>Elev.</th>
+                <th>Shape</th>
                 <th>Fairway</th>
                 <th>Green</th>
                 <th>Hazards</th>
@@ -94,13 +115,16 @@ export function CoursesScreen(): JSX.Element {
                   <td>{spec.yards}</td>
                   <td>{spec.index}</td>
                   <td>{spec.elevation.green >= 0 ? `+${spec.elevation.green}` : spec.elevation.green} ft</td>
-                  <td>{Math.round(spec.fairwayWidth * 2)} yd</td>
+                  <td className="muted">{shapeOf(spec)}</td>
+                  <td>{fairwayWidth(spec)}</td>
                   <td>{Math.round(spec.greenSize * 2)} yd</td>
                   <td className="muted">
                     {spec.bunkers.length} bunker{spec.bunkers.length === 1 ? '' : 's'}
                     {spec.water.length > 0 && `, water`}
                     {spec.waste && spec.waste.length > 0 && `, waste`}
                     {spec.trees > 0.5 && `, trees`}
+                    {(spec.groves?.length ?? 0) > 0 && spec.trees <= 0.5 && (course.style === 'desert' ? ', cactus' : course.style === 'links' ? ', gorse' : ', trees')}
+                    {(spec.landforms?.length ?? 0) > 0 && `, ${course.style === 'links' ? 'dunes' : course.style === 'desert' ? 'rock' : 'contour'}`}
                   </td>
                   <td>
                     <button type="button" className="ghost ghost--small" onClick={() => setHole(spec.number)}>

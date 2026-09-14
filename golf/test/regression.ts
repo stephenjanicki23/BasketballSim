@@ -24,7 +24,7 @@ import {
 } from '../src/simulation/puttingEngine';
 import { playHole } from '../src/simulation/holeEngine';
 import { createRng } from '../src/simulation/rng';
-import { add, dist, scale, vec } from '../src/simulation/geometry';
+import { add, dist, pointAlongPolyline, scale, vec } from '../src/simulation/geometry';
 import { courseFit } from '../src/simulation/courseFit';
 import {
   advanceSeason, createUniverse, currentTournament, seasonComplete, simulateNextRound,
@@ -277,7 +277,10 @@ test('shot outcomes are believable off the tee', () => {
   const hole = holeGeometry(desert, 1);
   const golfer = byName('Marcus Vandehey');
   const ctx = context(golfer, 1, hole.tee, 'tee', true);
-  const plan = planShot(ctx, { club: 'D', shotType: 'full', target: add(hole.tee, scale(vec(0, 1), 290)) });
+  // Down the middle of the hole, which bends: aiming at a point 290 yards due
+  // north of the tee is aiming at the rough on a hole that turns.
+  const target = pointAlongPolyline(hole.centerline, 290).point;
+  const plan = planShot(ctx, { club: 'D', shotType: 'full', target });
   let fairway = 0;
   let total = 0;
   const N = 2000;

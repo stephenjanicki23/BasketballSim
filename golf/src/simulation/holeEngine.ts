@@ -341,7 +341,11 @@ export function playHole(options: PlayHoleOptions): HoleOutcome {
     strokes += result.penalty;
 
     if (onTee && hole.spec.par !== 3) {
-      driveDistance = result.total;
+      // Driving distance means how far they hit a driver, not how far the ball
+      // went. On a dogleg that wants a 3 wood short of the corner, laying up is
+      // a decision about the hole, and tour stats do not count it either — they
+      // measure two chosen holes a week for exactly this reason.
+      if (plan.club.id === 'D') driveDistance = result.total;
       fairwayHit = result.finalLie === 'fairway' || result.finalLie === 'firstCut';
     }
 

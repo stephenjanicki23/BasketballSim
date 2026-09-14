@@ -32,13 +32,12 @@ import {
   polylineLength,
   projectToPolyline,
   scale,
-  smoothPath,
   sub,
   unionBounds,
   vec,
 } from './geometry';
 import { createRng, clamp, lerp, smoothstep } from './rng';
-import type { Course, CourseStyle, CourseStyleId, HoleGeometry, HoleSpec, LieType } from './types';
+import type { BendSpec, Course, CourseStyle, CourseStyleId, HoleGeometry, HoleSpec, LieType } from './types';
 import { COURSE_STYLES } from '../data/courseStyles';
 
 export function styleFor(id: CourseStyleId): CourseStyle {
@@ -49,21 +48,60 @@ export function styleFor(id: CourseStyleId): CourseStyle {
 // Building a hole
 // ---------------------------------------------------------------------------
 
+/**
+ * How far the line of play has moved sideways by fraction `t` of the way down the
+ * hole. Each bend contributes its shift over its own stretch, so bends compose:
+ * two opposite ones make an S, two the same way make a hole that keeps turning,
+ * and one with a small `turn` makes an elbow you cannot see round.
+ */
+function lateralProfile(spec: HoleSpec): (t: number) => number {
+  const bends: BendSpec[] = spec.bends?.length
+    ? spec.bends
+    : [{ at: spec.doglegAt, shift: spec.dogleg, turn: 0.28 }];
+  return (t: number) => {
+    let lateral = 0;
+    for (const bend of bends) {
+      const turn = clamp(bend.turn ?? 0.16, 0.04, 0.5);
+      // The turn has to finish inside the hole, or the fairway arrives at the
+      // green still moving sideways and the green sits off the end of it.
+      const at = clamp(bend.at, turn, 1 - turn * 0.35);
+      lateral += bend.shift * smoothstep(at - turn, at + turn, t);
+    }
+    return lateral;
+  };
+}
+
 function centerlineFor(spec: HoleSpec): Vec2[] {
   const yards = spec.yards;
-  const bendAt = clamp(spec.doglegAt, 0.3, 0.85);
-  const controls: Vec2[] = [
-    vec(0, 0),
-    vec(spec.dogleg * 0.04, yards * bendAt * 0.45),
-    vec(spec.dogleg * 0.42, yards * bendAt),
-    vec(spec.dogleg * 0.92, yards * lerp(bendAt, 1, 0.62)),
-    vec(spec.dogleg, yards),
-  ];
-  const path = smoothPath(controls, 10);
+  const lateral = lateralProfile(spec);
+  const steps = Math.max(40, Math.round(yards / 7));
+  const path: Vec2[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    path.push(vec(lateral(t), yards * t));
+  }
   // The scorecard yardage is measured along the centreline, so normalise.
   const length = polylineLength(path);
   const k = yards / length;
   return path.map((p) => vec(p.x * k, p.y * k));
+}
+
+/** Half-width of the fairway at a fraction along the hole, before the shaping. */
+function widthProfile(spec: HoleSpec, base: number): (t: number) => number {
+  const points = spec.widths;
+  if (!points || points.length === 0) return () => base;
+  const sorted = [...points].sort((a, b) => a.at - b.at);
+  return (t: number) => {
+    if (t <= sorted[0].at) return sorted[0].half;
+    for (let i = 1; i < sorted.length; i++) {
+      if (t <= sorted[i].at) {
+        const span = sorted[i].at - sorted[i - 1].at;
+        const k = span <= 1e-6 ? 1 : (t - sorted[i - 1].at) / span;
+        return lerp(sorted[i - 1].half, sorted[i].half, k);
+      }
+    }
+    return sorted[sorted.length - 1].half;
+  };
 }
 
 function blobFrom(center: Vec2, radius: number, seed: string, stretch: number, axis: number, wobble = 0.16): Blob {
@@ -90,22 +128,50 @@ function stripPolygon(
   offset: number,
   width: number,
   seed: string,
+  /** How much of each end narrows away, so the band is a shape and not a cut. */
+  taper = 0.1,
 ): Vec2[] {
   const rng = createRng(seed);
   const phase = rng.range(0, Math.PI * 2);
   const inner: Vec2[] = [];
   const outer: Vec2[] = [];
   const steps = Math.max(6, Math.round((to - from) / 14));
+  const length = polylineLength(centerline);
   for (let i = 0; i <= steps; i++) {
     const along = lerp(from, to, i / steps);
     const { point, tangent } = pointAlongPolyline(centerline, along);
     const right = perp(tangent);
     const wobble = Math.sin(along * 0.035 + phase) * 6 + Math.sin(along * 0.011 + phase * 2) * 9;
-    const innerOffset = offset + wobble * 0.5;
-    inner.push(add(point, scale(right, side * innerOffset)));
-    outer.push(add(point, scale(right, side * (innerOffset + width + wobble * 0.3))));
+    const t = i / steps;
+    const ease = taper <= 0 ? 1 : smoothstep(0, taper, t) * (1 - smoothstep(1 - taper, 1, t));
+    const innerOffset = offset + wobble * 0.5 + (1 - ease) * 9;
+    const cap = insideLimit(centerline, length, along, side);
+    const a = Math.min(innerOffset, cap);
+    const b = Math.min(innerOffset + (0.3 + 0.7 * ease) * (width + wobble * 0.3), cap);
+    inner.push(add(point, scale(right, side * a)));
+    outer.push(add(point, scale(right, side * b)));
   }
   return [...inner, ...outer.reverse()];
+}
+
+/**
+ * How far a band can be offset toward the inside of a bend before it folds back
+ * through itself. Offset past the centre of the turn and the polygon crosses
+ * over, which looks wrong and — for a water hazard — decides penalties wrongly
+ * too, so anything beyond three-quarters of the turning radius is held back.
+ */
+function insideLimit(centerline: Vec2[], length: number, along: number, side: -1 | 1): number {
+  const step = 10;
+  const before = pointAlongPolyline(centerline, Math.max(0, along - step)).tangent;
+  const after = pointAlongPolyline(centerline, Math.min(length, along + step)).tangent;
+  const cross = before.x * after.y - before.y * after.x;
+  const dot = clamp(before.x * after.x + before.y * after.y, -1, 1);
+  const turn = Math.atan2(cross, dot);
+  if (Math.abs(turn) < 1e-4) return Infinity;
+  // perp() points right of travel, so the inside of a left turn is side -1.
+  const inside = turn > 0 ? -1 : 1;
+  if (side !== inside) return Infinity;
+  return (Math.abs((2 * step) / turn)) * 0.75;
 }
 
 /** Offset outline of the mown corridor, used for rendering the grass bands. */
@@ -147,14 +213,18 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   const fairwayEnd = length - spec.greenSize * 1.35;
   const landingAt = spec.par === 5 ? length * 0.38 : length * clamp(spec.doglegAt, 0.35, 0.8);
   const baseWidth = spec.fairwayWidth * (spec.par === 3 ? 0.72 : 1);
+  const authored = widthProfile(spec, baseWidth);
+  const shaped = spec.widths !== undefined && spec.widths.length > 0;
   const halfWidth = (along: number): number => {
     if (along <= fairwayStart || along >= fairwayEnd + spec.greenSize * 1.1) return 0;
     const open = smoothstep(fairwayStart, fairwayStart + teeRamp, along);
     const close = 1 - smoothstep(fairwayEnd, fairwayEnd + spec.greenSize * 1.05, along);
-    // Widest through the landing zone, pinched where the architect wants you thinking.
-    const landing = 1 + 0.10 * Math.exp(-(((along - landingAt) / 90) ** 2));
+    // Widest through the landing zone, pinched where the architect wants you
+    // thinking — unless the hole says where it is wide and where it is not.
+    const landing = shaped ? 1 : 1 + 0.10 * Math.exp(-(((along - landingAt) / 90) ** 2));
     const texture = 1 + 0.11 * Math.sin(along * 0.042 + widthPhase) + 0.06 * Math.sin(along * 0.017 + widthPhase * 1.7);
-    return baseWidth * open * close * landing * texture;
+    const width = spec.par === 3 ? baseWidth : authored(along / length);
+    return width * open * close * landing * texture;
   };
 
   // --- Green ---------------------------------------------------------------
@@ -185,7 +255,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   // --- Water ---------------------------------------------------------------
   const water = spec.water.map((w, i) => {
     if (w.strip) {
-      const polygon = stripPolygon(centerline, w.strip.from, w.strip.to, w.strip.side, w.strip.offset, w.strip.width, `${course.id}:${spec.number}:strip:${i}`);
+      const polygon = stripPolygon(centerline, w.strip.from, w.strip.to, w.strip.side, w.strip.offset, w.strip.width, `${course.id}:${spec.number}:strip:${i}`, 0.18);
       return { polygon, bounds: boundsOf(polygon) };
     }
     const { point, tangent } = pointAlongPolyline(centerline, Math.min(w.along, length));
@@ -212,7 +282,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
 
   // --- Desert waste --------------------------------------------------------
   const waste = (spec.waste ?? []).map((w, i) => {
-    const polygon = stripPolygon(centerline, w.from, w.to, w.side, w.offset, w.width, `${course.id}:${spec.number}:waste:${i}`);
+    const polygon = stripPolygon(centerline, w.from, w.to, w.side, w.offset, w.width, `${course.id}:${spec.number}:waste:${i}`, 0.26);
     return { polygon, bounds: boundsOf(polygon) };
   });
 
@@ -222,6 +292,23 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   const tilt = rng.range(-0.085, 0.085) * (style.id === 'desert' ? 2.1 : style.id === 'parkland' ? 1.3 : 0.9);
   const noisePhase = rng.range(0, Math.PI * 2);
   const bendAt = clamp(spec.doglegAt, 0.3, 0.85);
+  // Authored landforms: a ridge you play blind over, a hollow the ball gathers
+  // into, a plateau that leaves a hanging lie. These sit on top of the
+  // tee-to-green slope rather than replacing it.
+  const landforms = spec.landforms ?? [];
+  const landformAt = (along: number, lateral: number): number => {
+    let delta = 0;
+    for (const form of landforms) {
+      const half = Math.max(12, form.length / 2);
+      const x = (along - form.at * length) / half;
+      if (x <= -1.8 || x >= 1.8) continue;
+      const across = form.width === undefined
+        ? 1
+        : Math.exp(-(((lateral - (form.lateral ?? 0)) / Math.max(6, form.width)) ** 2));
+      delta += form.rise * Math.exp(-x * x * 1.7) * across;
+    }
+    return delta;
+  };
   const elevationAt = (p: Vec2): number => {
     const proj = projectToPolyline(centerline, p);
     const t = clamp(proj.along / length, 0, 1);
@@ -231,37 +318,77 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     const lateral = proj.lateral * tilt;
     const roll = Math.sin(proj.along * 0.021 + noisePhase) * (style.id === 'links' ? 3.4 : 2.2)
       + Math.sin(proj.along * 0.0075 + noisePhase * 2.3) * 4.2 * (style.id === 'desert' ? 1.6 : 1);
-    return base + lateral + roll;
+    return base + lateral + roll + landformAt(proj.along, proj.lateral);
   };
 
   // --- Trees ---------------------------------------------------------------
+  // Three kinds, and they do different jobs. The authored ones come first
+  // because they are architecture: a stand across the inside of a dogleg is the
+  // reason the dogleg is a dogleg, and a single oak forty yards short of a green
+  // decides which side of the fairway you want to be on. The procedural ones
+  // fill the corridor behind them so the hole reads as a hole.
   const trees: HoleGeometry['trees'] = [];
+  const atLeast = (position: Vec2, gap: number): boolean =>
+    trees.every((t) => dist(t.position, position) > gap);
+
+  const plant = (along: number, offset: number, radius: number, shade: number) => {
+    const { point, tangent } = pointAlongPolyline(centerline, clamp(along, 0, length));
+    const position = add(point, scale(perp(tangent), offset));
+    if (atLeast(position, radius * 0.75)) trees.push({ position, radius, shade });
+  };
+
+  // How far out the corridor reaches at a point on the hole. The fairway tapers
+  // to nothing at the green, so a stand measured from the fairway edge alone
+  // would close in around the putting surface and leave no way to approach it.
+  const corridorEdge = (along: number): number => {
+    const toGreen = Math.max(0, length - along);
+    const nearGreen = toGreen < spec.greenSize * 3 ? spec.greenSize + 12 : 0;
+    return Math.max(halfWidth(along), nearGreen, 12);
+  };
+
+  (spec.groves ?? []).forEach((grove, index) => {
+    const g = createRng(`${course.id}:${spec.number}:grove:${index}`);
+    const density = clamp(grove.density ?? 0.6, 0.1, 1);
+    const spacing = lerp(17, 6.5, density);
+    const [minCanopy, maxCanopy] = grove.canopy ?? (style.id === 'parkland' ? [5, 11] : [3, 6]);
+    for (let along = grove.from; along <= grove.to; along += spacing * g.range(0.6, 1.4)) {
+      const edgeOfFairway = grove.side === 0 ? 0 : corridorEdge(clamp(along, 0, length));
+      for (let depth = 0; depth <= grove.depth; depth += spacing * g.range(0.7, 1.45)) {
+        const jitter = g.range(-spacing * 0.45, spacing * 0.45);
+        const from = grove.side === 0
+          ? grove.offset - grove.depth / 2 + depth
+          : grove.side * (edgeOfFairway + grove.offset + depth);
+        plant(along + g.range(-spacing * 0.4, spacing * 0.4), from + jitter, g.range(minCanopy, maxCanopy), g.range(0, 1));
+      }
+    }
+  });
+
+  for (const tree of spec.specimens ?? []) {
+    plant(tree.along, tree.lateral, tree.radius ?? (style.id === 'parkland' ? 9 : 5), rng.range(0.4, 1));
+  }
+
   if (spec.trees > 0.02) {
     const bands = style.bands;
     const edge = bands.firstCut + bands.lightRough + bands.heavyRough + bands.deepRough;
     const spacing = lerp(34, 11, spec.trees);
+    // Stands, not a hedge: the corridor opens up every so often, which is what
+    // gives a tree-lined hole its windows and its blind spots.
+    const gapPhase = rng.range(0, Math.PI * 2);
     for (let along = 12; along < length + 40; along += spacing * rng.range(0.65, 1.35)) {
+      const thinning = 0.5 + 0.5 * Math.sin(along * 0.014 + gapPhase);
       for (const side of [-1, 1] as const) {
-        if (!rng.chance(0.55 + spec.trees * 0.4)) continue;
-        const { point, tangent } = pointAlongPolyline(centerline, Math.min(along, length));
-        const r = perp(tangent);
+        if (!rng.chance((0.45 + spec.trees * 0.5) * (0.45 + thinning * 0.75))) continue;
         const depth = rng.range(2, 46);
         const w = halfWidth(Math.min(along, length));
         const canopy = style.id === 'desert' ? rng.range(2.2, 4.4) : rng.range(4.5, 10);
-        const position = add(point, scale(r, side * (Math.max(w, 12) + edge * 0.55 + depth)));
-        trees.push({ position, radius: canopy, shade: rng.range(0, 1) });
+        plant(along, side * (Math.max(w, 12) + edge * 0.55 + depth), canopy, rng.range(0, 1));
       }
     }
-    // A handful of specimen trees close enough to matter.
     const specimens = Math.round(spec.trees * 7);
     for (let i = 0; i < specimens; i++) {
       const along = rng.range(length * 0.22, length * 0.95);
       const side = rng.chance(0.5) ? -1 : 1;
-      const { point, tangent } = pointAlongPolyline(centerline, along);
-      const r = perp(tangent);
-      const w = halfWidth(along);
-      const position = add(point, scale(r, side * (w + rng.range(3, 13))));
-      trees.push({ position, radius: rng.range(5, 11), shade: rng.range(0, 1) });
+      plant(along, side * (halfWidth(along) + rng.range(3, 13)), rng.range(5, 11), rng.range(0, 1));
     }
   }
 
@@ -328,6 +455,49 @@ export interface TerrainInfo {
 
 const FRINGE_WIDTH = 3.6;
 
+/**
+ * Tree lookups by cell, because a wooded hole carries a few hundred of them and
+ * every terrain query would otherwise walk the lot. Each trunk is registered in
+ * every cell its canopy touches, so one cell lookup is the whole answer.
+ */
+const TREE_CELL = 24;
+const treeIndexCache = new WeakMap<HoleGeometry, Map<number, number[]>>();
+
+function treeIndexFor(hole: HoleGeometry): Map<number, number[]> {
+  const cached = treeIndexCache.get(hole);
+  if (cached) return cached;
+  const index = new Map<number, number[]>();
+  hole.trees.forEach((tree, i) => {
+    const r = tree.radius;
+    const x0 = Math.floor((tree.position.x - r) / TREE_CELL);
+    const x1 = Math.floor((tree.position.x + r) / TREE_CELL);
+    const y0 = Math.floor((tree.position.y - r) / TREE_CELL);
+    const y1 = Math.floor((tree.position.y + r) / TREE_CELL);
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        const key = x * 100003 + y;
+        const list = index.get(key);
+        if (list) list.push(i);
+        else index.set(key, [i]);
+      }
+    }
+  });
+  treeIndexCache.set(hole, index);
+  return index;
+}
+
+/** The tree the ball is under, if it is under one. */
+function treeAt(hole: HoleGeometry, p: Vec2): boolean {
+  const key = Math.floor(p.x / TREE_CELL) * 100003 + Math.floor(p.y / TREE_CELL);
+  const list = treeIndexFor(hole).get(key);
+  if (!list) return false;
+  for (const i of list) {
+    const tree = hole.trees[i];
+    if (dist(tree.position, p) <= tree.radius * 0.95) return true;
+  }
+  return false;
+}
+
 export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boolean }): TerrainInfo {
   const proj = projectToPolyline(hole.centerline, p);
   const halfWidth = hole.fairwayHalfWidth(proj.along);
@@ -385,11 +555,9 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
     }
   }
 
-  for (const tree of hole.trees) {
-    if (dist(tree.position, p) <= tree.radius * 0.95) {
-      info.lie = 'recovery';
-      return info;
-    }
+  if (treeAt(hole, p)) {
+    info.lie = 'recovery';
+    return info;
   }
 
   const bands = hole.style.bands;

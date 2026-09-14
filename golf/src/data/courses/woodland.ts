@@ -13,6 +13,15 @@ const holes: HoleSpec[] = [
   {
     number: 1, name: 'Pine Gate', par: 4, yards: 415, bearing: 75, index: 10,
     dogleg: 18, doglegAt: 0.58, fairwayWidth: 15,
+    bends: [{ at: 0.3, shift: -27, turn: 0.16 }, { at: 0.62, shift: 78, turn: 0.13 }],
+    widths: [{ at: 0.08, half: 18 }, { at: 0.4, half: 18 }, { at: 0.64, half: 13 }, { at: 0.85, half: 17 }, { at: 1, half: 16 }],
+    groves: [
+      { from: 60, to: 400, side: -1, offset: 26, depth: 18, density: 0.37 },
+      { from: 60, to: 190, side: 1, offset: 27, depth: 16, density: 0.34 },
+      { from: 215, to: 300, side: 1, offset: 7, depth: 22, density: 0.69, canopy: [7, 12] },
+    ],
+    specimens: [{ along: 372, lateral: 26, radius: 10 }],
+    landforms: [{ at: 0.52, rise: 5.2, length: 120 }],
     elevation: { landing: -8, green: 6 }, greenSize: 13, pin: { x: 3, y: 4 },
     greenSlope: { x: -1.8, y: -1.6 }, trees: 0.72,
     bunkers: [
@@ -20,11 +29,20 @@ const holes: HoleSpec[] = [
       { along: 404, lateral: -15, size: 6, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'A corridor 30 yards wide between the pines. Position off the tee is the entire hole — a drive in the trees means wedging out sideways.',
+    strategy: 'A corridor between the pines that squeezes to twenty-six yards exactly where the drive lands. Position off the tee is the entire hole — a drive in the trees means wedging out sideways.',
   },
   {
     number: 2, name: 'Deer Run', par: 4, yards: 440, bearing: 340, index: 4,
     dogleg: -26, doglegAt: 0.52, fairwayWidth: 14,
+    bends: [{ at: 0.46, shift: -90, turn: 0.15 }],
+    widths: [{ at: 0.08, half: 17 }, { at: 0.6, half: 17 }, { at: 0.85, half: 13 }, { at: 1, half: 14 }],
+    groves: [
+      { from: 155, to: 285, side: -1, offset: 6, depth: 23, density: 0.73, canopy: [7, 12] },
+      { from: 40, to: 430, side: 1, offset: 27, depth: 18, density: 0.37 },
+      { from: 300, to: 430, side: -1, offset: 28, depth: 15, density: 0.37 },
+    ],
+    specimens: [{ along: 300, lateral: -26, radius: 11 }],
+    landforms: [{ at: 0.5, rise: 7.5, length: 150 }],
     elevation: { landing: 12, green: 20 }, greenSize: 12, pin: { x: -3, y: -4 },
     greenSlope: { x: 1.6, y: -2.0 }, trees: 0.78,
     bunkers: [
@@ -39,6 +57,11 @@ const holes: HoleSpec[] = [
   {
     number: 3, name: 'Chapel', par: 3, yards: 178, bearing: 250, index: 15,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 11,
+    groves: [
+      { from: 20, to: 178, side: -1, offset: 24, depth: 18, density: 0.45 },
+      { from: 20, to: 178, side: 1, offset: 24, depth: 18, density: 0.45 },
+    ],
+    landforms: [{ at: 0.75, rise: -7.5, length: 90 }],
     elevation: { landing: 0, green: -18 }, greenSize: 12, pin: { x: 4, y: 3 },
     greenSlope: { x: -2.2, y: 1.4 }, trees: 0.6,
     bunkers: [
@@ -51,6 +74,15 @@ const holes: HoleSpec[] = [
   {
     number: 4, name: 'Millstream', par: 5, yards: 535, bearing: 20, index: 13,
     dogleg: 22, doglegAt: 0.44, fairwayWidth: 16,
+    bends: [{ at: 0.36, shift: 60, turn: 0.14 }, { at: 0.72, shift: -42, turn: 0.12 }],
+    widths: [{ at: 0.08, half: 19 }, { at: 0.5, half: 19 }, { at: 0.78, half: 13.5 }, { at: 1, half: 16 }],
+    groves: [
+      { from: 80, to: 300, side: -1, offset: 27, depth: 19, density: 0.37 },
+      { from: 120, to: 330, side: 1, offset: 26, depth: 18, density: 0.37 },
+      { from: 370, to: 470, side: 1, offset: 9, depth: 19, density: 0.62 },
+    ],
+    specimens: [{ along: 455, lateral: -26, radius: 9 }, { along: 300, lateral: 24, radius: 8 }],
+    landforms: [{ at: 0.62, rise: -6, length: 120 }],
     elevation: { landing: -6, green: -14 }, greenSize: 14, pin: { x: -4, y: 5 },
     greenSlope: { x: 1.4, y: -1.8 }, trees: 0.66,
     bunkers: [
@@ -64,6 +96,15 @@ const holes: HoleSpec[] = [
   {
     number: 5, name: 'Hollow', par: 4, yards: 396, bearing: 130, index: 16,
     dogleg: -14, doglegAt: 0.6, fairwayWidth: 15,
+    bends: [{ at: 0.3, shift: 24, turn: 0.2 }, { at: 0.66, shift: -66, turn: 0.13 }],
+    widths: [{ at: 0.08, half: 18 }, { at: 0.45, half: 17 }, { at: 0.67, half: 12.5 }, { at: 0.9, half: 17 }, { at: 1, half: 16 }],
+    groves: [
+      { from: 60, to: 380, side: 1, offset: 26, depth: 18, density: 0.38 },
+      { from: 60, to: 200, side: -1, offset: 28, depth: 15, density: 0.31 },
+      { from: 235, to: 330, side: -1, offset: 8, depth: 22, density: 0.67 },
+    ],
+    specimens: [{ along: 352, lateral: 26, radius: 10 }],
+    landforms: [{ at: 0.45, rise: -10.5, length: 150 }, { at: 0.85, rise: 4.5, length: 90 }],
     elevation: { landing: -16, green: -6 }, greenSize: 13, pin: { x: 3, y: -3 },
     greenSlope: { x: -1.4, y: 1.8 }, trees: 0.7,
     bunkers: [
@@ -76,6 +117,15 @@ const holes: HoleSpec[] = [
   {
     number: 6, name: 'Long Timber', par: 4, yards: 452, bearing: 295, index: 2,
     dogleg: 20, doglegAt: 0.5, fairwayWidth: 13,
+    bends: [{ at: 0.44, shift: 72, turn: 0.13 }, { at: 0.8, shift: -24, turn: 0.14 }],
+    widths: [{ at: 0.08, half: 16 }, { at: 0.59, half: 16.5 }, { at: 0.85, half: 13 }, { at: 1, half: 14 }],
+    groves: [
+      { from: 155, to: 275, side: 1, offset: 6, depth: 25, density: 0.73, canopy: [8, 13] },
+      { from: 40, to: 440, side: -1, offset: 26, depth: 19, density: 0.4 },
+      { from: 300, to: 450, side: 1, offset: 27, depth: 16, density: 0.37 },
+    ],
+    specimens: [{ along: 410, lateral: -26, radius: 11 }],
+    landforms: [{ at: 0.55, rise: 9, length: 160 }],
     elevation: { landing: 10, green: 22 }, greenSize: 12, pin: { x: -4, y: 4 },
     greenSlope: { x: 1.8, y: -2.2 }, trees: 0.82,
     bunkers: [
@@ -89,6 +139,11 @@ const holes: HoleSpec[] = [
   {
     number: 7, name: 'Lookout', par: 3, yards: 205, bearing: 200, index: 7,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 12,
+    groves: [
+      { from: 20, to: 200, side: -1, offset: 25, depth: 16, density: 0.37 },
+      { from: 20, to: 205, side: 1, offset: 26, depth: 15, density: 0.34 },
+    ],
+    landforms: [{ at: 0.55, rise: 6.8, length: 100, lateral: -26, width: 22 }],
     elevation: { landing: 0, green: 16 }, greenSize: 13, pin: { x: 0, y: -5 },
     greenSlope: { x: -1.2, y: -2.4 }, trees: 0.55,
     bunkers: [
@@ -102,6 +157,14 @@ const holes: HoleSpec[] = [
   {
     number: 8, name: 'Fox Bend', par: 4, yards: 432, bearing: 45, index: 8,
     dogleg: -30, doglegAt: 0.48, fairwayWidth: 14,
+    bends: [{ at: 0.42, shift: -102, turn: 0.15 }],
+    widths: [{ at: 0.08, half: 17 }, { at: 0.61, half: 17 }, { at: 0.88, half: 14 }, { at: 1, half: 15 }],
+    groves: [
+      { from: 145, to: 265, side: -1, offset: 5, depth: 27, density: 0.76, canopy: [8, 13] },
+      { from: 60, to: 420, side: 1, offset: 26, depth: 18, density: 0.38 },
+      { from: 290, to: 430, side: -1, offset: 27, depth: 15, density: 0.37 },
+    ],
+    specimens: [{ along: 250, lateral: -26, radius: 10 }],
     elevation: { landing: 6, green: -8 }, greenSize: 13, pin: { x: 4, y: 4 },
     greenSlope: { x: -1.6, y: 1.2 }, trees: 0.75,
     bunkers: [
@@ -115,6 +178,15 @@ const holes: HoleSpec[] = [
   {
     number: 9, name: 'Cathedral', par: 5, yards: 548, bearing: 160, index: 11,
     dogleg: 26, doglegAt: 0.42, fairwayWidth: 16,
+    bends: [{ at: 0.32, shift: 54, turn: 0.15 }, { at: 0.68, shift: 36, turn: 0.14 }],
+    widths: [{ at: 0.08, half: 19 }, { at: 0.48, half: 19 }, { at: 0.78, half: 13 }, { at: 1, half: 16 }],
+    groves: [
+      { from: 80, to: 320, side: -1, offset: 26, depth: 19, density: 0.4 },
+      { from: 120, to: 300, side: 1, offset: 25, depth: 18, density: 0.42 },
+      { from: 380, to: 520, side: -1, offset: 24, depth: 15, density: 0.38 },
+    ],
+    specimens: [{ along: 470, lateral: 26, radius: 10 }, { along: 330, lateral: -20, radius: 9 }],
+    landforms: [{ at: 0.5, rise: -5.2, length: 140 }],
     elevation: { landing: 14, green: 26 }, greenSize: 14, pin: { x: 5, y: 5 },
     greenSlope: { x: -1.4, y: -2.0 }, trees: 0.68,
     bunkers: [
@@ -129,6 +201,15 @@ const holes: HoleSpec[] = [
   {
     number: 10, name: 'Ridge Line', par: 4, yards: 462, bearing: 280, index: 3,
     dogleg: 16, doglegAt: 0.55, fairwayWidth: 14,
+    bends: [{ at: 0.36, shift: -36, turn: 0.16 }, { at: 0.68, shift: 78, turn: 0.13 }],
+    widths: [{ at: 0.08, half: 17 }, { at: 0.4, half: 17 }, { at: 0.57, half: 12.5 }, { at: 0.85, half: 16 }, { at: 1, half: 15 }],
+    groves: [
+      { from: 60, to: 450, side: 1, offset: 26, depth: 19, density: 0.41 },
+      { from: 60, to: 240, side: -1, offset: 27, depth: 16, density: 0.37 },
+      { from: 285, to: 375, side: -1, offset: 8, depth: 20, density: 0.65 },
+    ],
+    specimens: [{ along: 420, lateral: 26, radius: 11 }],
+    landforms: [{ at: 0.45, rise: 10.5, length: 140 }, { at: 0.9, rise: -4.5, length: 80 }],
     elevation: { landing: -14, green: -26 }, greenSize: 13, pin: { x: -4, y: -4 },
     greenSlope: { x: 2.0, y: 1.6 }, trees: 0.8,
     bunkers: [
@@ -141,6 +222,11 @@ const holes: HoleSpec[] = [
   {
     number: 11, name: 'Mill Pond', par: 3, yards: 165, bearing: 350, index: 17,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 11,
+    groves: [
+      { from: 20, to: 160, side: -1, offset: 25, depth: 15, density: 0.34 },
+      { from: 20, to: 165, side: 1, offset: 24, depth: 16, density: 0.37 },
+    ],
+    landforms: [{ at: 0.6, rise: -4.5, length: 80 }],
     elevation: { landing: 0, green: -10 }, greenSize: 12, pin: { x: -3, y: 3 },
     greenSlope: { x: 1.8, y: -1.2 }, trees: 0.5,
     bunkers: [{ along: 158, lateral: 14, size: 5, kind: 'greenside' }],
@@ -150,6 +236,14 @@ const holes: HoleSpec[] = [
   {
     number: 12, name: "Keeper's Cottage", par: 4, yards: 384, bearing: 110, index: 14,
     dogleg: -20, doglegAt: 0.6, fairwayWidth: 13,
+    bends: [{ at: 0.3, shift: 30, turn: 0.18 }, { at: 0.66, shift: -84, turn: 0.13 }],
+    widths: [{ at: 0.08, half: 16 }, { at: 0.69, half: 16.5 }, { at: 0.92, half: 13 }, { at: 1, half: 14 }],
+    groves: [
+      { from: 40, to: 370, side: 1, offset: 25, depth: 19, density: 0.43 },
+      { from: 40, to: 200, side: -1, offset: 26, depth: 16, density: 0.38 },
+      { from: 225, to: 325, side: -1, offset: 6, depth: 23, density: 0.73, canopy: [8, 12] },
+    ],
+    specimens: [{ along: 330, lateral: 26, radius: 9 }, { along: 355, lateral: -15, radius: 10 }],
     elevation: { landing: 4, green: 12 }, greenSize: 11, pin: { x: 3, y: -3 },
     greenSlope: { x: -2.0, y: -1.4 }, trees: 0.85,
     bunkers: [
@@ -163,6 +257,15 @@ const holes: HoleSpec[] = [
   {
     number: 13, name: 'Azalea', par: 5, yards: 512, bearing: 225, index: 18,
     dogleg: -32, doglegAt: 0.46, fairwayWidth: 16,
+    bends: [{ at: 0.38, shift: -78, turn: 0.13 }, { at: 0.74, shift: -30, turn: 0.13 }],
+    widths: [{ at: 0.08, half: 19 }, { at: 0.52, half: 19 }, { at: 0.82, half: 13 }, { at: 1, half: 16 }],
+    groves: [
+      { from: 100, to: 300, side: -1, offset: 25, depth: 18, density: 0.37 },
+      { from: 60, to: 420, side: 1, offset: 27, depth: 16, density: 0.37 },
+      { from: 385, to: 500, side: 1, offset: 9, depth: 17, density: 0.58 },
+    ],
+    specimens: [{ along: 440, lateral: -26, radius: 10 }],
+    landforms: [{ at: 0.55, rise: -6.8, length: 130 }],
     elevation: { landing: -10, green: -4 }, greenSize: 14, pin: { x: 4, y: 4 },
     greenSlope: { x: -1.6, y: 1.8 }, trees: 0.62,
     bunkers: [
@@ -175,6 +278,15 @@ const holes: HoleSpec[] = [
   {
     number: 14, name: 'Sawmill', par: 4, yards: 441, bearing: 30, index: 6,
     dogleg: 24, doglegAt: 0.52, fairwayWidth: 14,
+    bends: [{ at: 0.44, shift: 84, turn: 0.13 }, { at: 0.82, shift: -24, turn: 0.13 }],
+    widths: [{ at: 0.08, half: 17 }, { at: 0.4, half: 16.5 }, { at: 0.6, half: 12 }, { at: 0.86, half: 16 }, { at: 1, half: 15 }],
+    groves: [
+      { from: 155, to: 275, side: 1, offset: 7, depth: 23, density: 0.71 },
+      { from: 50, to: 430, side: -1, offset: 26, depth: 19, density: 0.4 },
+      { from: 310, to: 435, side: 1, offset: 27, depth: 15, density: 0.37 },
+    ],
+    specimens: [{ along: 400, lateral: -26, radius: 10 }],
+    landforms: [{ at: 0.5, rise: 6, length: 130 }],
     elevation: { landing: 8, green: -6 }, greenSize: 12, pin: { x: -4, y: 5 },
     greenSlope: { x: 1.4, y: -1.6 }, trees: 0.76,
     bunkers: [
@@ -188,6 +300,15 @@ const holes: HoleSpec[] = [
   {
     number: 15, name: 'Quarry Wood', par: 4, yards: 425, bearing: 300, index: 9,
     dogleg: -18, doglegAt: 0.58, fairwayWidth: 15,
+    bends: [{ at: 0.34, shift: 24, turn: 0.17 }, { at: 0.64, shift: -72, turn: 0.13 }],
+    widths: [{ at: 0.08, half: 18 }, { at: 0.62, half: 18 }, { at: 0.9, half: 14 }, { at: 1, half: 16 }],
+    groves: [
+      { from: 60, to: 410, side: 1, offset: 26, depth: 18, density: 0.4 },
+      { from: 235, to: 335, side: -1, offset: 8, depth: 22, density: 0.67 },
+      { from: 60, to: 210, side: -1, offset: 28, depth: 15, density: 0.34 },
+    ],
+    specimens: [{ along: 380, lateral: 26, radius: 10 }],
+    landforms: [{ at: 0.7, rise: -7.5, length: 110 }],
     elevation: { landing: -6, green: 10 }, greenSize: 13, pin: { x: 4, y: -4 },
     greenSlope: { x: -1.8, y: -1.8 }, trees: 0.7,
     bunkers: [
@@ -200,6 +321,11 @@ const holes: HoleSpec[] = [
   {
     number: 16, name: 'Stone Bridge', par: 3, yards: 192, bearing: 185, index: 12,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 12,
+    groves: [
+      { from: 20, to: 190, side: -1, offset: 24, depth: 16, density: 0.36 },
+      { from: 20, to: 192, side: 1, offset: 24, depth: 16, density: 0.36 },
+    ],
+    landforms: [{ at: 0.45, rise: -6, length: 70 }],
     elevation: { landing: 0, green: -14 }, greenSize: 13, pin: { x: -4, y: -3 },
     greenSlope: { x: 2.0, y: 1.6 }, trees: 0.58,
     bunkers: [
@@ -212,6 +338,15 @@ const holes: HoleSpec[] = [
   {
     number: 17, name: 'Long Walk', par: 4, yards: 455, bearing: 60, index: 5,
     dogleg: 20, doglegAt: 0.5, fairwayWidth: 13,
+    bends: [{ at: 0.3, shift: -30, turn: 0.16 }, { at: 0.62, shift: 84, turn: 0.13 }, { at: 0.88, shift: -18, turn: 0.1 }],
+    widths: [{ at: 0.08, half: 16 }, { at: 0.4, half: 16 }, { at: 0.58, half: 11.5 }, { at: 0.84, half: 15 }, { at: 1, half: 14 }],
+    groves: [
+      { from: 205, to: 315, side: 1, offset: 7, depth: 23, density: 0.71, canopy: [8, 12] },
+      { from: 50, to: 440, side: -1, offset: 25, depth: 19, density: 0.42 },
+      { from: 330, to: 450, side: 1, offset: 26, depth: 15, density: 0.37 },
+    ],
+    specimens: [{ along: 415, lateral: -26, radius: 11 }],
+    landforms: [{ at: 0.5, rise: 7.5, length: 150 }],
     elevation: { landing: 12, green: 24 }, greenSize: 12, pin: { x: 3, y: 5 },
     greenSlope: { x: -1.6, y: -2.2 }, trees: 0.8,
     bunkers: [
@@ -225,6 +360,15 @@ const holes: HoleSpec[] = [
   {
     number: 18, name: 'Grandstand', par: 5, yards: 538, bearing: 150, index: 1,
     dogleg: 28, doglegAt: 0.44, fairwayWidth: 14,
+    bends: [{ at: 0.34, shift: 66, turn: 0.13 }, { at: 0.7, shift: 30, turn: 0.14 }],
+    widths: [{ at: 0.08, half: 17 }, { at: 0.49, half: 17.5 }, { at: 0.79, half: 12 }, { at: 1, half: 15 }],
+    groves: [
+      { from: 125, to: 295, side: 1, offset: 7, depth: 22, density: 0.69 },
+      { from: 60, to: 460, side: -1, offset: 26, depth: 19, density: 0.41 },
+      { from: 380, to: 520, side: 1, offset: 25, depth: 15, density: 0.38 },
+    ],
+    specimens: [{ along: 470, lateral: -26, radius: 10 }],
+    landforms: [{ at: 0.6, rise: -6, length: 140 }, { at: 0.92, rise: 5.2, length: 80 }],
     elevation: { landing: -8, green: 14 }, greenSize: 14, pin: { x: -5, y: 4 },
     greenSlope: { x: 1.8, y: -2.0 }, trees: 0.72,
     bunkers: [
