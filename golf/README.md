@@ -484,6 +484,9 @@ model was actually missing — stayed raised.
 - `npm run calibrate` — the reports: club distances and dispersion by player,
   scoring by course and by par, scrambling by lie and distance, a full season
   with standings, statistical leaders and the news wire.
+- `node tools/tsrun.mjs test/venueCheck.ts` — a full tournament at every venue:
+  156 players, four rounds, a cut, the weather each course generates. What wins,
+  what makes the cut, which holes do the damage.
 - the harnesses behind the tables above: `test/smashCheck.ts` (strike quality and
   the shape of a bag of drives), `test/puttCheck.ts` (make curves, lag against
   attack, who takes it on), `test/spread.ts` (round-to-round variance against
