@@ -205,17 +205,17 @@ export const SHOT_TYPES: Record<ShotTypeId, ShotTypeProfile> = {
 
 export const TUNING = {
   /** Driver carry in yards for a golfer with 50 distance and 50 ball speed. */
-  driverCarryBase: 256,
-  driverCarryPerDistance: 0.66,
-  driverCarryPerSpeed: 0.28,
+  driverCarryBase: 258,
+  driverCarryPerDistance: 0.52,
+  driverCarryPerSpeed: 0.22,
 
   /** Dispersion falls off this fast with skill above 50, and grows this fast below it. */
   sigmaDecayAbove: 0.0075,
   sigmaGrowthBelow: 0.0098,
 
   /** Fraction of shots drawn from the fat tail, at consistency 50. */
-  tailBase: 0.055,
-  tailPerConsistency: 0.075,
+  tailBase: 0.075,
+  tailPerConsistency: 0.055,
   tailScale: 2.4,
 
   /** Pressure: sigma grows by up to this fraction for a golfer with no composure. */

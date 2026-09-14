@@ -15,7 +15,7 @@ import { ARCHETYPES, blankRatings, currentAbility, emptyCareer, emptySeason } fr
 import { clamp, createRng } from '../simulation/rng';
 import type { ArchetypeId, Golfer, RatingKey, Ratings } from '../simulation/types';
 
-interface GolferSeed {
+export interface GolferSeed {
   id: string;
   name: string;
   country: string;
@@ -551,6 +551,29 @@ const SEEDS: GolferSeed[] = [
 // Building
 // ---------------------------------------------------------------------------
 
+/**
+ * Seeds are authored on an intuitive 1–100 scale — 88 reads as "one of the five
+ * best players alive", 57 as "hanging on to his card". A professional tour is
+ * not that widely spread, though: the gap between the best scoring average on
+ * tour and the worst is about four strokes a round, not ten. So the authored
+ * level is compressed into the band a tour field actually occupies, and the
+ * *variation between a player's own skills* is widened to compensate.
+ *
+ * That second half matters more than the first. If every one of a golfer's
+ * thirty ratings sits within a few points of one number, then the best player is
+ * simultaneously the longest, straightest, best iron player and best putter in
+ * the field, and he wins eleven events out of twenty. Real players are lopsided:
+ * everybody out here is elite at something and ordinary at something else, and
+ * that is why twenty tournaments produce fifteen different winners.
+ */
+const LEVEL_CENTRE = 76;
+const LEVEL_COMPRESSION = 0.16;
+const SKILL_VARIATION = 9.5;
+
+function compressLevel(level: number, compression = LEVEL_COMPRESSION): number {
+  return LEVEL_CENTRE + (level - 72) * compression;
+}
+
 /** Which ratings decline with age, and which keep improving. */
 const PHYSICAL: RatingKey[] = ['driverDistance', 'ballSpeed', 'stamina', 'fatigueResistance', 'launch'];
 const MENTAL: RatingKey[] = ['composure', 'courseManagement', 'decisionMaking', 'consistency'];
@@ -571,12 +594,13 @@ function ageAdjust(key: RatingKey, age: number): number {
 }
 
 function buildRatings(seed: GolferSeed): Ratings {
-  const ratings = blankRatings(seed.level);
+  const level = compressLevel(seed.level);
+  const ratings = blankRatings(level);
   const bias = ARCHETYPES[seed.archetype].bias;
   const rng = createRng(`golfer:${seed.id}:ratings`);
   for (const key of Object.keys(ratings) as RatingKey[]) {
-    const noise = rng.normal() * 5.5;
-    const value = seed.level + (bias[key] ?? 0) + noise + ageAdjust(key, seed.age);
+    const noise = rng.normal() * SKILL_VARIATION;
+    const value = level + (bias[key] ?? 0) + noise + ageAdjust(key, seed.age);
     ratings[key] = clamp(Math.round(value), 12, 99);
   }
   // Authored specifics always win.
@@ -644,9 +668,9 @@ export function buildGolfer(seed: GolferSeed): Golfer {
     ratings,
     hidden: {
       currentAbility: 50,
-      potential: seed.potential,
+      potential: Math.round(compressLevel(seed.potential, 0.46)),
       form: Math.round(rng.range(-4, 4) * 10) / 10,
-      confidence: clamp(Math.round(52 + (seed.level - 68) * 0.7 + rng.range(-8, 8)), 20, 95),
+      confidence: clamp(Math.round(52 + (compressLevel(seed.level) - 74) * 1.4 + rng.range(-8, 8)), 20, 95),
       injuryRisk: clamp(Math.round(18 + (seed.age - 26) * 1.6 + rng.range(-8, 12)), 4, 82),
       adaptability: clamp(Math.round(50 + (ratings.decisionMaking - 50) * 0.5 + rng.range(-10, 14)), 15, 96),
     },

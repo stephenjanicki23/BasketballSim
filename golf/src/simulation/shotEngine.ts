@@ -39,6 +39,8 @@ import {
   type ShotTypeId,
 } from './config';
 import {
+  type DailyTouch,
+  NEUTRAL_TOUCH,
   bagFor,
   effective,
   effectiveFatigue,
@@ -79,6 +81,8 @@ export interface ShotContext {
   pressure: number;
   /** Deep bunkers cannot be advanced far. */
   deepBunker?: boolean;
+  /** What the golfer has with them today. Defaults to neutral. */
+  touch?: DailyTouch;
 }
 
 export interface ShotRequest {
@@ -288,11 +292,11 @@ export function planShot(
   const pressureKind = club.family === 'driver' ? 'drive' : isShortGame(request.shotType) ? 'short' : 'approach';
   const pressureMods = pressureEffect(golfer, ctx.pressure, pressureKind);
 
+  const shortGame = isShortGame(request.shotType);
   const elevationDelta = hole.elevationAt(request.target) - hole.elevationAt(ball);
   const elevationYards =
     elevationDelta >= 0 ? elevationDelta * TUNING.yardsPerFootUp : elevationDelta * TUNING.yardsPerFootDown;
 
-  const shortGame = isShortGame(request.shotType);
   const bag = bagFor(golfer);
 
   let expectedCarry: number;
@@ -303,7 +307,13 @@ export function planShot(
   let apex: number;
   let spin: number;
 
-  const envSigma = weatherMods.sigma * fatigueMods.sigma * pressureMods.sigma;
+  const touch = ctx.touch ?? NEUTRAL_TOUCH;
+  const touchFactor = shortGame
+    ? touch.short
+    : club.family === 'driver' || club.family === 'wood'
+      ? touch.driving
+      : touch.approach;
+  const envSigma = weatherMods.sigma * fatigueMods.sigma * pressureMods.sigma * touchFactor;
   const windSigma = 1 + windSpeed * TUNING.windSigmaPerMph * windSkill * profile.windExposure;
 
   if (shortGame) {
@@ -421,6 +431,44 @@ function windCarryDelta(
   return wind.head > 0 ? -wind.head * TUNING.headwindPerMph * scale_ : -wind.head * TUNING.tailwindPerMph * scale_;
 }
 
+/**
+ * How far every club in the bag goes from here, at a full swing.
+ *
+ * The decision AI needs this for each candidate club, and calling planShot
+ * fourteen times to find out was the single most expensive thing in a season
+ * simulation. The modifiers are shared across clubs, so they are computed once.
+ */
+export function reachTable(ctx: ShotContext, direction: Vec2, shotType: ShotTypeId = 'full'): Map<ClubId, number> {
+  const { golfer, hole, ball, conditions } = ctx;
+  const lie = LIES[ctx.lie];
+  const profile = SHOT_TYPES[shotType];
+  const weather = conditions.weather;
+  const windSpeed = gustedWind(conditions, ctx.shotIndex);
+  const wind = windComponents(weather, shotBearing(hole, direction), windSpeed);
+  const windSkill = 1 - (effective(golfer, 'wind') - 50) * 0.006;
+  const distanceMods =
+    lie.distance *
+    weatherEffect(golfer, weather).distance *
+    fatigueEffect(golfer).distance *
+    pressureEffect(golfer, ctx.pressure, 'approach').distance *
+    profile.distance;
+  const bag = bagFor(golfer);
+  const ballElevation = hole.elevationAt(ball);
+
+  const table = new Map<ClubId, number>();
+  for (const club of SWING_CLUBS) {
+    const carry = bag[club.id].carry * distanceMods;
+    const roll = bag[club.id].roll * profile.roll * weather.firmness * lie.rollAfter;
+    const landing = add(ball, scale(direction, carry));
+    const elevationYards = (() => {
+      const delta = hole.elevationAt(landing) - ballElevation;
+      return delta >= 0 ? delta * TUNING.yardsPerFootUp : delta * TUNING.yardsPerFootDown;
+    })();
+    table.set(club.id, carry + windCarryDelta(wind, carry, windSkill, profile.windExposure) - elevationYards + roll);
+  }
+  return table;
+}
+
 const EMPTY_ODDS: OutcomeOdds = {
   fairway: 0, green: 0, rough: 0, sand: 0, water: 0, trees: 0, ob: 0,
   expectedStrokes: 0, proximity: 0, inside10ft: 0,
@@ -463,7 +511,7 @@ function strataNodes(n: number): number[] {
 
 /** 9 strata for the player's own shot preview, 7 for the simulation AI. */
 const STRATA_FINE = strataNodes(9);
-const STRATA_FAST = strataNodes(7);
+const STRATA_FAST = strataNodes(6);
 
 /**
  * Integrate the shot's distribution over the terrain: the odds of each outcome,
@@ -670,7 +718,8 @@ export function resolveShot(ctx: ShotContext, plan: ShotPlan, rng: Rng): ShotRes
   let penaltyKind: ShotResult['penaltyKind'] = 'none';
   let finalInfo = terrainAt(hole, final);
 
-  if (finalInfo.lie !== 'water' && roll > 1) {
+  // Only bisect for a water crossing when there is water anywhere near the line.
+  if (finalInfo.lie !== 'water' && roll > 1 && nearWater(hole, landing, final)) {
     const crossing = findCrossing(landing, final, (p) => terrainAt(hole, p).lie === 'water', 24);
     if (crossing) {
       final = crossing;
@@ -719,6 +768,20 @@ export function resolveShot(ctx: ShotContext, plan: ShotPlan, rng: Rng): ShotRes
     rollPath,
     notes,
   };
+}
+
+/** Is any water close enough to this segment to be worth checking properly? */
+function nearWater(hole: HoleGeometry, from: Vec2, to: Vec2, pad = 6): boolean {
+  if (hole.water.length === 0) return false;
+  const minX = Math.min(from.x, to.x) - pad;
+  const maxX = Math.max(from.x, to.x) + pad;
+  const minY = Math.min(from.y, to.y) - pad;
+  const maxY = Math.max(from.y, to.y) + pad;
+  for (const w of hole.water) {
+    if (w.bounds.maxX < minX || w.bounds.minX > maxX || w.bounds.maxY < minY || w.bounds.minY > maxY) continue;
+    return true;
+  }
+  return false;
 }
 
 /** A ball rolling over the hole drops in. The hole is 4.25 inches across. */

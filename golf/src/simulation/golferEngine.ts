@@ -7,7 +7,7 @@
  * answer that already accounts for form, weather, fatigue and confidence.
  */
 
-import { clamp, lerp } from './rng';
+import { type Rng, clamp, lerp } from './rng';
 import { CLUB_BY_ID, CLUBS, TUNING } from './config';
 import type {
   Archetype,
@@ -356,10 +356,39 @@ export function pressureEffect(golfer: Golfer, pressure: number, kind: 'drive' |
   };
 }
 
+/**
+ * What a golfer has on a given day.
+ *
+ * Ratings describe a player's standard; they do not describe Thursday. Real
+ * golfers turn up without their driver, or hole everything for one round and
+ * nothing the next, and that day-to-day wobble is most of the reason a tour of
+ * fifty players produces fifteen different winners rather than one. Consistent
+ * players wobble less, which is exactly what the Consistency rating should mean.
+ *
+ * Values multiply dispersion, so above 1 is a bad day.
+ */
+export interface DailyTouch {
+  driving: number;
+  approach: number;
+  short: number;
+  putting: number;
+}
+
+export const NEUTRAL_TOUCH: DailyTouch = { driving: 1, approach: 1, short: 1, putting: 1 };
+
+export function dailyTouch(golfer: Golfer, rng: Rng): DailyTouch {
+  // Kept deliberately small. Dispersion costs strokes faster than it saves them,
+  // so a large day-to-day wobble does not just add variance — it pushes the whole
+  // field's scoring up, and it punishes the already-wide players twice.
+  const spread = 0.055 + (100 - effective(golfer, 'consistency')) * 0.0010;
+  const draw = () => Math.exp(rng.normal() * spread);
+  return { driving: draw(), approach: draw(), short: draw(), putting: draw() };
+}
+
 /** Fat-tail probability for this golfer: inconsistent players blow up more often. */
 export function tailProbability(golfer: Golfer): number {
   const consistency = effective(golfer, 'consistency');
-  return clamp(TUNING.tailBase + ((50 - consistency) / 50) * TUNING.tailPerConsistency, 0.012, 0.24);
+  return clamp(TUNING.tailBase + ((50 - consistency) / 50) * TUNING.tailPerConsistency, 0.030, 0.24);
 }
 
 /** Rounded display helper: 1–100 into a letter-ish band used by the UI. */

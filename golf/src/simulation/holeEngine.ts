@@ -21,10 +21,11 @@ import {
   type ShotPlan,
   legalClubs,
   planShot,
+  reachTable,
   resolveShot,
 } from './shotEngine';
 import { planPutt, resolvePutt } from './puttingEngine';
-import { effective, fatigueForHole } from './golferEngine';
+import { type DailyTouch, effective, fatigueForHole } from './golferEngine';
 import { terrainAt } from './courseEngine';
 import type { ClubId, Conditions, Golfer, HoleGeometry, LieType } from './types';
 
@@ -73,6 +74,8 @@ export interface PlayHoleOptions {
   fast?: boolean;
   /** Shot counter, so gusts vary through the round. */
   shotSeed?: number;
+  /** What the golfer has with them today; generated once per round. */
+  touch?: DailyTouch;
 }
 
 const MAX_STROKES = 12;
@@ -85,12 +88,6 @@ interface Candidate {
   club: ClubId;
   shotType: ShotTypeId;
   target: Vec2;
-}
-
-/** How far this club goes from here, at a full swing. */
-function reachOf(ctx: ShotContext, club: ClubId, shotType: ShotTypeId, direction: Vec2): number {
-  const far = add(ctx.ball, scale(direction, 420));
-  return planShot(ctx, { club, shotType, target: far }, { skipOdds: true }).expectedTotal;
 }
 
 /** Perpendicular aim offsets from a target. */
@@ -136,11 +133,12 @@ function candidatesFor(ctx: ShotContext, fast: boolean): Candidate[] {
   // --- Tee shot on a par 4 or 5 ------------------------------------------
   if (ctx.onTee && hole.spec.par !== 3) {
     const teeClubs: ClubId[] = fast ? ['D', '3W', '5i'] : ['D', '3W', '5W', '4i', '7i'];
-    const offsets = fast ? [0, -18, 18] : [0, -14, 14, -28, 28];
+    const offsets = fast ? [0, -16, 16] : [0, -14, 14, -28, 28];
     const projection = terrainAt(hole, ball);
+    const reaches = reachTable(ctx, lineToPin);
     for (const club of teeClubs) {
       if (!clubs.some((c) => c.id === club)) continue;
-      const reach = reachOf(ctx, club, 'full', lineToPin);
+      const reach = reaches.get(club) ?? 0;
       if (reach < 120) continue;
       const along = Math.min(projection.along + reach, hole.centerlineLength - 12);
       const base = pointAlongPolyline(hole.centerline, along).point;
@@ -149,7 +147,7 @@ function candidatesFor(ctx: ShotContext, fast: boolean): Candidate[] {
       }
     }
     if (!fast && ctx.conditions.weather.windSpeed > 16) {
-      const reach = reachOf(ctx, 'D', 'punch', lineToPin);
+      const reach = reachTable(ctx, lineToPin, 'punch').get('D') ?? 0;
       const base = pointAlongPolyline(hole.centerline, Math.min(projection.along + reach, hole.centerlineLength - 12)).point;
       candidates.push({ club: 'D', shotType: 'punch', target: base });
     }
@@ -157,15 +155,16 @@ function candidatesFor(ctx: ShotContext, fast: boolean): Candidate[] {
   }
 
   // --- Everything else: a shot at a green, or a lay-up -------------------
+  const allReaches = reachTable(ctx, lineToPin);
   const reachByClub = new Map<ClubId, number>();
-  for (const club of clubs) reachByClub.set(club.id, reachOf(ctx, club.id, 'full', lineToPin));
+  for (const club of clubs) reachByClub.set(club.id, allReaches.get(club.id) ?? 0);
 
   // The club that gets closest to the flag, plus one either side.
   const sorted = [...reachByClub.entries()].sort((a, b) => Math.abs(a[1] - toPin) - Math.abs(b[1] - toPin));
   const chosen = sorted.slice(0, fast ? 2 : 3).map(([club]) => club);
   const canReach = sorted.some(([, reach]) => reach >= toPin - 4);
 
-  const offsets = fast ? [0, -10, 10] : [0, -9, 9, -20, 20];
+  const offsets = fast ? [0, -11, 11] : [0, -9, 9, -20, 20];
   for (const club of chosen) {
     for (const target of offsetTargets(ball, hole.pin, offsets)) {
       candidates.push({ club, shotType: 'full', target });
@@ -257,6 +256,7 @@ export function playHole(options: PlayHoleOptions): HoleOutcome {
       shotIndex: shotIndex++,
       pressure,
       deepBunker: info.deepBunker,
+      touch: options.touch,
     };
     const toPinBefore = dist(ball, hole.pin);
 

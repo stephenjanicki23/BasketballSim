@@ -542,6 +542,29 @@ export function holeGeometry(course: Course, holeNumber: number): HoleGeometry {
   return built;
 }
 
+/**
+ * The same hole with the flag somewhere else. Pin positions move day to day, so
+ * a tournament is four different examinations of the same eighteen holes; the
+ * geometry and the lie grid are unchanged, so this is a shallow copy.
+ */
+export function withPin(hole: HoleGeometry, pin: Vec2): HoleGeometry {
+  return { ...hole, pin };
+}
+
+/**
+ * Where the flag is cut on a given day. Four rounds get four quadrants of the
+ * green, and Sunday's is tucked closest to an edge.
+ */
+export function pinForRound(hole: HoleGeometry, round: number): Vec2 {
+  const rng = createRng(`${hole.course.id}:${hole.spec.number}:pin:${round}`);
+  const quadrant = ((round - 1) % 4) * (Math.PI / 2) + rng.range(-0.5, 0.5);
+  const tuck = round >= 4 ? 0.62 : round === 3 ? 0.54 : 0.42;
+  const reach = hole.green.radius * tuck * rng.range(0.85, 1.1);
+  const candidate = add(hole.greenCenter, vec(Math.cos(quadrant) * reach, Math.sin(quadrant) * reach));
+  // Never cut a pin off the putting surface.
+  return blobEdgeDistance(hole.green, candidate) < -2.5 ? candidate : hole.pin;
+}
+
 export function courseBounds(course: Course): Bounds {
   let bounds = holeGeometry(course, 1).bounds;
   for (let i = 2; i <= course.holes.length; i++) bounds = unionBounds(bounds, holeGeometry(course, i).bounds);

@@ -13,7 +13,7 @@
 import { type Vec2, add, dist, norm, perp, scale, sub } from './geometry';
 import { type Rng, clamp, lerp, normalCdf } from './rng';
 import { TUNING } from './config';
-import { effective, effectiveFatigue, pressureEffect, sigmaFactor } from './golferEngine';
+import { NEUTRAL_TOUCH, effective, effectiveFatigue, pressureEffect, sigmaFactor } from './golferEngine';
 import { greenSlopeAt } from './courseEngine';
 import type { Golfer, LieType } from './types';
 import type { ShotContext } from './shotEngine';
@@ -104,14 +104,15 @@ export function planPutt(ctx: ShotContext, target: Vec2): PuttPlan {
   const fatigue = 1 + effectiveFatigue(golfer) / 100 * 0.10;
   const wet = 1 + conditions.weather.rain * 0.10;
   const lieExtra = (ctx.lie as LieType) === 'fringe' ? 1.35 : 1;
+  const touch = (ctx.touch ?? NEUTRAL_TOUCH).putting;
 
   const sigmaLatFeet =
     Math.max(TUNING.puttSigmaFloor, TUNING.puttSigmaCoef * Math.pow(distanceFeet, TUNING.puttSigmaExp)) *
-    sigmaFactor(skill) * pressure.sigma * fatigue * wet * lieExtra * (1 + Math.abs(sideGrade) * 0.06);
+    sigmaFactor(skill) * pressure.sigma * fatigue * wet * lieExtra * touch * (1 + Math.abs(sideGrade) * 0.06);
 
   const sigmaDistFeet =
     (TUNING.puttDistanceCoef * playsLikeFeet + TUNING.puttDistanceBase) *
-    sigmaFactor(skill) * pressure.sigma * fatigue * wet * lieExtra *
+    sigmaFactor(skill) * pressure.sigma * fatigue * wet * lieExtra * touch *
     (1 + Math.abs(grade) * 0.05 + Math.max(0, grade) * 0.05) *
     (greenSpeed > 12 ? 1.06 : 1);
 

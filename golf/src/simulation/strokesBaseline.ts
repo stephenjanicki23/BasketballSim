@@ -72,7 +72,7 @@ function lookup(table: Table, x: number): number {
  * Strokes to hole out from a given lie at a given distance in yards.
  * `abilityScale` shifts the whole surface for a weaker or stronger player.
  */
-export function strokesToHoleOut(lie: LieType, yards: number, abilityScale = 1): number {
+export function strokesToHoleOutExact(lie: LieType, yards: number, abilityScale = 1): number {
   if (lie === 'green') return lookup(GREEN, yards * 3) * (1 + (abilityScale - 1) * 0.6);
   let base: number;
   switch (lie) {
@@ -126,4 +126,34 @@ export function strokesToHoleOut(lie: LieType, yards: number, abilityScale = 1):
 /** A tour-average player is 1.0; a fringe player needs a few percent more. */
 export function abilityScaleFor(currentAbility: number): number {
   return 1 + (72 - currentAbility) * 0.0034;
+}
+
+// ---------------------------------------------------------------------------
+// Precomputed lookup
+// ---------------------------------------------------------------------------
+
+/**
+ * The interpolation above is called several hundred times per simulated shot —
+ * tens of millions of times in a season — so it is baked into a flat array at
+ * module load, one entry per yard per lie, and read with an array index.
+ */
+const LIE_KEYS: LieType[] = [
+  'tee', 'fairway', 'firstCut', 'lightRough', 'heavyRough', 'deepRough',
+  'fairwayBunker', 'greensideBunker', 'pineStraw', 'waste', 'recovery',
+  'fringe', 'green', 'water', 'ob',
+];
+const MAX_YARDS = 620;
+const TABLE: Record<string, Float32Array> = Object.fromEntries(
+  LIE_KEYS.map((lie) => {
+    const values = new Float32Array(MAX_YARDS + 1);
+    for (let yard = 0; yard <= MAX_YARDS; yard++) values[yard] = strokesToHoleOutExact(lie, yard);
+    return [lie, values];
+  }),
+);
+
+export function strokesToHoleOut(lie: LieType, yards: number, abilityScale = 1): number {
+  const table = TABLE[lie];
+  if (!table) return strokesToHoleOutExact(lie, yards, abilityScale);
+  const index = yards <= 0 ? 0 : yards >= MAX_YARDS ? MAX_YARDS : Math.round(yards);
+  return table[index] * abilityScale;
 }
