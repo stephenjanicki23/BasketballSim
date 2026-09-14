@@ -10,10 +10,11 @@
  * What is measured and what is not — stated plainly, because the distinction is
  * the whole point of the pipeline:
  *
- * 1. **The card is measured.** Par and yardage for holes 1–16 are the Gold-tee
- *    numbers printed on the club's own hole-by-hole overheads, hole by hole, and
- *    so are the intermediate distances — tee to the fairway marker, marker to
- *    the green — recorded in `SPLITS` below. Nothing here is rounded to a nicer
+ * 1. **The card is the club's.** Par, yardage and stroke index for all eighteen
+ *    holes are the Gold card as the club publishes it — par 72, 7,129 yards,
+ *    rating 74.8, slope 142 — and the intermediate distances recorded in
+ *    `SPLITS` below are the ones printed on the hole-by-hole overheads: tee to
+ *    the fairway marker, marker to the green. Nothing here is rounded to a nicer
  *    number and nothing is scaled to make a hole look right.
  * 2. **The splits place the corner; they do not measure it.** Both printed
  *    numbers are measured along the line of play, so on most holes they add up
@@ -26,9 +27,10 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **Holes 17 and 18 are provisional.** Their overheads have not arrived. They
- *    are authored to close the loop at par 72 and are marked as such on the
- *    course screen; replace them the moment the images come in.
+ * 3. **Holes 17 and 18 have their card but not their shape.** 182 and 432 are
+ *    the club's numbers; the overheads for those two have not arrived, so their
+ *    geometry is authored and says so on the tee. Replace it the moment the
+ *    images come in — the card above does not change when you do.
  * 4. **Elevation is inferred.** Plan-view overheads carry no contours, so the
  *    fall of each hole comes from the site — a property that runs from roughly
  *    250 feet at the entrance to better than 600 at the top of the hill, with
@@ -59,7 +61,7 @@ export const SPLITS: Readonly<Record<number, readonly number[]>> = {
 
 const holes: HoleSpec[] = [
   {
-    number: 1, name: 'Dairy Lane', par: 5, yards: 514, bearing: 168, index: 11,
+    number: 1, name: 'Dairy Lane', par: 5, yards: 514, bearing: 168, index: 15,
     dogleg: -76, doglegAt: 0.62, fairwayWidth: 18,
     // The marker is 298 of 493 walked: the corridor turns left just past 60%
     // of the way down, which is where it swings away from the pond.
@@ -81,7 +83,7 @@ const holes: HoleSpec[] = [
     strategy: 'Away from the clubhouse and downhill, turning left the whole way. The pond sits against the left of the green, so the lay-up wants to be right of centre even though the hole is moving the other way.',
   },
   {
-    number: 2, name: 'The Elbow', par: 4, yards: 397, bearing: 84, index: 9,
+    number: 2, name: 'The Elbow', par: 4, yards: 397, bearing: 84, index: 11,
     dogleg: 74, doglegAt: 0.54, fairwayWidth: 16,
     // 216 of 391 walked — the corner is at 55%, and it is a corner rather
     // than a drift.
@@ -103,7 +105,7 @@ const holes: HoleSpec[] = [
     strategy: 'A tee shot to a corner you cannot see round — the timber on the inside is eighty feet tall. Take the 3 wood to the marker and there is a mid-iron up the hill; take the driver at the trees and there is a wedge out sideways.',
   },
   {
-    number: 3, name: 'Sodom Hill', par: 4, yards: 424, bearing: 12, index: 1,
+    number: 3, name: 'Sodom Hill', par: 4, yards: 424, bearing: 12, index: 3,
     dogleg: 12, doglegAt: 0.55, fairwayWidth: 16,
     // 289 + 141 = 430 against 424: the marker distances round up, the hole is
     // straight, and it is all uphill. The hardest four on the card.
@@ -125,7 +127,7 @@ const holes: HoleSpec[] = [
     strategy: 'Thirty-four feet of climb between two walls of hardwood, which is a club and a half of it. Nobody minds a four here and the field average says so.',
   },
   {
-    number: 4, name: 'Stone Wall', par: 4, yards: 428, bearing: 300, index: 5,
+    number: 4, name: 'Stone Wall', par: 4, yards: 428, bearing: 300, index: 1,
     dogleg: -34, doglegAt: 0.56, fairwayWidth: 17,
     bends: [{ at: 0.56, shift: -34, turn: 0.18 }],
     widths: [{ at: 0.08, half: 18 }, { at: 0.48, half: 17 }, { at: 0.76, half: 14 }, { at: 1, half: 16 }],
@@ -144,7 +146,7 @@ const holes: HoleSpec[] = [
     strategy: 'Downhill off the tee to a brook that crosses at 320 and a green back up the far bank. Long enough that the drive has to find the fairway and short enough that laying up leaves a full club more than you want.',
   },
   {
-    number: 5, name: 'Cow Pasture', par: 3, yards: 193, bearing: 226, index: 15,
+    number: 5, name: 'Cow Pasture', par: 3, yards: 193, bearing: 226, index: 17,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 13,
     widths: [{ at: 0, half: 0 }, { at: 0.58, half: 0 }, { at: 0.76, half: 11 }, { at: 1, half: 14 }],
     groves: [
@@ -162,7 +164,7 @@ const holes: HoleSpec[] = [
     strategy: 'A long iron from a shelf in the trees, all carry over wetland to a green eighteen feet below the tee. The drop is worth a club, the wind up there is worth another, and they do not always point the same way.',
   },
   {
-    number: 6, name: 'Hard Left', par: 4, yards: 380, bearing: 152, index: 13,
+    number: 6, name: 'Hard Left', par: 4, yards: 380, bearing: 152, index: 9,
     dogleg: -86, doglegAt: 0.62, fairwayWidth: 16,
     // 220 of 347 walked: the corner is 63% of the way down, and the 33 yards
     // the legs give up against the card is how much of it the measurement cut.
@@ -184,7 +186,7 @@ const holes: HoleSpec[] = [
     strategy: 'Two hundred and twenty to the corner and a hundred and twenty-seven from it: the hole tells you exactly what to hit and the trees on the inside make sure you do.',
   },
   {
-    number: 7, name: 'The Haul', par: 4, yards: 401, bearing: 26, index: 7,
+    number: 7, name: 'The Haul', par: 4, yards: 401, bearing: 26, index: 13,
     dogleg: 8, doglegAt: 0.5, fairwayWidth: 16,
     // 200 and 200. Dead straight, dead uphill.
     bends: [{ at: 0.5, shift: 8, turn: 0.28 }],
@@ -204,7 +206,7 @@ const holes: HoleSpec[] = [
     strategy: 'Thirty-eight feet of climb to a green you play blind to the surface of. Two clubs more than the number and a putt from below the hole is the whole ambition.',
   },
   {
-    number: 8, name: 'Far Side', par: 3, yards: 204, bearing: 108, index: 17,
+    number: 8, name: 'Far Side', par: 3, yards: 204, bearing: 108, index: 7,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 13,
     widths: [{ at: 0, half: 0 }, { at: 0.52, half: 0 }, { at: 0.74, half: 12 }, { at: 1, half: 14 }],
     groves: [
@@ -222,7 +224,7 @@ const holes: HoleSpec[] = [
     strategy: 'Two hundred and four off a pad in the trees, twenty-two feet downhill, to a big green with sand down the whole right side. A three is worth more than the card suggests.',
   },
   {
-    number: 9, name: 'Home Field', par: 5, yards: 537, bearing: 350, index: 3,
+    number: 9, name: 'Home Field', par: 5, yards: 537, bearing: 350, index: 5,
     dogleg: 50, doglegAt: 0.56, fairwayWidth: 18,
     bends: [{ at: 0.34, shift: 16, turn: 0.2 }, { at: 0.56, shift: 34, turn: 0.2 }],
     widths: [{ at: 0.08, half: 19 }, { at: 0.42, half: 18 }, { at: 0.68, half: 15 }, { at: 0.88, half: 16 }, { at: 1, half: 16 }],
@@ -243,7 +245,7 @@ const holes: HoleSpec[] = [
     strategy: 'Five hundred and thirty-seven uphill and bending right twice, back toward the barn. Three good ones and it is a birdie hole; two good ones and a hanging lie and it is not.',
   },
   {
-    number: 10, name: 'The Drop', par: 4, yards: 443, bearing: 196, index: 4,
+    number: 10, name: 'The Drop', par: 4, yards: 443, bearing: 196, index: 12,
     dogleg: -38, doglegAt: 0.52, fairwayWidth: 17,
     bends: [{ at: 0.52, shift: -38, turn: 0.2 }],
     widths: [{ at: 0.08, half: 18 }, { at: 0.5, half: 17 }, { at: 0.78, half: 14 }, { at: 1, half: 16 }],
@@ -263,7 +265,7 @@ const holes: HoleSpec[] = [
     strategy: 'Four hundred and forty-three on the card and forty feet of it straight down, which is the only reason it is playable. The green falls away from you: everything wants to be pin high or short.',
   },
   {
-    number: 11, name: 'Plateau', par: 4, yards: 389, bearing: 118, index: 10,
+    number: 11, name: 'Plateau', par: 4, yards: 389, bearing: 118, index: 6,
     dogleg: 26, doglegAt: 0.5, fairwayWidth: 16,
     // 195 and 195 — the marker sits at half way and the hole barely moves.
     bends: [{ at: 0.5, shift: 26, turn: 0.22 }],
@@ -325,7 +327,7 @@ const holes: HoleSpec[] = [
     strategy: 'Six hundred and ten yards bending right and climbing, with sand at 296, 470 and 528. Three shots for everybody, and the third one is uphill to a green that runs off at the back.',
   },
   {
-    number: 14, name: 'Hemlock', par: 4, yards: 445, bearing: 236, index: 6,
+    number: 14, name: 'Hemlock', par: 4, yards: 445, bearing: 236, index: 4,
     dogleg: -40, doglegAt: 0.56, fairwayWidth: 16,
     bends: [{ at: 0.56, shift: -40, turn: 0.2 }],
     widths: [{ at: 0.08, half: 18 }, { at: 0.5, half: 16 }, { at: 0.78, half: 13 }, { at: 1, half: 16 }],
@@ -386,42 +388,42 @@ const holes: HoleSpec[] = [
   },
   // --- Provisional: overheads not yet supplied ------------------------------
   {
-    number: 17, name: 'Barnside', par: 3, yards: 171, bearing: 344, index: 18,
+    number: 17, name: 'Barnside', par: 3, yards: 182, bearing: 344, index: 18,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 13,
     widths: [{ at: 0, half: 0 }, { at: 0.58, half: 0 }, { at: 0.8, half: 11 }, { at: 1, half: 14 }],
     groves: [
-      { from: 30, to: 155, side: -1, offset: 15, depth: 22, density: 0.48, canopy: [4, 8] },
-      { from: 30, to: 155, side: 1, offset: 15, depth: 22, density: 0.48, canopy: [4, 8] },
+      { from: 30, to: 165, side: -1, offset: 15, depth: 22, density: 0.48, canopy: [4, 8] },
+      { from: 30, to: 165, side: 1, offset: 15, depth: 22, density: 0.48, canopy: [4, 8] },
     ],
     landforms: [{ at: 0.5, rise: -8, length: 100 }],
     elevation: { landing: -6, green: -12 }, greenSize: 13, pin: { x: 3, y: 3 },
     greenSlope: { x: -1.6, y: 1.4 }, trees: 0.66,
     bunkers: [
-      { along: 156, lateral: -13, size: 6, kind: 'greenside' },
-      { along: 166, lateral: 13, size: 5, kind: 'greenside', deep: true },
+      { along: 167, lateral: -13, size: 6, kind: 'greenside' },
+      { along: 177, lateral: 13, size: 5, kind: 'greenside', deep: true },
     ],
     water: [],
-    strategy: 'PROVISIONAL — the overhead for this hole has not arrived. A short iron downhill through the trees, authored to close the round at par 72 and to be replaced by the traced hole.',
+    strategy: 'The card is the club\u2019s — 182, par 3, the last stroke hole on it — but the overhead has not arrived, so the shape of this one is authored: a mid-iron downhill through the trees, to be replaced by the traced hole. PROVISIONAL SHAPE.',
   },
   {
-    number: 18, name: 'Up to the Barn', par: 4, yards: 402, bearing: 8, index: 12,
+    number: 18, name: 'Up to the Barn', par: 4, yards: 432, bearing: 8, index: 10,
     dogleg: 20, doglegAt: 0.55, fairwayWidth: 17,
     bends: [{ at: 0.54, shift: 20, turn: 0.2 }],
     widths: [{ at: 0.08, half: 18 }, { at: 0.5, half: 17 }, { at: 0.78, half: 14 }, { at: 1, half: 16 }],
     groves: [
-      { from: 70, to: 380, side: -1, offset: 21, depth: 26, density: 0.44, canopy: [4, 8] },
-      { from: 110, to: 340, side: 1, offset: 22, depth: 22, density: 0.4, canopy: [4, 7] },
+      { from: 70, to: 410, side: -1, offset: 21, depth: 26, density: 0.44, canopy: [4, 8] },
+      { from: 110, to: 370, side: 1, offset: 22, depth: 22, density: 0.4, canopy: [4, 7] },
     ],
     landforms: [{ at: 0.62, rise: 16, length: 180 }],
     elevation: { landing: 18, green: 30 }, greenSize: 15, pin: { x: -4, y: -3 },
     greenSlope: { x: 1.4, y: -2.0 }, trees: 0.58,
     bunkers: [
-      { along: 258, lateral: 19, size: 6, kind: 'fairway' },
-      { along: 386, lateral: -14, size: 6, kind: 'greenside' },
-      { along: 394, lateral: 14, size: 5, kind: 'greenside', deep: true },
+      { along: 278, lateral: 19, size: 6, kind: 'fairway' },
+      { along: 416, lateral: -14, size: 6, kind: 'greenside' },
+      { along: 424, lateral: 14, size: 5, kind: 'greenside', deep: true },
     ],
     water: [],
-    strategy: 'PROVISIONAL — the overhead for this hole has not arrived. A four bending right and climbing back to the barn, authored to close the round at par 72 and to be replaced by the traced hole.',
+    strategy: 'The card is the club\u2019s — 432 uphill to finish — but the overhead has not arrived, so the shape of this one is authored: a four bending right and climbing back to the barn, to be replaced by the traced hole. PROVISIONAL SHAPE.',
   },
 ];
 
@@ -472,7 +474,10 @@ const card: HoleSpec[] = holes.map((spec) => {
 const GOLD_YARDS: readonly number[] = holes.map((hole) => hole.yards);
 
 const TEES: TeeSet[] = [
-  { id: 'gold', name: 'Gold', yards: [...GOLD_YARDS], index: holes.map((hole) => hole.index) },
+  {
+    id: 'gold', name: 'Gold', yards: [...GOLD_YARDS], index: holes.map((hole) => hole.index),
+    rating: 74.8, slope: 142,
+  },
 ];
 
 export const THE_RANCH: Course = {
@@ -485,8 +490,8 @@ export const THE_RANCH: Course = {
   blurb:
     'A dairy farm on the side of Sodom Mountain, turned into golf in 2001 and left as steep as it was found. Corridors through New England hardwood, stone walls between holes, and four greens that sit more than thirty feet below or above their tees.',
   identity: [
-    'Holes 1–16 built to the Gold-tee card printed on the club\'s own overheads',
-    'The 17th and 18th are provisional until their overheads arrive',
+    'The club\'s Gold card: 7,129 yards, rating 74.8, slope 142',
+    'Built hole by hole off the club\'s own overheads; the 17th and 18th await theirs',
     'Hillside routing: 40 feet down the 10th and the 15th, 38 up the 7th',
     'Hardwood on both sides of nearly every corridor — no bail-out and no recovery',
     'The 6th turns 220 yards from the tee and leaves 127 in',

@@ -368,10 +368,11 @@ farm on the shoulder of Sodom Mountain that Damian Pascuzzo turned into golf in
 hole-by-hole overheads, and the file is explicit about which parts of it are
 measurements and which are not:
 
-- **The card is measured.** Par and yardage for holes 1–16 are the Gold-tee
-  numbers printed on the overheads, and so are the two intermediate distances on
-  each one — tee to the fairway marker, marker to the green. Front nine 3,478,
-  holes 10 to 16 3,037.
+- **The card is the club's.** Par, yardage and stroke index for all eighteen
+  holes are the **Gold card: par 72, 7,129 yards, rating 74.8, slope 142**, and
+  the two intermediate distances on each overhead — tee to the fairway marker,
+  marker to the green — come off the images. Out 3,478, in 3,651, hole for
+  hole.
 - **The splits place every corner.** Both printed legs are measured along the
   line of play, so they add up to the card and say nothing about how far a hole
   moves sideways. What they fix exactly is *where* it turns: the marker on the
@@ -384,17 +385,20 @@ measurements and which are not:
   rather than in the numbers. Drop a trace into `TRACES` in the course file and
   the photograph replaces it, at the card's own scale, with nothing else to
   change.
-- **The 17th and the 18th are provisional.** Their overheads have not arrived;
-  the two holes close the loop at par 72 and say so on the course screen and in
-  their own strategy notes.
+- **The 17th and the 18th have their card but not their shape.** 182 and 432 are
+  the club's numbers; those two overheads have not arrived, so their geometry is
+  authored and says so on the tee.
 - **Elevation is inferred**, as it was at the Concord: plan-view overheads carry
   no contours. The property runs from about 250 feet to better than 600, so the
   7th climbs 38 feet, and the 10th and the 15th fall 40.
 
-It plays like what it is — 7,088 yards of hillside corridor through hardwood.
-The field averages **+0.8 a round**, which puts it third of the five venues,
+It plays like what it is — 7,129 yards of hillside corridor through hardwood.
+The field averages **+1.0 a round**, which puts it third of the five venues,
 between Woodland National at +2.4 and the Desert Classic at −0.3; it hits 50% of
-fairways and 66% of greens there, against 73% of greens at the Concord.
+fairways and 66% of greens there, against 73% of greens at the Concord. The
+three holes the field finds hardest are the 18th, the 4th and the 12th — and the
+club's own stroke indexes make those 10, **1** and 16, so the hardest two-shotter
+on the property is the hardest one here too, without anybody tuning it to be.
 
 ## Is the game easy?
 

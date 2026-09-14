@@ -83,9 +83,9 @@ for (const spec of THE_RANCH.holes) {
 }
 
 const traced = THE_RANCH.holes.filter((hole) => hole.centreline).length;
-const provisional = THE_RANCH.holes.filter((hole) => hole.strategy.startsWith('PROVISIONAL')).length;
+const provisional = THE_RANCH.holes.filter((hole) => hole.strategy.includes('PROVISIONAL SHAPE')).length;
 console.log(
-  `\n  ${THE_RANCH.holes.length - provisional} holes off the overheads, ${provisional} provisional, ` +
+  `\n  ${THE_RANCH.holes.length - provisional} holes off the overheads, ${provisional} awaiting theirs, ` +
     `${traced} traced from an image — ${failures} failure${failures === 1 ? '' : 's'}`,
 );
 if (failures > 0) process.exitCode = 1;
