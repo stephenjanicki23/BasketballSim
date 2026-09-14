@@ -128,6 +128,13 @@ the overlay if the recorded alignment needs a hand.
 
 Put the images in `public/holes/<course>/<n>.jpg` so the overlay can load them.
 
+Two things the traces on The Ranch's 17th and 18th are worth copying. A par 3
+over water traces as a corridor that does not start until the far bank —
+`widths` of zero until 0.78 — so the carry is water rather than a ribbon of
+rough with the fairway missing. And a hole whose overhead prints a marker gets
+its play line traced *through* that marker, which turns the printed leg
+distances into a test of the trace itself.
+
 ## 4. What is authored, and what is procedural
 
 Trace what the image supports and let the engine do the rest. A photograph

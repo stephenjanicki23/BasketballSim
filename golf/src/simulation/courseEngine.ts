@@ -230,7 +230,9 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   const centerline = centerlineFor(spec);
   const length = polylineLength(centerline);
   const tee = centerline[0];
-  const finalTangent = norm(sub(centerline[centerline.length - 1], centerline[centerline.length - 3]));
+  // Two points back, so the tangent is the line the hole arrives on rather than
+  // the last sampling step — but a traced straight line has only two points.
+  const finalTangent = norm(sub(centerline[centerline.length - 1], centerline[Math.max(0, centerline.length - 3)]));
   const greenCenter = centerline[centerline.length - 1];
   const right = perp(finalTangent);
 
@@ -361,11 +363,15 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   const trees: HoleGeometry['trees'] = [];
   const atLeast = (position: Vec2, gap: number): boolean =>
     trees.every((t) => dist(t.position, position) > gap);
+  // Nothing grows out of a pond. Worth saying because the tree scatter does not
+  // know about hazards, and one trunk standing in the middle of the water on a
+  // forced carry undoes the whole picture.
+  const plantable = (position: Vec2): boolean => !water.some((w) => w.shape.contains(position));
 
   const plant = (along: number, offset: number, radius: number, shade: number) => {
     const { point, tangent } = pointAlongPolyline(centerline, clamp(along, 0, length));
     const position = add(point, scale(perp(tangent), offset));
-    if (atLeast(position, radius * 0.75)) trees.push({ position, radius, shade });
+    if (plantable(position) && atLeast(position, radius * 0.75)) trees.push({ position, radius, shade });
   };
 
   // How far out the corridor reaches at a point on the hole. The fairway tapers
@@ -406,7 +412,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     for (let y = minY; y <= maxY; y += spacing) {
       for (let x = minX; x <= maxX; x += spacing) {
         const position = vec(x + g.range(-spacing * 0.45, spacing * 0.45), y + g.range(-spacing * 0.45, spacing * 0.45));
-        if (!shape.contains(position)) continue;
+        if (!shape.contains(position) || !plantable(position)) continue;
         const radius = g.range(minCanopy, maxCanopy);
         if (atLeast(position, radius * 0.75)) trees.push({ position, radius, shade: g.range(0, 1) });
       }

@@ -381,19 +381,25 @@ measurements and which are not:
   against the card, and fails any hole that bends harder than a card measured
   along it could allow. That check is the new, reusable part — any course whose
   source prints intermediate distances gets it for free.
-- **Which way each hole turns is authored**, because that lives in the image
-  rather than in the numbers. Drop a trace into `TRACES` in the course file and
-  the photograph replaces it, at the card's own scale, with nothing else to
-  change.
-- **The 17th and the 18th have their card but not their shape.** 182 and 432 are
-  the club's numbers; those two overheads have not arrived, so their geometry is
-  authored and says so on the tee.
+- **On the other sixteen, which way each hole turns is authored**, because that
+  lives in the image rather than in the numbers. Drop a trace into `TRACES` in the
+  course file and the photograph replaces it, at the card's own scale, with
+  nothing else to change — the 17th and the 18th are the worked examples.
+- **The 17th and the 18th are traced, not derived.** Those two overheads arrived
+  as images, so they are read straight off the photograph: the line of play, the
+  pond that is a hundred and fifty of the 17th's hundred and eighty-two yards,
+  both green outlines, the wood on the inside of the 18th's turn, and the stream
+  down its right. The 18th's traced corner lands at 0.59 of the hole against a
+  printed 0.603 — the same check every other hole passes, now measuring the trace
+  instead of the authoring. They were traced by eye rather than digitised, so
+  they are accurate to a few yards rather than to the yard; press **D** in a round
+  to lay the photograph back over the geometry.
 - **Elevation is inferred**, as it was at the Concord: plan-view overheads carry
   no contours. The property runs from about 250 feet to better than 600, so the
   7th climbs 38 feet, and the 10th and the 15th fall 40.
 
 It plays like what it is — 7,129 yards of hillside corridor through hardwood.
-The field averages **+1.0 a round**, which puts it third of the five venues,
+The field averages **+0.9 a round**, which puts it third of the five venues,
 between Woodland National at +2.4 and the Desert Classic at −0.3; it hits 50% of
 fairways and 66% of greens there, against 73% of greens at the Concord. The
 three holes the field finds hardest are the 18th, the 4th and the 12th — and the

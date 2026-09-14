@@ -27,10 +27,12 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **Holes 17 and 18 have their card but not their shape.** 182 and 432 are
- *    the club's numbers; the overheads for those two have not arrived, so their
- *    geometry is authored and says so on the tee. Replace it the moment the
- *    images come in — the card above does not change when you do.
+ * 3. **The 17th and the 18th are traced, not derived.** Their overheads arrived
+ *    as images, so those two are read straight off the photograph — the line of
+ *    play, the pond that is all of the 17th, the green outlines, the wood on the
+ *    inside of the 18th's turn and the stream down its right — and the card sets
+ *    the scale, as it does everywhere. They were traced by eye rather than
+ *    digitised, so call them accurate to a few yards, not to the yard.
  * 4. **Elevation is inferred.** Plan-view overheads carry no contours, so the
  *    fall of each hole comes from the site — a property that runs from roughly
  *    250 feet at the entrance to better than 600 at the top of the hill, with
@@ -38,11 +40,11 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish a hole properly, trace its overhead and drop the trace into
- * `TRACES` keyed by hole number: the traced centreline, green, bunkers, water
- * and wooded edges then replace everything derived here, at the card's own
- * scale, with no other change to this file. docs/adding-a-course.md has the
- * procedure.
+ * To finish any of the other sixteen the same way, trace its overhead and drop
+ * the trace into `TRACES` keyed by hole number: the traced centreline, green,
+ * bunkers, water and wooded edges then replace everything derived here, at the
+ * card's own scale, with no other change to this file. The 17th and the 18th
+ * below are the worked examples, and docs/adding-a-course.md has the procedure.
  */
 
 import type { Course, HoleSpec, TeeSet } from '../../simulation/types';
@@ -56,7 +58,7 @@ export const SPLITS: Readonly<Record<number, readonly number[]>> = {
   1: [298, 195], 2: [216, 175], 3: [289, 141], 4: [251, 179], 5: [191],
   6: [220, 127], 7: [200, 200], 8: [199], 9: [295, 233],
   10: [229, 207], 11: [195, 195], 12: [186], 13: [291, 285], 14: [254, 183],
-  15: [204, 147], 16: [326, 273],
+  15: [204, 147], 16: [326, 273], 17: [182], 18: [263, 173],
 };
 
 const holes: HoleSpec[] = [
@@ -386,34 +388,26 @@ const holes: HoleSpec[] = [
     water: [{ along: 560, lateral: -30, size: 26, stretch: 1.5, label: 'the mill pond' }],
     strategy: 'The longest hole on the card, drifting left down to the water. The third shot is played along the edge of the pond to a green tipped toward it, and laying back to the right of the fairway bunker is not cowardice.',
   },
-  // --- Provisional: overheads not yet supplied ------------------------------
   {
     number: 17, name: 'Barnside', par: 3, yards: 182, bearing: 344, index: 18,
     dogleg: 0, doglegAt: 0.5, fairwayWidth: 13,
-    widths: [{ at: 0, half: 0 }, { at: 0.58, half: 0 }, { at: 0.8, half: 11 }, { at: 1, half: 14 }],
-    groves: [
-      { from: 30, to: 165, side: -1, offset: 15, depth: 22, density: 0.48, canopy: [4, 8] },
-      { from: 30, to: 165, side: 1, offset: 15, depth: 22, density: 0.48, canopy: [4, 8] },
-    ],
-    landforms: [{ at: 0.5, rise: -8, length: 100 }],
-    elevation: { landing: -6, green: -12 }, greenSize: 13, pin: { x: 3, y: 3 },
-    greenSlope: { x: -1.6, y: 1.4 }, trees: 0.66,
-    bunkers: [
-      { along: 167, lateral: -13, size: 6, kind: 'greenside' },
-      { along: 177, lateral: 13, size: 5, kind: 'greenside', deep: true },
-    ],
+    // Traced: nothing but tee, water and green. The corridor does not start
+    // until the far bank, which is what makes it all carry.
+    widths: [{ at: 0, half: 0 }, { at: 0.78, half: 0 }, { at: 0.88, half: 7 }, { at: 0.95, half: 12 }, { at: 1, half: 13 }],
+    landforms: [{ at: 0.5, rise: -7, length: 110 }],
+    elevation: { landing: -6, green: -14 }, greenSize: 13, pin: { x: 3, y: 3 },
+    greenSlope: { x: -1.6, y: 1.4 }, trees: 0.12,
+    bunkers: [],
     water: [],
-    strategy: 'The card is the club\u2019s — 182, par 3, the last stroke hole on it — but the overhead has not arrived, so the shape of this one is authored: a mid-iron downhill through the trees, to be replaced by the traced hole. PROVISIONAL SHAPE.',
+    strategy: 'A hundred and eighty-two, and a hundred and fifty of it is water. The pond runs from sixty yards off the tee to the front bank, the green sits on the far side of it with sand short-left, and there is no bail-out: the shot is the hole.',
   },
   {
     number: 18, name: 'Up to the Barn', par: 4, yards: 432, bearing: 8, index: 10,
-    dogleg: 20, doglegAt: 0.55, fairwayWidth: 17,
+    // Traced: out of the trees, right to the marker at 263, then back left to a
+    // green with the property line and the stream down its right.
+    dogleg: 20, doglegAt: 0.60, fairwayWidth: 17,
     bends: [{ at: 0.54, shift: 20, turn: 0.2 }],
-    widths: [{ at: 0.08, half: 18 }, { at: 0.5, half: 17 }, { at: 0.78, half: 14 }, { at: 1, half: 16 }],
-    groves: [
-      { from: 70, to: 410, side: -1, offset: 21, depth: 26, density: 0.44, canopy: [4, 8] },
-      { from: 110, to: 370, side: 1, offset: 22, depth: 22, density: 0.4, canopy: [4, 7] },
-    ],
+    widths: [{ at: 0.08, half: 16 }, { at: 0.42, half: 19 }, { at: 0.62, half: 18 }, { at: 0.86, half: 14 }, { at: 1, half: 16 }],
     landforms: [{ at: 0.62, rise: 16, length: 180 }],
     elevation: { landing: 18, green: 30 }, greenSize: 15, pin: { x: -4, y: -3 },
     greenSlope: { x: 1.4, y: -2.0 }, trees: 0.58,
@@ -423,18 +417,70 @@ const holes: HoleSpec[] = [
       { along: 424, lateral: 14, size: 5, kind: 'greenside', deep: true },
     ],
     water: [],
-    strategy: 'The card is the club\u2019s — 432 uphill to finish — but the overhead has not arrived, so the shape of this one is authored: a four bending right and climbing back to the barn, to be replaced by the traced hole. PROVISIONAL SHAPE.',
+    strategy: 'Out of a chute of hardwood, right to the marker at 263, then back left and uphill to a green with sand on both sides of it and the stream down the right. The drive has to come out of the trees before the hole will give you anything.',
   },
 ];
 
 /**
- * Traces, keyed by hole number. Empty for now: the geometry above comes from the
- * printed distances rather than from the images. Drop a `TracedHole` in here and
- * that hole is rebuilt from the photograph instead — the card, the stroke index,
- * the elevation and the strategy note are carried over, everything geometric is
- * replaced, and the scale is fixed by the card yardage.
+ * Traces, keyed by hole number: pixels off the club's own overhead, y growing
+ * down, at the image's own size. A hole in here is rebuilt from the photograph —
+ * the card, the stroke index, the elevation and the strategy note carry over,
+ * everything geometric is replaced, and the scale is fixed by the card yardage
+ * on the played line. Holes not in here are built from the printed distances.
+ *
+ * The 17th and the 18th are traced off the 1440 × 2927 BlueGolf screenshots.
+ * They were read by eye rather than digitised, so the shapes are within a few
+ * yards rather than to the yard; press D in a round to lay the photograph back
+ * over the geometry and see where they disagree.
  */
-const TRACES: Partial<Record<number, TracedHole>> = {};
+const TRACES: Partial<Record<number, TracedHole>> = {
+  17: {
+    tee: [755, 2530],
+    pin: [761, 1092],
+    playLine: [[755, 2530], [761, 1092]],
+    green: [
+      [770, 1011], [829, 1025], [876, 1070], [902, 1132], [897, 1210],
+      [855, 1272], [791, 1298], [728, 1284], [695, 1228], [688, 1149], [712, 1070],
+    ],
+    // The pond: from sixty yards off the tee to the bank the green sits on.
+    water: [[
+      [615, 2012], [700, 2045], [820, 2030], [930, 1985], [966, 1880], [960, 1700],
+      [935, 1540], [900, 1440], [840, 1404], [760, 1412], [690, 1440], [640, 1530],
+      [620, 1700], [612, 1880],
+    ]],
+    bunkers: [
+      { shape: [[661, 1240], [688, 1201], [720, 1220], [714, 1267], [676, 1276]], kind: 'greenside' },
+      { shape: [[878, 2184], [958, 2168], [983, 2231], [958, 2309], [893, 2293], [866, 2239]], kind: 'fairway' },
+    ],
+    paths: [{ line: [[571, 2098], [702, 2078], [819, 2075], [966, 2056]], width: 3 }],
+    widths: [{ at: 0, half: 0 }, { at: 0.78, half: 0 }, { at: 0.88, half: 7 }, { at: 0.95, half: 12 }, { at: 1, half: 13 }],
+  },
+  18: {
+    tee: [559, 2582],
+    // The marker on the overhead: 263 from the tee, 173 to the green.
+    playLine: [[559, 2582], [754, 1814], [556, 1299]],
+    pin: [560, 1240],
+    green: [
+      [577, 1238], [602, 1245], [619, 1268], [621, 1304], [607, 1332],
+      [581, 1342], [556, 1334], [542, 1309], [540, 1272], [555, 1248],
+    ],
+    // The stream and the property line down the right of the green.
+    water: [[
+      [896, 2075], [937, 1934], [958, 1747], [966, 1560], [948, 1404], [922, 1279],
+      [896, 1186], [878, 1201], [904, 1295], [925, 1412], [943, 1560], [937, 1747],
+      [915, 1934], [875, 2075],
+    ]],
+    trees: [
+      // The stand on the inside of the turn, which is why the hole goes right.
+      { shape: [[439, 1685], [505, 1654], [585, 1700], [593, 1856], [527, 1919], [454, 1888], [427, 1794]], density: 0.62, canopy: [5, 9] },
+      // The chute off the tee.
+      { shape: [[337, 2184], [439, 2153], [483, 2340], [468, 2652], [366, 2746], [329, 2496]], density: 0.5, canopy: [5, 9] },
+      { shape: [[819, 2215], [937, 2262], [966, 2496], [878, 2714], [761, 2683], [761, 2418]], density: 0.5, canopy: [5, 9] },
+    ],
+    paths: [{ line: [[878, 2106], [937, 1872], [966, 1638], [958, 1404], [922, 1232]], width: 3 }],
+    widths: [{ at: 0.08, half: 16 }, { at: 0.42, half: 19 }, { at: 0.62, half: 18 }, { at: 0.86, half: 14 }, { at: 1, half: 16 }],
+  },
+};
 
 /** The hole's card row, for handing to the tracer. */
 function cardEntry(spec: HoleSpec): CardEntry {
@@ -466,10 +512,8 @@ const card: HoleSpec[] = holes.map((spec) => {
 });
 
 /**
- * The Gold card. Holes 1–16 are the printed numbers; the last two are
- * provisional. The other sets of markers, the ratings and the club's own stroke
- * indexes go here when the scorecard arrives — the holes are authored at this
- * card, so every other set is this one with the tee moved.
+ * The Gold card, as the club publishes it. The holes are authored at this card,
+ * so any other set of markers is this one with the tee moved: add them here.
  */
 const GOLD_YARDS: readonly number[] = holes.map((hole) => hole.yards);
 
@@ -491,12 +535,13 @@ export const THE_RANCH: Course = {
     'A dairy farm on the side of Sodom Mountain, turned into golf in 2001 and left as steep as it was found. Corridors through New England hardwood, stone walls between holes, and four greens that sit more than thirty feet below or above their tees.',
   identity: [
     'The club\'s Gold card: 7,129 yards, rating 74.8, slope 142',
-    'Built hole by hole off the club\'s own overheads; the 17th and 18th await theirs',
+    'Built hole by hole off the club\'s own overheads; the 17th and 18th traced from them',
     'Hillside routing: 40 feet down the 10th and the 15th, 38 up the 7th',
     'Hardwood on both sides of nearly every corridor — no bail-out and no recovery',
     'The 6th turns 220 yards from the tee and leaves 127 in',
     'The 13th and the 16th are 610 and 611 yards, both of them climbing at the end',
-    'Water on the 1st, the 4th and the 16th; the rest of the trouble is timber',
+    'The 17th is 182 yards and 150 of them are water',
+    'Water on the 1st, the 4th, the 16th and the 17th; the rest of the trouble is timber',
   ],
   tees: TEES,
   teeId: 'gold',

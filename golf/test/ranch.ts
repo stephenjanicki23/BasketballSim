@@ -16,7 +16,7 @@
  */
 import { THE_RANCH, SPLITS } from '../src/data/courses/ranch';
 import { buildHole } from '../src/simulation/courseEngine';
-import { dist } from '../src/simulation/geometry';
+import { dist, polylineLength } from '../src/simulation/geometry';
 import type { HoleSpec } from '../src/simulation/types';
 
 /** The legs are printed to the yard and the corner is where they disagree most. */
@@ -34,8 +34,24 @@ const fail = (what: string, got: unknown, want: unknown): void => {
   console.log(`      FAIL ${what}: ${got}, expected ${want}`);
 };
 
-/** Where the corridor turns: the bend that moves it furthest, as a fraction. */
+/**
+ * Where the corridor turns, as a fraction of the hole. A traced hole turns at
+ * the vertex the trace put there — which is the marker itself, so checking it
+ * against the printed fraction says whether the trace read the image right. An
+ * authored hole turns at its largest bend.
+ */
 function corner(spec: HoleSpec): { at: number; shift: number } | null {
+  const line = spec.centreline;
+  if (line && line.length > 2) {
+    const tee = line[0];
+    const green = line[line.length - 1];
+    const dx = green.x - tee.x;
+    const dy = green.y - tee.y;
+    // How far the corner stands off the tee-to-green line; positive is right of
+    // it, the same convention a bend's shift uses.
+    const offset = ((line[1].x - tee.x) * dy - (line[1].y - tee.y) * dx) / Math.hypot(dx, dy);
+    return { at: polylineLength(line.slice(0, 2)) / polylineLength(line), shift: offset };
+  }
   if (!spec.bends?.length) return null;
   const biggest = [...spec.bends].sort((a, b) => Math.abs(b.shift) - Math.abs(a.shift))[0];
   return Math.abs(biggest.shift) >= CORNER_SHIFT ? { at: biggest.at, shift: biggest.shift } : null;
@@ -53,7 +69,7 @@ for (const spec of THE_RANCH.holes) {
   const row = (printed: string, marker: string) =>
     console.log(
       `    ${String(spec.number).padStart(2)}    ${spec.par}   ${String(spec.yards).padStart(3)}` +
-        `   ${printed.padEnd(14)} ${marker.padEnd(8)} ${(turn ? `${turn.at.toFixed(2)} ${turn.shift > 0 ? 'R' : 'L'}${Math.abs(turn.shift)}` : '—').padEnd(8)} ` +
+        `   ${printed.padEnd(14)} ${marker.padEnd(8)} ${(turn ? `${turn.at.toFixed(2)} ${turn.shift > 0 ? 'R' : 'L'}${Math.round(Math.abs(turn.shift))}` : '—').padEnd(9)} ` +
         `${(ratio * 100).toFixed(1)}%`,
     );
 
@@ -83,9 +99,8 @@ for (const spec of THE_RANCH.holes) {
 }
 
 const traced = THE_RANCH.holes.filter((hole) => hole.centreline).length;
-const provisional = THE_RANCH.holes.filter((hole) => hole.strategy.includes('PROVISIONAL SHAPE')).length;
 console.log(
-  `\n  ${THE_RANCH.holes.length - provisional} holes off the overheads, ${provisional} awaiting theirs, ` +
-    `${traced} traced from an image — ${failures} failure${failures === 1 ? '' : 's'}`,
+  `\n  all ${THE_RANCH.holes.length} holes off the overheads, ${traced} of them traced from the image itself` +
+    ` — ${failures} failure${failures === 1 ? '' : 's'}`,
 );
 if (failures > 0) process.exitCode = 1;
