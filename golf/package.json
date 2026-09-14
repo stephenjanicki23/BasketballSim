@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "npm run build && node tools/smoke.mjs",
+    "artifact": "npm run build && node tools/artifact.mjs",
     "calibrate": "node tools/tsrun.mjs test/calibration.ts && node tools/tsrun.mjs test/roundCheck.ts && node tools/tsrun.mjs test/seasonCheck.ts",
     "test": "node tools/tsrun.mjs test/regression.ts"
   },
