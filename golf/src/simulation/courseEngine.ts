@@ -577,7 +577,8 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
   // under it is whatever the course puts outside the mown grass. Before the
   // fairway starts and past the green the corridor still exists — it is the
   // ramp that has closed — so those keep their rough.
-  const fromFairway = hole.corridorHalfWidth(proj.along) > 0.2 ? offLine - Math.max(halfWidth, 0) : 1e4;
+  const noCorridor = hole.corridorHalfWidth(proj.along) <= 0.2;
+  const fromFairway = noCorridor ? 1e4 : offLine - Math.max(halfWidth, 0);
   const edges = [
     bands.firstCut,
     bands.firstCut + bands.lightRough,
@@ -594,15 +595,19 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
   const fromGreen = Math.max(0, greenEdge - FRINGE_WIDTH) / 2.1;
   const effective = Math.min(fromFairway + shift, fromGreen);
 
+  const surroundWidth = hole.course.surroundWidth ?? hole.style.surroundWidth;
+  const surround: LieType = hole.style.surround === 'recovery' ? 'pineStraw' : hole.style.surround;
   if (effective <= edges[0]) info.lie = 'firstCut';
   else if (effective <= edges[1]) info.lie = 'lightRough';
   else if (effective <= edges[2]) info.lie = 'heavyRough';
   else if (effective <= edges[3]) info.lie = 'deepRough';
-  else if (effective <= edges[3] + (hole.course.surroundWidth ?? hole.style.surroundWidth)) {
-    info.lie = hole.style.surround === 'recovery' ? 'pineStraw' : hole.style.surround;
-  } else {
-    info.lie = 'ob';
-  }
+  else if (effective <= edges[3] + surroundWidth) info.lie = surround;
+  // Where the hole has no corridor, the carry is all surround — desert on a
+  // desert course — and the boundary stays where it is on the rest of the hole.
+  // Calling it out of bounds would put a stroke-and-distance penalty across the
+  // middle of a par 3.
+  else if (noCorridor && offLine <= edges[3] + surroundWidth) info.lie = surround;
+  else info.lie = 'ob';
   return info;
 }
 
@@ -644,7 +649,13 @@ export function dropPoint(hole: HoleGeometry, from: Vec2, to: Vec2): Vec2 {
     const lie = terrainAt(hole, candidate).lie;
     if (lie !== 'water' && lie !== 'ob') return candidate;
   }
-  return candidate;
+  // Nothing playable on the way back — a hazard that runs the length of the
+  // hole, or a boundary tight against it. Take the relief the centreline gives:
+  // a drop has to leave the ball somewhere it can be played from.
+  const proj = projectToPolyline(hole.centerline, to);
+  const along = clamp(proj.along, 12, hole.centerlineLength - 12);
+  const line = pointAlongPolyline(hole.centerline, along).point;
+  return terrainAt(hole, line).lie === 'water' ? candidate : line;
 }
 
 // ---------------------------------------------------------------------------

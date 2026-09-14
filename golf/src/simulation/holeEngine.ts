@@ -126,7 +126,10 @@ function offsetTargets(ball: Vec2, target: Vec2, offsets: number[]): Vec2[] {
 function candidatesFor(ctx: ShotContext, fast: boolean): Candidate[] {
   const { hole, ball } = ctx;
   const toPin = dist(ball, hole.pin);
+  // A lie can leave nothing legal in the bag — a ball still inside a boundary
+  // the drop could not escape. Something has to be swung, so it is the lob wedge.
   const clubs = legalClubs(ctx);
+  if (clubs.length === 0) return [{ club: 'LW', shotType: 'pitch', target: hole.pin }];
   const candidates: Candidate[] = [];
 
   // --- Around the green ---------------------------------------------------

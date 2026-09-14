@@ -13,9 +13,10 @@
  *    overheads (432-yard par 5s, a 285-yard par 4). The Concord plays 7,034
  *    from the championship tees; set `SCALE` to `CHAMPIONSHIP` below and the
  *    whole course — yardages, bends, bunker positions, hazards — scales to it.
- * 2. **Holes 1, 17 and 18 are reconstructed** from the neighbouring holes'
- *    overheads, where they appear in frame. Par is fixed by the card (72), the
- *    shapes are right, the yardages are estimates.
+ * 2. **The 1st is the one hole without a yardage.** Its overhead arrived as a
+ *    crop with no banner on it, so 370 yards is an estimate; the shape, the
+ *    bend and the bearing are traced like every other hole, and par is fixed by
+ *    the card.
  * 3. **Elevation is inferred**, from tee pads standing above washes, retaining
  *    walls, cart-path switchbacks and the fall of the desert between holes. No
  *    topographic survey was available. The altitude of the property — which is
@@ -35,21 +36,24 @@ void CHAMPIONSHIP;
 
 const holes: HoleSpec[] = [
   {
-    number: 1, name: 'First Light', par: 4, yards: 350, bearing: 258, index: 9,
-    dogleg: 38, doglegAt: 0.5, fairwayWidth: 19,
-    bends: [{ at: 0.46, shift: 38, turn: 0.14 }],
+    number: 1, name: 'First Light', par: 4, yards: 370, bearing: 258, index: 9,
+    dogleg: 0, doglegAt: 0.55, fairwayWidth: 19,
+    // The corridor runs some fifty yards left of the tee-to-green line and turns
+    // back right at the corner, so from the tee you are playing at the bend
+    // rather than at the flag.
+    bends: [{ at: 0.30, shift: -46, turn: 0.22 }, { at: 0.72, shift: 46, turn: 0.18 }],
     widths: [{ at: 0.10, half: 21 }, { at: 0.50, half: 19 }, { at: 0.74, half: 16 }, { at: 1, half: 19 }],
-    groves: [{ from: 60, to: 330, side: -1, offset: 22, depth: 16, density: 0.3, canopy: [2, 3.6] }],
+    groves: [{ from: 60, to: 340, side: -1, offset: 22, depth: 16, density: 0.3, canopy: [2, 3.6] }],
     landforms: [{ at: 0.18, rise: -9, length: 90 }],
     elevation: { landing: -12, green: -8 }, greenSize: 14, pin: { x: 3, y: 3 },
     greenSlope: { x: -1.4, y: -1.2 }, trees: 0.12,
     bunkers: [
-      { along: 196, lateral: 19, size: 6, kind: 'fairway' },
-      { along: 338, lateral: -14, size: 6, kind: 'greenside' },
+      { along: 210, lateral: 19, size: 6, kind: 'fairway' },
+      { along: 356, lateral: -14, size: 6, kind: 'greenside' },
     ],
     water: [],
     waste: [{ from: 0, to: 118, side: -1, offset: 16, width: 60 }, { from: 0, to: 118, side: 1, offset: 16, width: 60 }],
-    strategy: 'Off an elevated tee across the wash, then right around the corner. The bunker at 195 sits on the inside of the turn — go past it and the green opens up.',
+    strategy: 'Off an elevated tee across the wash, out to the left and back right around the corner. The bunker on the inside of the turn is the whole tee shot; past it the green opens up.',
   },
   {
     number: 2, name: 'Long Wash', par: 5, yards: 432, bearing: 322, index: 13,
@@ -318,40 +322,50 @@ const holes: HoleSpec[] = [
     strategy: 'All carry, downhill into a bowl, with a deep bunker front-left. The small green gathers from the right, which is the only help the hole gives you.',
   },
   {
-    number: 17, name: 'Water Return', par: 4, yards: 345, bearing: 300, index: 3,
-    dogleg: -16, doglegAt: 0.5, fairwayWidth: 18,
-    bends: [{ at: 0.50, shift: -16, turn: 0.16 }],
-    widths: [{ at: 0.10, half: 19 }, { at: 0.50, half: 18 }, { at: 0.78, half: 15 }, { at: 1, half: 17 }],
-    groves: [{ from: 40, to: 200, side: -1, offset: 20, depth: 16, density: 0.3, canopy: [2, 3.4] }],
-    landforms: [{ at: 0.5, rise: -7, length: 130 }],
-    elevation: { landing: 2, green: -4 }, greenSize: 14, pin: { x: 4, y: 3 },
-    greenSlope: { x: -1.6, y: 1.6 }, trees: 0.12,
-    bunkers: [
-      { along: 206, lateral: -16, size: 6, kind: 'fairway' },
-      { along: 336, lateral: 12, size: 6, kind: 'greenside', deep: true },
+    number: 17, name: 'Lake Corner', par: 4, yards: 375, bearing: 70, index: 3,
+    dogleg: 0, doglegAt: 0.6, fairwayWidth: 16,
+    // Ninety yards of desert off the tee, then the fairway bows right and the
+    // hole turns back left to a green with the lake long and left of it.
+    bends: [{ at: 0.35, shift: 36, turn: 0.22 }, { at: 0.80, shift: -36, turn: 0.18 }],
+    widths: [
+      { at: 0, half: 0 }, { at: 0.22, half: 0 }, { at: 0.32, half: 16 },
+      { at: 0.62, half: 15 }, { at: 0.85, half: 13 }, { at: 1, half: 15 },
     ],
-    water: [{ along: 0, lateral: 0, size: 0, strip: { from: 190, to: 330, side: 1, offset: 26, width: 80 } }],
-    waste: [],
-    strategy: 'Back along the same water that runs the 11th, this time on the right the whole way in. The green is on the far corner of it.',
+    groves: [{ from: 30, to: 110, side: 1, offset: 14, depth: 16, density: 0.32, canopy: [2, 3.4] }],
+    landforms: [{ at: 0.20, rise: -8, length: 100 }, { at: 0.86, rise: 7, length: 110 }],
+    elevation: { landing: 4, green: 8 }, greenSize: 14, pin: { x: -3, y: 4 },
+    greenSlope: { x: 1.4, y: -1.6 }, trees: 0.12,
+    bunkers: [
+      { along: 156, lateral: -16, size: 6, kind: 'fairway' },
+      { along: 202, lateral: -15, size: 5, kind: 'fairway' },
+      { along: 366, lateral: 12, size: 6, kind: 'greenside', deep: true },
+    ],
+    water: [{ along: 404, lateral: -30, size: 28 }],
+    waste: [{ from: 0, to: 95, side: -1, offset: 12, width: 60 }, { from: 0, to: 95, side: 1, offset: 12, width: 60 }],
+    strategy: 'From beside the 16th green, ninety yards of desert to a fairway that bends right and then back left, to a green propped on the corner of the lake. Long and left is in the water the 11th plays down.',
   },
   {
-    number: 18, name: 'Home Climb', par: 5, yards: 470, bearing: 60, index: 2,
-    dogleg: 12, doglegAt: 0.5, fairwayWidth: 19,
-    bends: [{ at: 0.38, shift: 26, turn: 0.14 }, { at: 0.76, shift: -14, turn: 0.13 }],
-    widths: [{ at: 0.10, half: 21 }, { at: 0.45, half: 20 }, { at: 0.70, half: 17 }, { at: 1, half: 19 }],
-    groves: [{ from: 80, to: 380, side: -1, offset: 22, depth: 16, density: 0.3, canopy: [2, 3.6] }],
-    landforms: [{ at: 0.6, rise: 9, length: 150 }, { at: 0.92, rise: 8, length: 90 }],
-    elevation: { landing: 8, green: 18 }, greenSize: 15, pin: { x: -4, y: 4 },
+    number: 18, name: 'Home Climb', par: 5, yards: 499, bearing: 15, index: 2,
+    dogleg: 0, doglegAt: 0.45, fairwayWidth: 18,
+    // Housing tight down the left, desert wide open down the right, and the
+    // fairway running up the left of the direct line before the green swings
+    // back across it.
+    bends: [{ at: 0.35, shift: -38, turn: 0.24 }, { at: 0.78, shift: 38, turn: 0.20 }],
+    widths: [{ at: 0.08, half: 19 }, { at: 0.45, half: 18 }, { at: 0.72, half: 15 }, { at: 1, half: 17 }],
+    groves: [{ from: 100, to: 420, side: 1, offset: 24, depth: 18, density: 0.3, canopy: [2, 3.8] }],
+    landforms: [{ at: 0.60, rise: 8, length: 160 }, { at: 0.94, rise: 10, length: 90 }],
+    elevation: { landing: 6, green: 20 }, greenSize: 15, pin: { x: -4, y: 4 },
     greenSlope: { x: 1.6, y: -2.2 }, trees: 0.12,
     bunkers: [
-      { along: 248, lateral: 18, size: 6, kind: 'fairway' },
-      { along: 378, lateral: -16, size: 6, kind: 'fairway' },
-      { along: 456, lateral: 13, size: 6, kind: 'greenside', deep: true },
-      { along: 462, lateral: -12, size: 5, kind: 'greenside' },
+      { along: 200, lateral: 17, size: 6, kind: 'fairway' },
+      { along: 252, lateral: 16, size: 5, kind: 'fairway' },
+      { along: 402, lateral: -16, size: 6, kind: 'fairway' },
+      { along: 482, lateral: -13, size: 6, kind: 'greenside', deep: true },
+      { along: 492, lateral: 12, size: 5, kind: 'greenside' },
     ],
-    water: [{ along: 428, lateral: 24, size: 16 }],
-    waste: [{ from: 100, to: 400, side: 1, offset: 30, width: 55 }],
-    strategy: 'Right, then left, then uphill to the clubhouse. Reachable downwind, and the pond short-right of the green is exactly where a pulled long iron finishes.',
+    water: [],
+    waste: [{ from: 120, to: 430, side: 1, offset: 30, width: 70 }],
+    strategy: 'Five hundred yards uphill, houses down the left and open desert on the right. The green sits on a bench above the fairway: short of it is a wall, not an apron.',
   },
 ];
 

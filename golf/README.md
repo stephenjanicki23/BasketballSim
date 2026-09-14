@@ -331,13 +331,13 @@ Three things about it are stated rather than traced, and the course file says so
 at the top:
 
 - **The card is the forward tee set** — the yardages printed on those overheads
-  (432-yard par 5s, a 285-yard par 4), 5,769 yards in total. One constant at the
+  (432-yard par 5s, a 285-yard par 4), 5,848 yards in total. One constant at the
   top of `concord.ts` scales the whole course — yardages, bends, bunker
   positions, hazards — to the 7,034-yard championship card. It matters: the field
-  averages 67.9 from the forward tees and 71.9 from the tips.
-- **Holes 1, 17 and 18 are reconstructed** from the neighbouring holes' overheads,
-  where they appear in frame. Par is fixed by the card, the shapes are right, the
-  yardages are estimates.
+  averages 67.8 from the forward tees and 71.9 from the tips.
+- **The 1st is the one hole without a yardage.** Its overhead arrived as a crop
+  with no banner on it, so 370 yards is an estimate; the shape, the bend and the
+  bearing are traced like every other hole, and par is fixed by the card.
 - **Elevation is inferred** from tee pads standing above washes, retaining walls
   and the fall of the desert between holes. No topographic survey was to hand.
 
