@@ -3,7 +3,7 @@
  * left, the shot on the right, and a running commentary underneath.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CourseView } from '../components/CourseView';
 import { ShotControls } from '../components/ShotControls';
 import { PuttPanel } from '../components/PuttPanel';
@@ -19,6 +19,8 @@ import { sessionContext } from '../game/session';
 import { describeWeather } from '../simulation/weatherEngine';
 import { dist } from '../simulation/geometry';
 import { benchmarkRound } from '../simulation/benchmark';
+import { DebugPanel } from '../components/DebugPanel';
+import type { DebugOptions } from '../components/render/holeRenderer';
 import { roundTotal } from '../game/session';
 
 export function PlayScreen(): JSX.Element {
@@ -32,6 +34,45 @@ export function PlayScreen(): JSX.Element {
 
   const plan = useMemo(() => (session && golfer ? currentPlan(session, golfer) : null), [session, golfer]);
   const hole = useMemo(() => (session ? sessionHole(session) : null), [session]);
+
+  // --- Trace check ---------------------------------------------------------
+  // A development view, off by default and opened with D: the photograph a hole
+  // was traced from, laid over the geometry the engine plays on.
+  const [debug, setDebug] = useState<DebugOptions | null>(null);
+  const reference = hole?.spec.reference?.image ?? null;
+  useEffect(() => {
+    if (!debug || !reference || debug.image) return;
+    const image = new Image();
+    image.src = reference;
+    image.onload = () => setDebug((current) => (current ? { ...current, image } : current));
+    // Reference images are local working files, not part of the build, so a
+    // missing one is normal rather than broken. Say so instead of showing an
+    // overlay slider that does nothing.
+    image.onerror = () => setDebug((current) => (current ? { ...current, missing: true } : current));
+  }, [debug, reference]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== 'd' && event.key !== 'D') return;
+      if (event.target instanceof HTMLInputElement) return;
+      setDebug((current) =>
+        current
+          ? null
+          : {
+              image: null,
+              opacity: reference ? 0.5 : 0,
+              offset: { x: 0, y: 0 },
+              rotate: 0,
+              zoom: 1,
+              layers: {
+                fairway: true, rough: false, bunkers: true, water: true, green: true,
+                ob: true, paths: true, trees: false, centreline: true, grid: true,
+              },
+            },
+      );
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [reference]);
 
   // A score means nothing on its own. When a practice round finishes, play a
   // slice of the tour over the same holes, the same pins and the same weather,
@@ -133,6 +174,7 @@ export function PlayScreen(): JSX.Element {
           onAim={aim}
           interactive={session.status === 'aiming' && plan.kind === 'swing'}
           puttingView={putting}
+          debug={debug}
           windFrom={session.conditions.weather.windFrom}
           windSpeed={session.conditions.weather.windSpeed}
           showZones={zones}
@@ -152,6 +194,10 @@ export function PlayScreen(): JSX.Element {
               Next hole <span className="hit__hint">space</span>
             </button>
           </div>
+        )}
+
+        {debug && hole && (
+          <DebugPanel hole={hole} debug={debug} onChange={setDebug} onClose={() => setDebug(null)} />
         )}
 
         {session.status === 'roundComplete' && (

@@ -1,7 +1,7 @@
 /** The three venues: identity, hole-by-hole card, difficulty and who they suit. */
 
 import { useState } from 'react';
-import { COURSES, COURSE_BY_ID } from '../data/courses';
+import { COURSES, COURSE_BY_ID, teeSetsFor } from '../data/courses';
 import { COURSE_STYLES } from '../data/courseStyles';
 import { courseFit, fitVerdict } from '../simulation/courseFit';
 import { Bar, Panel, Stat, pct } from '../components/ui';
@@ -35,6 +35,7 @@ export function CoursesScreen(): JSX.Element {
   const [selected, setSelected] = useState(COURSES[0].id);
   const [hole, setHole] = useState<number | null>(null);
   const course = COURSE_BY_ID[selected];
+  const tees = teeSetsFor(course);
   const style = COURSE_STYLES[course.style];
 
   const suited = [...universe.golfers]
@@ -54,7 +55,7 @@ export function CoursesScreen(): JSX.Element {
           <button
             key={option.id}
             type="button"
-            className={option.id === selected ? 'chip-button chip-button--active' : 'chip-button'}
+            className={(option.baseId ?? option.id) === (course.baseId ?? course.id) ? 'chip-button chip-button--active' : 'chip-button'}
             onClick={() => {
               setSelected(option.id);
               setHole(null);
@@ -64,6 +65,23 @@ export function CoursesScreen(): JSX.Element {
           </button>
         ))}
       </div>
+
+      {tees.length > 1 && (
+        <div className="chip-row chip-row--tight">
+          <span className="chip-label">Tees</span>
+          {tees.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={option.id === course.id ? 'chip-button chip-button--active' : 'chip-button'}
+              onClick={() => setSelected(option.id)}
+            >
+              {option.tees?.find((set) => set.id === option.teeId)?.name ?? option.teeId}
+              <small> {option.yards.toLocaleString()}</small>
+            </button>
+          ))}
+        </div>
+      )}
 
       <Panel
         title={course.name}

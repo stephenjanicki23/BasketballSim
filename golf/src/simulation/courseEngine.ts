@@ -17,21 +17,20 @@
 import {
   type Blob,
   type Bounds,
+  type Shape,
   type Vec2,
   add,
-  blobContains,
-  blobEdgeDistance,
   boundsOf,
   dist,
   expandBounds,
-  inBounds,
   norm,
   perp,
   pointAlongPolyline,
-  pointInPolygon,
   polylineLength,
   projectToPolyline,
   scale,
+  shapeFromBlob,
+  shapeFromPolygon,
   sub,
   unionBounds,
   vec,
@@ -73,6 +72,16 @@ function lateralProfile(spec: HoleSpec): (t: number) => number {
 
 function centerlineFor(spec: HoleSpec): Vec2[] {
   const yards = spec.yards;
+  // A traced line wins over a generated one: it is the hole, measured off the
+  // photograph, and only its scale needs settling. Normalising its length to the
+  // card yardage is what keeps the game world in real yards.
+  if (spec.centreline && spec.centreline.length >= 2) {
+    const traced = spec.centreline;
+    const length = polylineLength(traced);
+    const k = yards / length;
+    const origin = traced[0];
+    return traced.map((p) => vec((p.x - origin.x) * k, (p.y - origin.y) * k));
+  }
   const lateral = lateralProfile(spec);
   const steps = Math.max(40, Math.round(yards / 7));
   const path: Vec2[] = [];
@@ -174,6 +183,21 @@ function insideLimit(centerline: Vec2[], length: number, along: number, side: -1
   return (Math.abs((2 * step) / turn)) * 0.75;
 }
 
+/** A polyline given width: the polygon a cart path or a creek occupies. */
+function thickenLine(line: Vec2[], half: number): Vec2[] {
+  const left: Vec2[] = [];
+  const right: Vec2[] = [];
+  for (let i = 0; i < line.length; i++) {
+    const before = line[Math.max(0, i - 1)];
+    const after = line[Math.min(line.length - 1, i + 1)];
+    const tangent = norm(sub(after, before));
+    const side = perp(tangent);
+    right.push(add(line[i], scale(side, half)));
+    left.push(add(line[i], scale(side, -half)));
+  }
+  return [...right, ...left.reverse()];
+}
+
 /** Offset outline of the mown corridor, used for rendering the grass bands. */
 function corridorPolygon(
   centerline: Vec2[],
@@ -234,63 +258,64 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   };
 
   // --- Green ---------------------------------------------------------------
+  // Traced, if the hole came off a photograph; otherwise grown from the spec.
   const greenAxis = Math.atan2(finalTangent.y, finalTangent.x) + rng.range(-0.5, 0.5);
-  const green = blobFrom(
-    greenCenter,
-    spec.greenSize,
-    `${course.id}:${spec.number}:green`,
-    rng.range(1.05, 1.45),
-    greenAxis,
-    0.13,
-  );
-  const pin = add(add(greenCenter, scale(right, spec.pin.x)), scale(finalTangent, spec.pin.y));
+  const green: Shape = spec.greenShape
+    ? shapeFromPolygon(spec.greenShape)
+    : shapeFromBlob(
+        blobFrom(greenCenter, spec.greenSize, `${course.id}:${spec.number}:green`, rng.range(1.05, 1.45), greenAxis, 0.13),
+      );
+  const greenMiddle = green.centre;
+  const pin = add(add(greenMiddle, scale(right, spec.pin.x)), scale(finalTangent, spec.pin.y));
 
   // --- Bunkers -------------------------------------------------------------
   const bunkers = spec.bunkers.map((b, i) => {
+    const kind = b.kind;
+    const deep = b.deep ?? b.kind === 'greenside';
+    if (b.shape) return { shape: shapeFromPolygon(b.shape), kind, deep };
     const { point, tangent } = pointAlongPolyline(centerline, Math.min(b.along, length));
     const r = perp(tangent);
     const center = add(point, scale(r, b.lateral));
     const axis = Math.atan2(tangent.y, tangent.x) + (b.kind === 'fairway' ? 0 : rng.range(-0.7, 0.7));
-    return {
-      blob: blobFrom(center, b.size, `${course.id}:${spec.number}:bunker:${i}`, b.stretch ?? (b.kind === 'fairway' ? 1.7 : 1.25), axis, 0.22),
-      kind: b.kind,
-      deep: b.deep ?? b.kind === 'greenside',
-    };
+    const blob = blobFrom(center, b.size, `${course.id}:${spec.number}:bunker:${i}`, b.stretch ?? (b.kind === 'fairway' ? 1.7 : 1.25), axis, 0.22);
+    return { shape: shapeFromBlob(blob, 44), kind, deep };
   });
 
   // --- Water ---------------------------------------------------------------
   const water = spec.water.map((w, i) => {
+    if (w.shape) return { shape: shapeFromPolygon(w.shape) };
     if (w.strip) {
       const polygon = stripPolygon(centerline, w.strip.from, w.strip.to, w.strip.side, w.strip.offset, w.strip.width, `${course.id}:${spec.number}:strip:${i}`, 0.18);
-      return { polygon, bounds: boundsOf(polygon) };
+      return { shape: shapeFromPolygon(polygon) };
     }
     const { point, tangent } = pointAlongPolyline(centerline, Math.min(w.along, length));
     const r = perp(tangent);
-    const center = add(point, scale(r, w.lateral));
-    const blob = blobFrom(center, w.size, `${course.id}:${spec.number}:water:${i}`, w.stretch ?? 1.3, Math.atan2(tangent.y, tangent.x), 0.18);
-    return { blob, bounds: expandBounds(boundsOf([center]), w.size * (w.stretch ?? 1.3) * 1.6) };
+    let center = add(point, scale(r, w.lateral));
+    const stretch = w.stretch ?? 1.3;
+    // A generated pond that overlaps the putting surface is an authoring slip,
+    // not a design: it turns every approach on that side into a penalty stroke.
+    // Push it back out to a fair distance. A *traced* hazard is never moved —
+    // if the photograph says the water is there, the water is there.
+    const reach = w.size * stretch * 1.16;
+    const need = green.radius + 7 + reach;
+    const gap = dist(center, greenMiddle);
+    if (gap < need && gap > 1e-6) center = add(greenMiddle, scale(norm(sub(center, greenMiddle)), need));
+    const blob = blobFrom(center, w.size, `${course.id}:${spec.number}:water:${i}`, stretch, Math.atan2(tangent.y, tangent.x), 0.18);
+    return { shape: shapeFromBlob(blob, 56) };
   });
-
-  // A pond that overlaps the putting surface is an authoring slip, not a design:
-  // it turns every approach on that side into a penalty stroke. Push any water
-  // that has crept into the green complex back out to a fair distance.
-  for (const w of water) {
-    if (!w.blob) continue;
-    const reach = w.blob.radius * w.blob.stretch * 1.16;
-    const need = spec.greenSize + 7 + reach;
-    const gap = dist(w.blob.center, greenCenter);
-    if (gap < need && gap > 1e-6) {
-      const push = norm(sub(w.blob.center, greenCenter));
-      w.blob.center = add(greenCenter, scale(push, need));
-      w.bounds = expandBounds(boundsOf([w.blob.center]), reach);
-    }
-  }
 
   // --- Desert waste --------------------------------------------------------
   const waste = (spec.waste ?? []).map((w, i) => {
+    if (w.shape) return { shape: shapeFromPolygon(w.shape) };
     const polygon = stripPolygon(centerline, w.from, w.to, w.side, w.offset, w.width, `${course.id}:${spec.number}:waste:${i}`, 0.26);
-    return { polygon, bounds: boundsOf(polygon) };
+    return { shape: shapeFromPolygon(polygon) };
   });
+
+  // --- Authored out of bounds and cart paths --------------------------------
+  const ob = (spec.obZones ?? []).map((zone) => ({ shape: shapeFromPolygon(zone.shape) }));
+  const paths = (spec.cartPaths ?? []).map((path) => ({
+    shape: shapeFromPolygon(thickenLine(path.line, (path.width ?? 3) / 2)),
+  }));
 
   // --- Elevation -----------------------------------------------------------
   // Cross slope in feet per yard of lateral offset. A fairway that tilts more
@@ -369,6 +394,25 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     }
   });
 
+  // Traced stands: the outline is the shape of the wood, and the trees inside it
+  // are procedural. A photograph supports the boundary, not the trunk positions.
+  (spec.treeZones ?? []).forEach((zone, index) => {
+    const g = createRng(`${course.id}:${spec.number}:wood:${index}`);
+    const shape = shapeFromPolygon(zone.shape);
+    const density = clamp(zone.density ?? 0.55, 0.1, 1);
+    const spacing = lerp(17, 7, density);
+    const [minCanopy, maxCanopy] = zone.canopy ?? (style.id === 'parkland' ? [5, 11] : [2.5, 5]);
+    const { minX, minY, maxX, maxY } = shape.bounds;
+    for (let y = minY; y <= maxY; y += spacing) {
+      for (let x = minX; x <= maxX; x += spacing) {
+        const position = vec(x + g.range(-spacing * 0.45, spacing * 0.45), y + g.range(-spacing * 0.45, spacing * 0.45));
+        if (!shape.contains(position)) continue;
+        const radius = g.range(minCanopy, maxCanopy);
+        if (atLeast(position, radius * 0.75)) trees.push({ position, radius, shade: g.range(0, 1) });
+      }
+    }
+  });
+
   for (const tree of spec.specimens ?? []) {
     plant(tree.along, tree.lateral, tree.radius ?? (style.id === 'parkland' ? 9 : 5), rng.range(0.4, 1));
   }
@@ -409,9 +453,8 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   };
 
   let bounds = expandBounds(boundsOf(bands.deepRough), 22);
-  bounds = unionBounds(bounds, expandBounds(boundsOf([greenCenter]), spec.greenSize * 2.4));
-  for (const w of water) bounds = unionBounds(bounds, expandBounds(w.bounds, 8));
-  for (const w of waste) bounds = unionBounds(bounds, expandBounds(w.bounds, 8));
+  bounds = unionBounds(bounds, expandBounds(green.bounds, green.radius * 1.6));
+  for (const area of [...water, ...waste, ...ob, ...paths]) bounds = unionBounds(bounds, expandBounds(area.shape.bounds, 8));
   for (const t of trees) bounds = unionBounds(bounds, expandBounds(boundsOf([t.position]), t.radius + 4));
 
   const built: HoleGeometry = {
@@ -429,6 +472,8 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     bunkers,
     water,
     waste,
+    ob,
+    paths,
     trees,
     exactElevationAt: elevationAt,
     elevationAt,
@@ -508,7 +553,7 @@ function treeAt(hole: HoleGeometry, p: Vec2): boolean {
 export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boolean }): TerrainInfo {
   const proj = projectToPolyline(hole.centerline, p);
   const halfWidth = hole.fairwayHalfWidth(proj.along);
-  const greenEdge = blobEdgeDistance(hole.green, p);
+  const greenEdge = hole.green.edgeDistance(p);
   const info: TerrainInfo = {
     lie: 'fairway',
     lateral: proj.lateral,
@@ -531,19 +576,23 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
   }
 
   for (const w of hole.water) {
-    if (w.blob) {
-      if (blobContains(w.blob, p)) {
-        info.lie = 'water';
-        return info;
-      }
-    } else if (w.polygon && inBounds(w.bounds, p) && pointInPolygon(w.polygon, p)) {
+    if (w.shape.contains(p)) {
       info.lie = 'water';
       return info;
     }
   }
 
+  // Authored boundaries beat everything below them: a ball in somebody's garden
+  // is out of bounds whatever the grass gradient says about it.
+  for (const zone of hole.ob) {
+    if (zone.shape.contains(p)) {
+      info.lie = 'ob';
+      return info;
+    }
+  }
+
   for (const bunker of hole.bunkers) {
-    if (blobContains(bunker.blob, p)) {
+    if (bunker.shape.contains(p)) {
       info.lie = bunker.kind === 'greenside' ? 'greensideBunker' : 'fairwayBunker';
       info.deepBunker = bunker.deep;
       return info;
@@ -556,7 +605,7 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
   }
 
   for (const w of hole.waste) {
-    if (inBounds(w.bounds, p) && pointInPolygon(w.polygon, p)) {
+    if (w.shape.contains(p)) {
       info.lie = 'waste';
       return info;
     }
@@ -635,9 +684,28 @@ export function greenSlopeAt(hole: HoleGeometry, p: Vec2): Vec2 {
   return base;
 }
 
-/** True when a point is inside the green blob. */
+/** True when a point is on the putting surface. */
 export function onGreen(hole: HoleGeometry, p: Vec2): boolean {
-  return blobEdgeDistance(hole.green, p) <= 0;
+  return hole.green.edgeDistance(p) <= 0;
+}
+
+/**
+ * Free relief from a cart path: the nearest point off it, no nearer the hole.
+ * A path is a thing the ball bounces off, not a lie anybody plays from.
+ */
+export function pathRelief(hole: HoleGeometry, p: Vec2): Vec2 {
+  const on = hole.paths.find((path) => path.shape.contains(p));
+  if (!on) return p;
+  for (let radius = 2; radius <= 10; radius += 2) {
+    for (let step = 0; step < 12; step++) {
+      const angle = (step / 12) * Math.PI * 2;
+      const candidate = add(p, vec(Math.cos(angle) * radius, Math.sin(angle) * radius));
+      if (hole.paths.every((path) => !path.shape.contains(candidate)) && terrainAt(hole, candidate).lie !== 'water') {
+        return candidate;
+      }
+    }
+  }
+  return p;
 }
 
 /** Nearest point that is not in a hazard, walking back along a line. */
@@ -793,9 +861,9 @@ export function pinForRound(hole: HoleGeometry, round: number): Vec2 {
   const quadrant = ((round - 1) % 4) * (Math.PI / 2) + rng.range(-0.5, 0.5);
   const tuck = round >= 4 ? 0.62 : round === 3 ? 0.54 : 0.42;
   const reach = hole.green.radius * tuck * rng.range(0.85, 1.1);
-  const candidate = add(hole.greenCenter, vec(Math.cos(quadrant) * reach, Math.sin(quadrant) * reach));
+  const candidate = add(hole.green.centre, vec(Math.cos(quadrant) * reach, Math.sin(quadrant) * reach));
   // Never cut a pin off the putting surface.
-  return blobEdgeDistance(hole.green, candidate) < -2.5 ? candidate : hole.pin;
+  return hole.green.edgeDistance(candidate) < -2.5 ? candidate : hole.pin;
 }
 
 export function courseBounds(course: Course): Bounds {

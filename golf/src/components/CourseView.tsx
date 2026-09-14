@@ -9,8 +9,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type Camera, fitCamera, toWorld } from './render/camera';
-import { drawHole, drawHoleMap } from './render/holeRenderer';
-import { type Vec2, blobOutline, dist, norm, sub } from '../simulation/geometry';
+import { drawHole, drawHoleMap, type DebugOptions } from './render/holeRenderer';
+import { type Vec2, dist, norm, sub } from '../simulation/geometry';
 import { dispersionContour, sigmaForShare, type ShotPlan } from '../simulation/shotEngine';
 import type { GreenRead } from '../simulation/puttingEngine';
 import type { FlightAnimation } from '../game/session';
@@ -32,6 +32,8 @@ export interface CourseViewProps {
   windSpeed: number;
   showZones: { fifty: boolean; seventyFive: boolean; ninety: boolean };
   showDispersion: boolean;
+  /** Developer overlay: the source image and the traced geometry over it. */
+  debug?: DebugOptions | null;
 }
 
 function rotationFor(direction: Vec2): number {
@@ -41,7 +43,7 @@ function rotationFor(direction: Vec2): number {
 export function CourseView(props: CourseViewProps): JSX.Element {
   const {
     hole, ball, target, plan, putt, animation, onAnimationDone, onAim,
-    interactive, puttingView, windFrom, windSpeed, showZones, showDispersion, shotLines,
+    interactive, puttingView, windFrom, windSpeed, showZones, showDispersion, shotLines, debug,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -86,7 +88,7 @@ export function CourseView(props: CourseViewProps): JSX.Element {
         { x: hole.bounds.maxX, y: hole.bounds.minY },
       );
     } else if (puttingView) {
-      points.push(...blobOutline(hole.green, 16), hole.pin);
+      points.push(...hole.green.outline, hole.pin);
     } else {
       points.push(hole.pin);
       if (target) points.push(target);
@@ -194,6 +196,7 @@ export function CourseView(props: CourseViewProps): JSX.Element {
         windSpeed,
         puttingView,
         hoverTarget: hover,
+        debug,
       });
       raf = requestAnimationFrame(render);
     };
@@ -201,7 +204,7 @@ export function CourseView(props: CourseViewProps): JSX.Element {
     return () => cancelAnimationFrame(raf);
   }, [
     hole, camera, ball, target, plan, putt, flight, trail, shotLines, showDispersion,
-    showZones, windFrom, windSpeed, puttingView, hover, size, interactive, animation,
+    showZones, windFrom, windSpeed, puttingView, hover, size, interactive, animation, debug,
   ]);
 
   // --- Hole map inset ------------------------------------------------------

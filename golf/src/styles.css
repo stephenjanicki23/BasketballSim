@@ -1,0 +1,60 @@
+
+/* --- Trace check: the development overlay ------------------------------- */
+.debug-sliders {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.debug-sliders label {
+  display: grid;
+  grid-template-columns: 62px 1fr 68px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.debug-sliders span {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+.debug-layers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.debug-layers label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.debug-readout {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+.debug-readout .label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+}
+
+.chip-row--tight {
+  margin-top: -6px;
+  align-items: center;
+}
+.chip-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+.chip-button small {
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}

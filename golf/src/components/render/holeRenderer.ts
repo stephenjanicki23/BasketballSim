@@ -11,7 +11,7 @@
  */
 
 import { type Camera, toScreen } from './camera';
-import { type Vec2, blobOutline, pointAlongPolyline } from '../../simulation/geometry';
+import { type Vec2, pointAlongPolyline } from '../../simulation/geometry';
 import { createRng } from '../../simulation/rng';
 import { dispersionContour, sigmaForShare, type ShotPlan } from '../../simulation/shotEngine';
 import type { GreenRead } from '../../simulation/puttingEngine';
@@ -40,6 +40,36 @@ export interface RenderOptions {
   /** Putting view draws slope arrows and the read. */
   puttingView: boolean;
   hoverTarget: Vec2 | null;
+  /** Developer view: the source photograph and the geometry traced from it. */
+  debug?: DebugOptions | null;
+}
+
+/**
+ * What the reconstruction looks like against what it was reconstructed from.
+ * The overlay is placed by the transform the trace recorded, so it lands where
+ * the geometry lands and any daylight between them is a fault in the trace.
+ */
+export interface DebugOptions {
+  image: HTMLImageElement | null;
+  /** The hole names a reference image, but it is not on disk. */
+  missing?: boolean;
+  opacity: number;
+  /** Manual nudge on top of the recorded alignment, in yards and radians. */
+  offset: Vec2;
+  rotate: number;
+  zoom: number;
+  layers: {
+    fairway: boolean;
+    rough: boolean;
+    bunkers: boolean;
+    water: boolean;
+    green: boolean;
+    ob: boolean;
+    paths: boolean;
+    trees: boolean;
+    centreline: boolean;
+    grid: boolean;
+  };
 }
 
 function path(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly Vec2[]): void {
@@ -438,7 +468,7 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
 
   // --- Desert waste --------------------------------------------------------
   for (const waste of hole.waste) {
-    path(ctx, camera, waste.polygon);
+    path(ctx, camera, waste.shape.outline);
     ctx.fillStyle = palette.waste;
     ctx.fill();
     ctx.strokeStyle = 'rgba(120, 92, 58, 0.55)';
@@ -454,7 +484,7 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
 
   // --- Water ---------------------------------------------------------------
   for (const water of hole.water) {
-    const outline = water.blob ? blobOutline(water.blob, 56) : water.polygon ?? [];
+    const outline = water.shape.outline;
     path(ctx, camera, outline);
     ctx.fillStyle = palette.water;
     ctx.fill();
@@ -496,7 +526,7 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
   // --- Bunkers -------------------------------------------------------------
   const sandShadow = clampOffset(shadowOffset(camera, 1.5), 10);
   for (const bunker of hole.bunkers) {
-    const outline = blobOutline(bunker.blob, 44);
+    const outline = bunker.shape.outline;
     // Sand sits below the ground it is cut into, so the high side throws a
     // shadow across it and the low lip catches the light.
     ctx.save();
@@ -537,7 +567,7 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
   }
 
   // --- Green ---------------------------------------------------------------
-  const greenOutline = blobOutline(hole.green, 72);
+  const greenOutline = hole.green.outline;
   const fringeOutline = greenOutline.map((p) => {
     const dx = p.x - hole.greenCenter.x;
     const dy = p.y - hole.greenCenter.y;
@@ -599,6 +629,9 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
 
   // --- Ball and flight -----------------------------------------------------
   drawBallAndFlight(ctx, options);
+
+  // --- Developer overlay ---------------------------------------------------
+  if (options.debug) drawDebug(ctx, options, options.debug);
 
   // --- Vignette ------------------------------------------------------------
   // The eye reads a frame that falls off at the corners as depth. It is the
@@ -786,6 +819,91 @@ function drawTree(
   ctx.drawImage(sprite, centre.x - size / 2, centre.y - size / 2, size, size);
 }
 
+/**
+ * The source image over the reconstruction, and the reconstruction's own
+ * boundaries over that. Everything here is a development tool: it draws last,
+ * it draws nothing the player sees, and it is off unless asked for.
+ */
+function drawDebug(ctx: CanvasRenderingContext2D, options: RenderOptions, debug: DebugOptions): void {
+  const { camera, hole } = options;
+  const reference = hole.spec.reference;
+
+  if (debug.image && reference && debug.opacity > 0.01) {
+    // Place the photograph by the transform the trace recorded: pixels to yards,
+    // rotate the green onto the y-axis, tee to the origin — then the camera.
+    const origin = toScreen(camera, { x: debug.offset.x, y: debug.offset.y });
+    const yardsToPixels = camera.scale * reference.scale * debug.zoom;
+    const angle = -camera.rotation - reference.angle + debug.rotate;
+    ctx.save();
+    ctx.globalAlpha = debug.opacity;
+    ctx.translate(origin.x, origin.y);
+    ctx.rotate(angle);
+    // The screen's y points down and the image's y points down too, so the
+    // vertical flip the world needs is applied to the world, not to the image.
+    ctx.scale(yardsToPixels, yardsToPixels * (reference.flip === -1 ? 1 : -1));
+    ctx.drawImage(debug.image, -reference.origin.x, -reference.origin.y);
+    ctx.restore();
+  }
+
+  const outline = (points: readonly Vec2[], colour: string, width = 1.6) => {
+    if (points.length < 2) return;
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    path(ctx, camera, points);
+    ctx.stroke();
+  };
+
+  const { layers } = debug;
+  if (layers.grid) {
+    // Fifty-yard rings from the tee: the scale, made visible.
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.font = '11px ui-monospace, monospace';
+    for (let yards = 50; yards <= hole.centerlineLength + 50; yards += 50) {
+      const centre = toScreen(camera, hole.tee);
+      ctx.beginPath();
+      ctx.arc(centre.x, centre.y, yards * camera.scale, 0, Math.PI * 2);
+      ctx.stroke();
+      const label = toScreen(camera, { x: hole.tee.x, y: hole.tee.y + yards });
+      ctx.fillText(`${yards}`, label.x + 3, label.y);
+    }
+  }
+  if (layers.rough) {
+    outline(hole.bands.deepRough, 'rgba(120, 220, 120, 0.5)');
+    outline(hole.bands.lightRough, 'rgba(160, 240, 160, 0.4)');
+  }
+  if (layers.fairway) outline(hole.bands.fairway, 'rgba(255, 255, 120, 0.9)', 2);
+  if (layers.bunkers) for (const bunker of hole.bunkers) outline(bunker.shape.outline, 'rgba(255, 210, 120, 0.95)');
+  if (layers.water) for (const water of hole.water) outline(water.shape.outline, 'rgba(120, 200, 255, 0.95)', 2);
+  if (layers.ob) for (const zone of hole.ob) outline(zone.shape.outline, 'rgba(255, 110, 110, 0.9)', 2);
+  if (layers.paths) for (const cart of hole.paths) outline(cart.shape.outline, 'rgba(230, 230, 230, 0.8)');
+  if (layers.green) outline(hole.green.outline, 'rgba(255, 255, 255, 0.95)', 2);
+  if (layers.trees) {
+    ctx.strokeStyle = 'rgba(80, 255, 160, 0.5)';
+    ctx.lineWidth = 1;
+    for (const tree of hole.trees) {
+      const centre = toScreen(camera, tree.position);
+      ctx.beginPath();
+      ctx.arc(centre.x, centre.y, tree.radius * camera.scale, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  if (layers.centreline) {
+    ctx.strokeStyle = 'rgba(255, 80, 200, 0.95)';
+    ctx.lineWidth = 2;
+    openPath(ctx, camera, hole.centerline);
+    ctx.stroke();
+    for (const point of [hole.tee, hole.pin]) {
+      const screen = toScreen(camera, point);
+      ctx.fillStyle = 'rgba(255, 80, 200, 0.95)';
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 function drawElevation(ctx: CanvasRenderingContext2D, options: RenderOptions): void {
   const { hole, camera } = options;
   const layer = elevationLayer(hole);
@@ -926,10 +1044,10 @@ function drawGreenContours(ctx: CanvasRenderingContext2D, options: RenderOptions
   ctx.clip();
   // Slope arrows on a grid across the green.
   const step = 3.2;
-  const r = hole.green.radius * 1.4;
+  const r = hole.green.radius * 1.5;
   for (let dy = -r; dy <= r; dy += step) {
     for (let dx = -r; dx <= r; dx += step) {
-      const p = { x: hole.greenCenter.x + dx, y: hole.greenCenter.y + dy };
+      const p = { x: hole.green.centre.x + dx, y: hole.green.centre.y + dy };
       const slope = greenSlopeAt(hole, p);
       const magnitude = Math.hypot(slope.x, slope.y);
       if (magnitude < 0.15) continue;
@@ -1143,16 +1261,16 @@ export function drawHoleMap(
   ctx.fillStyle = hole.style.palette.fairway;
   ctx.fill();
   for (const water of hole.water) {
-    path(ctx, camera, water.blob ? blobOutline(water.blob, 28) : water.polygon ?? []);
+    path(ctx, camera, water.shape.outline);
     ctx.fillStyle = hole.style.palette.water;
     ctx.fill();
   }
   for (const bunker of hole.bunkers) {
-    path(ctx, camera, blobOutline(bunker.blob, 18));
+    path(ctx, camera, bunker.shape.outline);
     ctx.fillStyle = hole.style.palette.sand;
     ctx.fill();
   }
-  path(ctx, camera, blobOutline(hole.green, 32));
+  path(ctx, camera, hole.green.outline);
   ctx.fillStyle = hole.style.palette.green;
   ctx.fill();
 

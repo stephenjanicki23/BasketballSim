@@ -1,6 +1,6 @@
 /** Shared domain types. Kept in one place so the engines never import each other in a circle. */
 
-import type { Blob, Bounds, Vec2 } from './geometry';
+import type { Bounds, Shape, Vec2 } from './geometry';
 
 // ---------------------------------------------------------------------------
 // Clubs
@@ -318,6 +318,13 @@ export interface Golfer {
 
 export type CourseStyleId = 'links' | 'desert' | 'parkland';
 
+/**
+ * An outline traced off an aerial image, in the hole's own frame: x is yards
+ * right of the tee-to-green line, y is yards from the tee toward the green.
+ * `traceHole` in /data/courses/trace.ts turns pixels into these.
+ */
+export type TracedShape = Vec2[];
+
 export interface BunkerSpec {
   /** Yards from the tee along the centreline. */
   along: number;
@@ -330,6 +337,8 @@ export interface BunkerSpec {
   stretch?: number;
   /** Deep enough that you cannot advance it far. */
   deep?: boolean;
+  /** Traced outline. When present it is the bunker, and along/lateral/size are ignored. */
+  shape?: TracedShape;
 }
 
 export interface WaterSpec {
@@ -340,6 +349,8 @@ export interface WaterSpec {
   /** A strip runs along the hole rather than sitting as a pond. */
   strip?: { from: number; to: number; side: -1 | 1; offset: number; width: number };
   label?: string;
+  /** Traced outline. When present it is the hazard. */
+  shape?: TracedShape;
 }
 
 export interface WasteSpec {
@@ -348,6 +359,8 @@ export interface WasteSpec {
   side: -1 | 1;
   offset: number;
   width: number;
+  /** Traced outline. When present it is the waste area. */
+  shape?: TracedShape;
 }
 
 /**
@@ -440,6 +453,40 @@ export interface HoleSpec {
   specimens?: { along: number; lateral: number; radius?: number }[];
   /** Landforms over the tee-to-green slope. */
   landforms?: LandformSpec[];
+
+  // --- Traced from an image, when there is one -------------------------------
+  /**
+   * The line of play, traced: points in the hole's frame, tee first, pin last.
+   * When present it *is* the centreline and `bends` are ignored. Its length is
+   * normalised to the card yardage, so the scale stays honest.
+   */
+  centreline?: TracedShape;
+  /** The putting surface, traced. Replaces the generated blob. */
+  greenShape?: TracedShape;
+  /** Out of bounds: housing, a road, the property line. */
+  obZones?: { shape: TracedShape }[];
+  /** Stands of trees, traced as an outline and filled at a density. */
+  treeZones?: { shape: TracedShape; density?: number; canopy?: [number, number] }[];
+  /** Cart paths, traced as their centre line, in yards wide. */
+  cartPaths?: { line: TracedShape; width?: number }[];
+  /**
+   * The image this hole was traced from, and the transform that put it in the
+   * hole's frame. With this the overlay lands exactly where the geometry does,
+   * so any gap between the two is a mistake in the trace rather than in the
+   * alignment.
+   */
+  reference?: {
+    /** Served path, e.g. /holes/concord/18.jpg */
+    image: string;
+    /** Yards per pixel. */
+    scale: number;
+    /** Rotation applied to put the green up the y-axis, radians. */
+    angle: number;
+    /** The tee, in image pixels. */
+    origin: Vec2;
+    /** -1 when the image's y grows downward, which it usually does. */
+    flip: 1 | -1;
+  };
   /** Strategic note shown to the player on the tee. */
   strategy: string;
 }
@@ -483,8 +530,26 @@ export interface CourseStyle {
   surroundWidth: number;
 }
 
+/** One set of markers on the card: its yardages, and its rating if it has one. */
+export interface TeeSet {
+  id: string;
+  name: string;
+  /** Yardage for each of the eighteen holes, in order. */
+  yards: number[];
+  /** Stroke indexes, when a tee set has its own. */
+  index?: number[];
+  rating?: number;
+  slope?: number;
+}
+
 export interface Course {
   id: string;
+  /** The course this is a tee set of; equal to `id` for a course with one card. */
+  baseId?: string;
+  /** Which set of markers this Course object plays from. */
+  teeId?: string;
+  /** Every set on the card. The authored holes are the default one. */
+  tees?: TeeSet[];
   name: string;
   location: string;
   style: CourseStyleId;
@@ -542,10 +607,14 @@ export interface HoleGeometry {
    * par 3 — which is a different thing from the fairway not having started yet.
    */
   corridorHalfWidth: (along: number) => number;
-  green: Blob;
-  bunkers: { blob: Blob; kind: 'fairway' | 'greenside'; deep: boolean }[];
-  water: { blob?: Blob; polygon?: Vec2[]; bounds: Bounds }[];
-  waste: { polygon: Vec2[]; bounds: Bounds }[];
+  green: Shape;
+  bunkers: { shape: Shape; kind: 'fairway' | 'greenside'; deep: boolean }[];
+  water: { shape: Shape }[];
+  waste: { shape: Shape }[];
+  /** Authored out of bounds — housing, a road — beyond the corridor's own boundary. */
+  ob: { shape: Shape }[];
+  /** Cart paths, as thin polygons. Firm, fast and legal to play from. */
+  paths: { shape: Shape }[];
   trees: { position: Vec2; radius: number; shade: number }[];
   /** Elevation in feet, relative to the tee — interpolated, and what callers use. */
   elevationAt: (p: Vec2) => number;

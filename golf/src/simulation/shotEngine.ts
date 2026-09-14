@@ -52,7 +52,7 @@ import {
   tailProbability,
   weatherEffect,
 } from './golferEngine';
-import { approximateLieAt, greenSlopeAt, terrainAt, dropPoint } from './courseEngine';
+import { approximateLieAt, greenSlopeAt, terrainAt, dropPoint, pathRelief } from './courseEngine';
 import { gustedWind, windComponents } from './weatherEngine';
 import { abilityScaleFor, strokesToHoleOut } from './strokesBaseline';
 import type {
@@ -779,6 +779,17 @@ export function resolveShot(ctx: ShotContext, plan: ShotPlan, rng: Rng): ShotRes
   let final = add(landing, scale(rollDirection, roll));
   const rollPath = [landing, final];
 
+  // A ball at rest on a cart path gets free relief, which is what the rules say
+  // and what every player does: step off it and drop. The path is a bounce, not
+  // a lie you play from.
+  if (hole.paths.length > 0) {
+    const relieved = pathRelief(hole, final);
+    if (relieved !== final) {
+      final = relieved;
+      rollPath[1] = final;
+    }
+  }
+
   // --- Hazards -------------------------------------------------------------
   let penalty = 0;
   let penaltyKind: ShotResult['penaltyKind'] = 'none';
@@ -846,7 +857,8 @@ function nearWater(hole: HoleGeometry, from: Vec2, to: Vec2, pad = 6): boolean {
   const minY = Math.min(from.y, to.y) - pad;
   const maxY = Math.max(from.y, to.y) + pad;
   for (const w of hole.water) {
-    if (w.bounds.maxX < minX || w.bounds.minX > maxX || w.bounds.maxY < minY || w.bounds.minY > maxY) continue;
+    const b = w.shape.bounds;
+    if (b.maxX < minX || b.minX > maxX || b.maxY < minY || b.minY > maxY) continue;
     return true;
   }
   return false;

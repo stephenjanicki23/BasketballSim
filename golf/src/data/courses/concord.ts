@@ -30,7 +30,7 @@
  * Hole names are descriptive rather than the club's own.
  */
 
-import type { Course, HoleSpec } from '../../simulation/types';
+import type { Course, HoleSpec, TeeSet } from '../../simulation/types';
 
 const holes: HoleSpec[] = [
   {
@@ -363,6 +363,15 @@ const holes: HoleSpec[] = [
     ],
     water: [],
     waste: [{ from: 120, to: 430, side: 1, offset: 30, width: 70 }],
+    // The overhead this hole was traced from, for the trace check (press D).
+    // Its own card is 499, so the Black tee sits 49 yards behind the image's.
+    reference: {
+      image: '/holes/concord/18.jpg',
+      scale: 499 / 1290,
+      angle: Math.PI / 2 - Math.atan2(1230, 320),
+      origin: { x: 335, y: 1620 },
+      flip: -1,
+    },
     strategy: 'Five hundred and forty-eight yards uphill, houses down the left and open desert on the right. The green sits on a bench above the fairway: short of it is a wall, not an apron.',
   },
 ];
@@ -419,6 +428,11 @@ function stretch(spec: HoleSpec, index: number): HoleSpec {
 
 const card = holes.map(stretch);
 
+/** The card as printed. Add the other sets of markers here as they come in. */
+const TEES: TeeSet[] = [
+  { id: 'black', name: 'Black', yards: [...BLACK_YARDS], index: [...STROKE_INDEX], rating: 73.5, slope: 140 },
+];
+
 export const REVERE_CONCORD: Course = {
   id: 'concord',
   name: 'Revere Concord',
@@ -437,6 +451,8 @@ export const REVERE_CONCORD: Course = {
     'Water on the 5th, the 11th, the 12th and the 17th',
     'Par 3s of 183, 171, 242 and 220 yards — the 12th is a 3 wood',
   ],
+  tees: TEES,
+  teeId: 'black',
   altitude: 2600,
   surroundWidth: 45,
   difficulty: 76,

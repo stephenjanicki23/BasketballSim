@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict';
 
 import { COURSES, COURSE_BY_ID } from '../src/data/courses';
+import { traceHole } from '../src/data/courses/trace';
 import { SCHEDULE } from '../src/data/tournaments';
 import { createTour, TOUR_SIZE } from '../src/data/golfers';
 import { holeGeometry, onGreen, pinForRound, terrainAt, withPin } from '../src/simulation/courseEngine';
@@ -25,7 +26,7 @@ import {
 } from '../src/simulation/puttingEngine';
 import { playHole } from '../src/simulation/holeEngine';
 import { createRng } from '../src/simulation/rng';
-import { add, dist, pointAlongPolyline, scale, vec } from '../src/simulation/geometry';
+import { add, dist, pointAlongPolyline, polylineLength, scale, vec } from '../src/simulation/geometry';
 import { courseFit } from '../src/simulation/courseFit';
 import {
   advanceSeason, createUniverse, currentTournament, seasonComplete, simulateNextRound,
@@ -143,6 +144,41 @@ test('four courses, eighteen holes each', () => {
   }
   const tour = COURSES.filter((course) => SCHEDULE.some((event) => event.courseId === course.id));
   assert.equal(tour.length, 3, 'the schedule should still be the three tour venues');
+});
+
+test('tracing an image puts the hole where the card says it is', () => {
+  // A hole traced diagonally across an image, y growing downward, with a bend.
+  const traced = {
+    tee: [100, 900] as [number, number],
+    pin: [500, 100] as [number, number],
+    playLine: [[100, 900], [300, 500], [500, 100]] as [number, number][],
+    green: [[480, 80], [520, 80], [520, 120], [480, 120]] as [number, number][],
+    bunkers: [{ shape: [[300, 520], [330, 520], [330, 550], [300, 550]] as [number, number][] }],
+  };
+  const spec = traceHole(traced, { number: 1, name: 'Traced', par: 4, yards: 400, index: 1, bearing: 90 });
+
+  assert.equal(spec.yards, 400);
+  const line = spec.centreline!;
+  // The scale comes from the card: the played line is 400 yards, whatever the
+  // image's pixels say.
+  between(polylineLength(line), 399.5, 400.5, 'traced play line');
+  // The tee sits at the origin and the green straight up the y-axis, which is
+  // what the wind model and the camera both assume.
+  between(dist(line[0], vec(0, 0)), 0, 0.01, 'tee at the origin');
+  between(Math.abs(line[line.length - 1].x), 0, 0.01, 'pin on the axis');
+  between(line[line.length - 1].y, 393, 400, 'pin up the axis');
+
+  // A feature traced beside the corner lands beside the corner, at the same scale.
+  const green = spec.greenShape!;
+  between(green.length, 4, 4, 'green points kept');
+  const hole = holeGeometry(
+    { ...COURSE_BY_ID.woodland, id: 'traced-test', holes: [{ ...spec, index: 1 }] },
+    1,
+  );
+  assert.ok(onGreen(hole, hole.green.centre), 'the traced green is a green');
+  between(hole.centerlineLength, 399, 401, 'built centreline');
+  assert.equal(hole.bunkers.length, 1);
+  between(dist(hole.bunkers[0].shape.centre, hole.centerline[1]), 0, 30, 'bunker near the corner it was traced at');
 });
 
 test('every hole builds with a pin on the green', () => {

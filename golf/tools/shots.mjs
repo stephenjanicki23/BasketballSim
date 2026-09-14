@@ -68,7 +68,12 @@ for (const [course, hole] of shots) {
   await page.getByRole('button', { name: `Play hole ${hole}` }).click();
   await page.waitForSelector('.course-canvas');
   await page.waitForTimeout(600);
-  const path = join(outDir, `${course}-${hole}.png`);
+  // --debug presses D for the trace check: source image plus traced geometry.
+  if (args.includes('--debug')) {
+    await page.keyboard.press('d');
+    await page.waitForTimeout(900);
+  }
+  const path = join(outDir, `${course}-${hole}${args.includes('--debug') ? '-debug' : ''}.png`);
   await page.locator('.course-canvas').screenshot({ path });
   console.log(`  ${path}`);
   const leave = page.getByRole('button', { name: /Leave the round/ }).first();

@@ -267,6 +267,83 @@ export function blobBounds(blob: Blob): Bounds {
   return boundsOf(blobOutline(blob, 24));
 }
 
+/**
+ * A closed area on the course — a green, a bunker, a pond, a waste area.
+ *
+ * Two things make one: a *blob*, which is a centre, a radius and a few
+ * harmonics, and is how an invented hole gets an organic edge for free; and a
+ * *polygon*, which is a shape traced off an aerial photograph of a real one.
+ * Everything downstream — what lie the ball is in, where the fringe is, how it
+ * is drawn — goes through this interface, so the two are interchangeable and
+ * the engine never has to care which it is looking at.
+ */
+export interface Shape {
+  /** Closed outline, ready to draw. */
+  outline: Vec2[];
+  bounds: Bounds;
+  centre: Vec2;
+  /** Mean distance from the centre to the edge: the size of the thing. */
+  radius: number;
+  /** Negative inside, positive outside, in yards. */
+  edgeDistance: (p: Vec2) => number;
+  contains: (p: Vec2) => boolean;
+}
+
+export function shapeFromBlob(blob: Blob, steps = 56): Shape {
+  const outline = blobOutline(blob, steps);
+  return {
+    outline,
+    bounds: boundsOf(outline),
+    centre: blob.center,
+    radius: blob.radius,
+    edgeDistance: (p) => blobEdgeDistance(blob, p),
+    contains: (p) => blobContains(blob, p),
+  };
+}
+
+export function shapeFromPolygon(points: readonly Vec2[]): Shape {
+  const outline = [...points];
+  const bounds = boundsOf(outline);
+  let cx = 0;
+  let cy = 0;
+  for (const point of outline) {
+    cx += point.x;
+    cy += point.y;
+  }
+  const centre = { x: cx / outline.length, y: cy / outline.length };
+  const radius = outline.reduce((sum, point) => sum + dist(centre, point), 0) / outline.length;
+  const outer = outline.reduce((max, point) => Math.max(max, dist(centre, point)), 0);
+  const edgeDistance = (p: Vec2): number => {
+    // Far away is the common case, and a cheap one.
+    const rough = dist(centre, p) - outer;
+    if (rough > 6) return rough;
+    const inside = pointInPolygon(outline, p);
+    let best = Infinity;
+    for (let i = 0; i < outline.length; i++) {
+      best = Math.min(best, distanceToSegment(p, outline[i], outline[(i + 1) % outline.length]));
+    }
+    return inside ? -best : best;
+  };
+  return {
+    outline,
+    bounds,
+    centre,
+    radius,
+    edgeDistance,
+    contains: (p) => inBounds(bounds, p) && pointInPolygon(outline, p),
+  };
+}
+
+export function distanceToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const length2 = abx * abx + aby * aby;
+  if (length2 === 0) return dist(p, a);
+  let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / length2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
+}
+
 /** Where a segment first crosses into a region, by bisection. Used for hazard entry points. */
 export function findCrossing(
   from: Vec2,
