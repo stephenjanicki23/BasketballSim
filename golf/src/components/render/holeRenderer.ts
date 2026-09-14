@@ -79,35 +79,209 @@ interface ShadeLayer {
 
 const shadeCache = new Map<string, ShadeLayer>();
 
-/** A coarse light-and-shade bitmap of the hole's height field. */
+/**
+ * Where shadows fall, in screen pixels, for something `yards` of ground away
+ * from what casts it. The sun sits in the north-west of the *course*, not the
+ * top-left of the screen, so the offset turns with the camera — which is what
+ * keeps the hillshade, the green pad, the bunker lips and the trees all agreeing
+ * about the time of day once the view rotates to put the hole up the screen.
+ */
+/** The same offset, but never more than a few pixels once zoomed right in. */
+function clampOffset(offset: { x: number; y: number }, limit: number): { x: number; y: number } {
+  const length = Math.hypot(offset.x, offset.y);
+  if (length <= limit || length === 0) return offset;
+  const k = limit / length;
+  return { x: offset.x * k, y: offset.y * k };
+}
+
+function shadowOffset(camera: Camera, yards: number): { x: number; y: number } {
+  const wx = 0.62;
+  const wy = -0.55;
+  const c = Math.cos(camera.rotation);
+  const s = Math.sin(camera.rotation);
+  const rx = wx * c - wy * s;
+  const ry = wx * s + wy * c;
+  const px = yards * camera.scale;
+  return { x: rx * px, y: -ry * px };
+}
+
+/**
+ * Smooth value noise, for shading only. Ground is not a mathematical surface —
+ * it has grain, and a hillshade of a perfectly smooth field reads as a smear of
+ * airbrush rather than as ground. This never reaches the simulation: the ball
+ * still rolls on the height field the engine authored.
+ */
+function groundGrain(x: number, y: number, seed: number): number {
+  const hash = (ix: number, iy: number): number => {
+    let h = ix * 374761393 + iy * 668265263 + seed * 1274126177;
+    h = (h ^ (h >>> 13)) * 1274126177;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295 - 0.5;
+  };
+  const octave = (scale: number): number => {
+    const px = x / scale;
+    const py = y / scale;
+    const ix = Math.floor(px);
+    const iy = Math.floor(py);
+    const fx = px - ix;
+    const fy = py - iy;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const a = hash(ix, iy);
+    const b = hash(ix + 1, iy);
+    const c = hash(ix, iy + 1);
+    const d = hash(ix + 1, iy + 1);
+    return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy;
+  };
+  return octave(31) * 1.05 + octave(14) * 0.5 + octave(6.5) * 0.24;
+}
+
+/** Separable box blur over a scalar field, used to split coarse from fine. */
+function blur(field: Float32Array, cols: number, rows: number, radius: number): Float32Array {
+  const pass = new Float32Array(cols * rows);
+  const out = new Float32Array(cols * rows);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      let sum = 0;
+      let count = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const x = Math.min(cols - 1, Math.max(0, col + k));
+        sum += field[row * cols + x];
+        count++;
+      }
+      pass[row * cols + col] = sum / count;
+    }
+  }
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      let sum = 0;
+      let count = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const y = Math.min(rows - 1, Math.max(0, row + k));
+        sum += pass[y * cols + col];
+        count++;
+      }
+      out[row * cols + col] = sum / count;
+    }
+  }
+  return out;
+}
+
+/**
+ * Hillshade. The height field is sampled onto a grid, smoothed once (the lie
+ * grid underneath is piecewise flat, and differentiating that gives facets), and
+ * then lit: a surface normal per cell against a sun low in the north-west, plus
+ * a curvature term that darkens hollows and brightens the crowns of ridges the
+ * way ambient light actually behaves, plus a faint height tint.
+ *
+ * Vertical exaggeration is deliberate. Real golf contour — six feet over forty
+ * yards — is almost invisible under a physically honest light, and the whole
+ * point of the shading is that you can see which way a slope runs.
+ */
 function elevationLayer(hole: HoleGeometry): ShadeLayer {
   const key = `${hole.course.id}:${hole.spec.number}`;
   const cached = shadeCache.get(key);
   if (cached) return cached;
 
-  const cols = 96;
-  const rows = 160;
+  const { minX, minY, maxX, maxY } = hole.bounds;
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  const step = 3; // yards per cell
+  const cols = Math.max(48, Math.min(240, Math.round(spanX / step)));
+  const rows = Math.max(48, Math.min(320, Math.round(spanY / step)));
   const canvas = document.createElement('canvas');
   canvas.width = cols;
   canvas.height = rows;
   const ctx = canvas.getContext('2d')!;
-  const { minX, minY, maxX, maxY } = hole.bounds;
-  const spanX = maxX - minX;
-  const spanY = maxY - minY;
   const image = ctx.createImageData(cols, rows);
 
-  // Shade by the slope facing a light from the north-west, plus height.
-  const sample = (cx: number, cy: number) =>
-    hole.elevationAt({ x: minX + (cx / cols) * spanX, y: minY + (cy / rows) * spanY });
+  const raw = new Float32Array(cols * rows);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = minX + ((col + 0.5) / cols) * spanX;
+      const y = minY + ((row + 0.5) / rows) * spanY;
+      raw[row * cols + col] = hole.elevationAt({ x, y }) + groundGrain(x, y, hole.spec.number * 17 + 3);
+    }
+  }
+
+  // One box pass, so the lie grid's flat cells stop showing up as facets.
+  const height = new Float32Array(cols * rows);
+  const at = (col: number, row: number) =>
+    raw[Math.min(rows - 1, Math.max(0, row)) * cols + Math.min(cols - 1, Math.max(0, col))];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      height[row * cols + col] =
+        (at(col, row) * 4 +
+          at(col - 1, row) + at(col + 1, row) + at(col, row - 1) + at(col, row + 1) +
+          (at(col - 1, row - 1) + at(col + 1, row - 1) + at(col - 1, row + 1) + at(col + 1, row + 1)) * 0.5) / 10;
+    }
+  }
+
+  // Split the ground into the broad fall of the hole and the local shapes on
+  // top of it. Lighting the raw field shades half the hole black because it
+  // climbs twenty feet from tee to green; lighting the detail picks out the
+  // dunes, hollows and plateaus, which is what you actually want to see.
+  const base = blur(height, cols, rows, 8);
+  const detail = new Float32Array(cols * rows);
+  for (let i = 0; i < detail.length; i++) detail[i] = height[i] - base[i];
+
+  let low = Infinity;
+  let high = -Infinity;
+  for (const value of height) {
+    if (value < low) low = value;
+    if (value > high) high = value;
+  }
+  const mid = (low + high) / 2;
+  const halfRange = Math.max(8, (high - low) / 2);
+
+  const dx = spanX / cols;
+  const dy = spanY / rows;
+  // A sun low in the north-west. Everything else on the hole — trees, bunker
+  // lips, the green pad — throws its shadow the same way.
+  const lightX = -0.55;
+  const lightY = 0.62;
+  const lightZ = 0.56;
+
+  const sampler = (field: Float32Array) => (col: number, row: number) =>
+    field[Math.min(rows - 1, Math.max(0, row)) * cols + Math.min(cols - 1, Math.max(0, col))];
+  const fine = sampler(detail);
+  const broad = sampler(base);
+
+  const shade = (
+    sample: (col: number, row: number) => number,
+    col: number,
+    row: number,
+    exaggeration: number,
+  ): number => {
+    const gx = ((sample(col + 1, row) - sample(col - 1, row)) / (2 * dx)) * exaggeration;
+    const gy = ((sample(col, row + 1) - sample(col, row - 1)) / (2 * dy)) * exaggeration;
+    const norm = Math.sqrt(gx * gx + gy * gy + 1);
+    return (-gx * lightX + -gy * lightY + lightZ) / norm - lightZ;
+  };
+
+  // Light and shade first, then take the mean out of it. A hillshade is meant to
+  // model which way the ground faces, not to dim the course: if the average cell
+  // comes out dark, every hole is drawn darker than its own palette.
+  const values = new Float32Array(cols * rows);
+  let total = 0;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      // Concave ground sits in its own shade; a crown catches the light.
+      const here = fine(col, row);
+      const around = (fine(col - 2, row) + fine(col + 2, row) + fine(col, row - 2) + fine(col, row + 2)) / 4;
+      const value =
+        shade(fine, col, row, 2.2) * 1.0 +
+        shade(broad, col, row, 0.9) * 0.16 +
+        (here - around) * 0.045 +
+        ((height[row * cols + col] - mid) / halfRange) * 0.025;
+      values[row * cols + col] = value;
+      total += value;
+    }
+  }
+  const mean = total / values.length;
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const here = sample(col, row);
-      const dx = sample(col + 1, row) - here;
-      const dy = sample(col, row + 1) - here;
-      const light = -dx * 0.5 + dy * 0.5;
-      const height = here * 0.9;
-      const value = light * 16 + height * 1.1;
+      const value = values[row * cols + col] - mean;
       const index = ((rows - 1 - row) * cols + col) * 4;
       // Fade the bitmap out at its own edges. Without this the hole sits inside
       // a visible rectangle of shading, which is the one thing that gives away
@@ -120,14 +294,14 @@ function elevationLayer(hole: HoleGeometry): ShadeLayer {
       const fade = edge * edge * (3 - 2 * edge);
       if (value >= 0) {
         image.data[index] = 255;
-        image.data[index + 1] = 255;
-        image.data[index + 2] = 236;
-        image.data[index + 3] = Math.min(70, value * 3.2) * fade;
+        image.data[index + 1] = 250;
+        image.data[index + 2] = 226;
+        image.data[index + 3] = Math.min(180, value * 340) * fade;
       } else {
-        image.data[index] = 12;
-        image.data[index + 1] = 24;
-        image.data[index + 2] = 14;
-        image.data[index + 3] = Math.min(80, -value * 3.4) * fade;
+        image.data[index] = 10;
+        image.data[index + 1] = 26;
+        image.data[index + 2] = 18;
+        image.data[index + 3] = Math.min(165, -value * 320) * fade;
       }
     }
   }
@@ -229,6 +403,26 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
     ctx.fill();
   }
 
+  // --- The mown edges ------------------------------------------------------
+  // Each cut of grass stands taller than the one inside it, so every boundary is
+  // a step rather than a colour change: the taller band throws a thread of shade
+  // across the shorter one, on the side the sun is coming from.
+  if (camera.scale > 0.35) {
+    const step = clampOffset(shadowOffset(camera, 1.2), 9);
+    const edges = [hole.bands.fairway, hole.bands.firstCut, hole.bands.lightRough, hole.bands.heavyRough];
+    for (const band of edges) {
+      ctx.save();
+      path(ctx, camera, band);
+      ctx.clip();
+      ctx.translate(step.x, step.y);
+      ctx.strokeStyle = 'rgba(12, 28, 12, 0.19)';
+      ctx.lineWidth = Math.min(12, Math.max(1.4, 2.6 * camera.scale));
+      path(ctx, camera, band);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   // --- Mowing lines on the fairway ----------------------------------------
   if (camera.scale > 0.55) {
     ctx.save();
@@ -256,7 +450,7 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
   drawElevation(ctx, options);
 
   // --- Texture -------------------------------------------------------------
-  if (camera.scale > 0.9) drawSpeckles(ctx, options);
+  if (camera.scale > 0.4) drawSpeckles(ctx, options);
 
   // --- Water ---------------------------------------------------------------
   for (const water of hole.water) {
@@ -280,6 +474,19 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
       ctx.stroke();
     }
     ctx.restore();
+    // Inner shadow: the bank stands above the surface all the way round.
+    ctx.save();
+    path(ctx, camera, outline);
+    ctx.clip();
+    ctx.shadowColor = 'rgba(6, 30, 46, 0.85)';
+    ctx.shadowBlur = Math.min(14, Math.max(3, 5 * camera.scale));
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = 'rgba(6, 30, 46, 0.9)';
+    ctx.lineWidth = Math.min(10, Math.max(2, 3 * camera.scale));
+    path(ctx, camera, outline);
+    ctx.stroke();
+    ctx.restore();
     ctx.strokeStyle = 'rgba(9, 44, 66, 0.75)';
     ctx.lineWidth = 1.5;
     path(ctx, camera, outline);
@@ -287,11 +494,33 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
   }
 
   // --- Bunkers -------------------------------------------------------------
+  const sandShadow = clampOffset(shadowOffset(camera, 1.5), 10);
   for (const bunker of hole.bunkers) {
     const outline = blobOutline(bunker.blob, 44);
+    // Sand sits below the ground it is cut into, so the high side throws a
+    // shadow across it and the low lip catches the light.
+    ctx.save();
+    ctx.shadowColor = bunker.deep ? 'rgba(24, 18, 6, 0.65)' : 'rgba(30, 24, 10, 0.45)';
+    ctx.shadowBlur = Math.min(14, Math.max(2, (bunker.deep ? 5 : 3) * camera.scale));
+    ctx.shadowOffsetX = sandShadow.x;
+    ctx.shadowOffsetY = sandShadow.y;
     path(ctx, camera, outline);
     ctx.fillStyle = palette.sand;
     ctx.fill();
+    ctx.restore();
+    path(ctx, camera, outline);
+    ctx.fillStyle = palette.sand;
+    ctx.fill();
+    if (camera.scale > 0.8) {
+      ctx.save();
+      ctx.clip();
+      ctx.translate(-sandShadow.x * 1.6, -sandShadow.y * 1.6);
+      ctx.strokeStyle = 'rgba(255, 246, 214, 0.5)';
+      ctx.lineWidth = Math.min(6, Math.max(1, 1.6 * camera.scale));
+      path(ctx, camera, outline);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.strokeStyle = bunker.deep ? 'rgba(120, 96, 52, 0.85)' : 'rgba(150, 128, 84, 0.6)';
     ctx.lineWidth = bunker.deep ? 2 : 1.2;
     ctx.stroke();
@@ -315,6 +544,17 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
     const len = Math.hypot(dx, dy) || 1;
     return { x: p.x + (dx / len) * 3.4, y: p.y + (dy / len) * 3.4 };
   });
+  // A green is built up, and the pad it sits on is most of what tells you so.
+  const padShadow = clampOffset(shadowOffset(camera, 2.6), 14);
+  ctx.save();
+  ctx.shadowColor = 'rgba(12, 26, 12, 0.55)';
+  ctx.shadowBlur = Math.min(16, Math.max(3, 6 * camera.scale));
+  ctx.shadowOffsetX = padShadow.x;
+  ctx.shadowOffsetY = padShadow.y;
+  path(ctx, camera, fringeOutline);
+  ctx.fillStyle = palette.fringe;
+  ctx.fill();
+  ctx.restore();
   path(ctx, camera, fringeOutline);
   ctx.fillStyle = palette.fringe;
   ctx.fill();
@@ -360,43 +600,99 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
   // --- Ball and flight -----------------------------------------------------
   drawBallAndFlight(ctx, options);
 
+  // --- Vignette ------------------------------------------------------------
+  // The eye reads a frame that falls off at the corners as depth. It is the
+  // cheapest dimension in the whole renderer.
+  const vignette = ctx.createRadialGradient(
+    camera.width / 2,
+    camera.height / 2,
+    Math.min(camera.width, camera.height) * 0.36,
+    camera.width / 2,
+    camera.height / 2,
+    Math.max(camera.width, camera.height) * 0.78,
+  );
+  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vignette.addColorStop(1, 'rgba(4, 12, 6, 0.30)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, camera.width, camera.height);
+
   ctx.restore();
 }
 
 /**
- * A tree from above. What kind of tree matters: a stand of pines reads as dark
- * rosettes, hardwoods as lumpy clumps of two or three canopies, gorse as a low
- * olive cushion with flower on it, and a cactus as a pale column with arms. Same
- * circle in the simulation, three different places to be in trouble.
+ * Trees are drawn from sprites, not painted one by one. There are a few hundred
+ * on a wooded hole and they never change, so each kind is painted once into a
+ * small canvas — canopy, highlight and all — and stamped from there. That buys
+ * the soft shadow underneath: blurring three hundred shapes a frame would cost
+ * the frame rate, blurring four sprites once costs nothing.
  */
-function drawTree(
-  ctx: CanvasRenderingContext2D,
-  options: RenderOptions,
-  tree: { position: Vec2; radius: number; shade: number },
-): void {
-  const { camera, hole } = options;
+type TreeKind = 'conifer' | 'hardwood' | 'gorse' | 'saguaro';
+
+/** Mix a hex colour toward daylight, for the side of a thing the sun is on. */
+function lighten(hex: string, amount: number): string {
+  const value = parseInt(hex.slice(1), 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  const mix = (channel: number, target: number) => Math.round(channel + (target - channel) * amount);
+  return `rgb(${mix(r, 214)}, ${mix(g, 232)}, ${mix(b, 158)})`;
+}
+
+const SPRITE = 96;
+const SPRITE_RADIUS = 32;
+const spriteCache = new Map<string, HTMLCanvasElement>();
+let shadowSprite: HTMLCanvasElement | null = null;
+
+function treeKind(hole: HoleGeometry, radius: number): TreeKind {
+  if (hole.style.id === 'desert') return 'saguaro';
+  if (hole.style.id === 'links') return 'gorse';
+  return radius >= 6.5 ? 'conifer' : 'hardwood';
+}
+
+/** A soft round shadow, stamped under everything that stands up off the ground. */
+function groundShadow(): HTMLCanvasElement {
+  if (shadowSprite) return shadowSprite;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(32, 32, 2, 32, 32, 31);
+  gradient.addColorStop(0, 'rgba(0, 0, 0, 0.46)');
+  gradient.addColorStop(0.55, 'rgba(0, 0, 0, 0.28)');
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+  shadowSprite = canvas;
+  return canvas;
+}
+
+function treeSprite(hole: HoleGeometry, kind: TreeKind, variant: number): HTMLCanvasElement {
+  const key = `${hole.style.id}:${kind}:${variant}`;
+  const cached = spriteCache.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = SPRITE;
+  canvas.height = SPRITE;
+  const ctx = canvas.getContext('2d')!;
   const palette = hole.style.palette;
-  const centre = toScreen(camera, tree.position);
-  const r = tree.radius * camera.scale;
-  if (centre.x < -r * 2 || centre.x > camera.width + r * 2 || centre.y < -r * 2 || centre.y > camera.height + r * 2) return;
+  const flip = variant % 2 === 0;
+  const dark = flip ? palette.treeDark : palette.tree;
+  // Sunlit foliage is not the same green as the shaded side of the same tree —
+  // it is warmer and much lighter, and without that a wood reads as a stain.
+  const light = lighten(flip ? palette.tree : palette.treeDark, 0.16);
+  const rng = createRng(`sprite:${key}`);
+  const cx = SPRITE / 2;
+  const cy = SPRITE / 2;
+  const r = SPRITE_RADIUS;
 
-  // Everything is lit from the north-west, so every shadow falls the same way.
-  ctx.beginPath();
-  ctx.ellipse(centre.x + r * 0.28, centre.y + r * 0.34, r * 1.02, r * 0.88, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
-  ctx.fill();
-
-  const dark = tree.shade > 0.5 ? palette.treeDark : palette.tree;
-  const light = tree.shade > 0.5 ? palette.tree : palette.treeDark;
-
-  const rosette = (radius: number, lobes: number, depth: number, fill: string) => {
+  const rosette = (radius: number, lobes: number, depth: number, fill: string, phase: number) => {
     ctx.beginPath();
-    const steps = lobes * 6;
+    const steps = lobes * 8;
     for (let i = 0; i <= steps; i++) {
-      const a = (i / steps) * Math.PI * 2;
-      const rad = radius * (1 - depth + depth * Math.abs(Math.cos((a * lobes) / 2)));
-      const x = centre.x + Math.cos(a) * rad;
-      const y = centre.y + Math.sin(a) * rad;
+      const a = (i / steps) * Math.PI * 2 + phase;
+      const rad = radius * (1 - depth + depth * Math.abs(Math.cos(((a - phase) * lobes) / 2)));
+      const x = cx + Math.cos(a) * rad;
+      const y = cy + Math.sin(a) * rad;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -405,68 +701,89 @@ function drawTree(
     ctx.fill();
   };
 
-  if (hole.style.id === 'desert') {
-    // Saguaro: a column with an arm or two, pale and spiny.
-    ctx.fillStyle = tree.shade > 0.4 ? '#5e7a4e' : '#4d6742';
+  if (kind === 'saguaro') {
+    // A column with an arm or two, pale and spiny.
+    ctx.fillStyle = flip ? '#5e7a4e' : '#4d6742';
     ctx.beginPath();
-    ctx.ellipse(centre.x, centre.y, r * 0.52, r * 0.62, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, r * 0.5, r * 0.6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(centre.x - r * 0.62, centre.y + r * 0.1, r * 0.34, 0, Math.PI * 2);
-    ctx.arc(centre.x + r * 0.58, centre.y - r * 0.24, r * 0.3, 0, Math.PI * 2);
+    ctx.arc(cx - r * 0.6, cy + rng.range(-0.1, 0.25) * r, r * 0.33, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.58, cy - rng.range(0.05, 0.35) * r, r * 0.29, 0, Math.PI * 2);
     ctx.fill();
-    if (r > 4) {
-      ctx.strokeStyle = 'rgba(226, 240, 208, 0.45)';
-      ctx.lineWidth = 0.8;
+    ctx.strokeStyle = 'rgba(232, 244, 214, 0.42)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 2, cy - r * 0.46);
+    ctx.lineTo(cx - 2, cy + r * 0.46);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(18, 30, 14, 0.35)';
+    ctx.beginPath();
+    ctx.moveTo(cx + 5, cy - r * 0.4);
+    ctx.lineTo(cx + 5, cy + r * 0.42);
+    ctx.stroke();
+  } else if (kind === 'gorse') {
+    // A low cushion, and in flower it is unmistakable.
+    rosette(r, 5, 0.32, dark, rng.range(0, Math.PI));
+    rosette(r * 0.6, 5, 0.3, light, rng.range(0, Math.PI));
+    ctx.fillStyle = 'rgba(236, 201, 66, 0.8)';
+    for (let i = 0; i < 6; i++) {
       ctx.beginPath();
-      ctx.moveTo(centre.x, centre.y - r * 0.5);
-      ctx.lineTo(centre.x, centre.y + r * 0.5);
-      ctx.stroke();
-    }
-    return;
-  }
-
-  if (hole.style.id === 'links') {
-    // Gorse: a low cushion, and in flower it is unmistakable.
-    rosette(r, 5, 0.3, dark);
-    if (r > 3) {
-      const rng = createRng(`gorse:${Math.round(tree.position.x)}:${Math.round(tree.position.y)}`);
-      ctx.fillStyle = 'rgba(232, 197, 62, 0.75)';
-      for (let i = 0; i < 4; i++) {
-        ctx.beginPath();
-        ctx.arc(centre.x + rng.range(-r * 0.6, r * 0.6), centre.y + rng.range(-r * 0.6, r * 0.6), Math.max(0.6, r * 0.14), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    return;
-  }
-
-  if (tree.radius >= 6.5) {
-    // Conifer: layered whorls, almost black from above.
-    rosette(r, 7, 0.26, light);
-    rosette(r * 0.66, 7, 0.3, dark);
-    if (r > 6) {
-      ctx.beginPath();
-      ctx.arc(centre.x, centre.y, Math.max(0.8, r * 0.1), 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(58, 42, 28, 0.8)';
+      ctx.arc(cx + rng.range(-r * 0.62, r * 0.62), cy + rng.range(-r * 0.62, r * 0.62), r * 0.11, 0, Math.PI * 2);
       ctx.fill();
     }
-    return;
-  }
-
-  // Hardwood: two or three canopies bunched together.
-  ctx.fillStyle = dark;
-  ctx.beginPath();
-  ctx.arc(centre.x, centre.y, r, 0, Math.PI * 2);
-  ctx.arc(centre.x - r * 0.52, centre.y + r * 0.3, r * 0.62, 0, Math.PI * 2);
-  ctx.arc(centre.x + r * 0.46, centre.y + r * 0.36, r * 0.54, 0, Math.PI * 2);
-  ctx.fill();
-  if (r > 4) {
+  } else if (kind === 'conifer') {
+    // Layered whorls, almost black from above, with the crown catching the sun.
+    const phase = rng.range(0, Math.PI);
+    rosette(r, 11, 0.13, dark, phase);
+    rosette(r * 0.68, 9, 0.12, light, phase + 0.3);
     ctx.beginPath();
-    ctx.arc(centre.x - r * 0.24, centre.y - r * 0.28, r * 0.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+    ctx.arc(cx, cy, r * 0.12, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(52, 38, 24, 0.7)';
+    ctx.fill();
+  } else {
+    // Hardwood: two or three canopies bunched together.
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
+    ctx.arc(cx - r * 0.44, cy + r * 0.3, r * 0.5, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.4, cy + r * 0.34, r * 0.44, 0, Math.PI * 2);
+    ctx.arc(cx + rng.range(-0.2, 0.2) * r, cy - r * 0.46, r * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.24, cy - r * 0.26, r * 0.42, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 240, 0.13)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx + r * 0.3, cy + r * 0.34, r * 0.34, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.14)';
     ctx.fill();
   }
+
+  spriteCache.set(key, canvas);
+  return canvas;
+}
+
+function drawTree(
+  ctx: CanvasRenderingContext2D,
+  options: RenderOptions,
+  tree: { position: Vec2; radius: number; shade: number },
+): void {
+  const { camera, hole } = options;
+  const centre = toScreen(camera, tree.position);
+  const r = tree.radius * camera.scale;
+  if (centre.x < -r * 3 || centre.x > camera.width + r * 3 || centre.y < -r * 3 || centre.y > camera.height + r * 3) return;
+
+  // Taller things throw longer shadows, and they all fall the same way.
+  const offset = shadowOffset(camera, tree.radius * 0.75);
+  const shadowScale = r * 1.5;
+  ctx.drawImage(groundShadow(), centre.x + offset.x - shadowScale, centre.y + offset.y - shadowScale * 0.86, shadowScale * 2, shadowScale * 1.72);
+
+  const kind = treeKind(hole, tree.radius);
+  const variant = Math.min(2, Math.floor(tree.shade * 3));
+  const sprite = treeSprite(hole, kind, variant);
+  const size = r * (SPRITE / SPRITE_RADIUS);
+  ctx.drawImage(sprite, centre.x - size / 2, centre.y - size / 2, size, size);
 }
 
 function drawElevation(ctx: CanvasRenderingContext2D, options: RenderOptions): void {
@@ -485,7 +802,14 @@ function drawElevation(ctx: CanvasRenderingContext2D, options: RenderOptions): v
   const vy = (corners[2].y - corners[1].y) / layer.canvas.height;
   ctx.setTransform(ux, uy, vx, vy, corners[0].x, corners[0].y);
   ctx.imageSmoothingEnabled = true;
+  // Soft light, not a grey wash over the top: the lit side of a slope comes up
+  // and the shaded side goes down, and the grass keeps its own colour.
+  ctx.globalCompositeOperation = 'soft-light';
   ctx.drawImage(layer.canvas, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 0.18;
+  ctx.drawImage(layer.canvas, 0, 0);
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
 
@@ -496,8 +820,11 @@ function drawSpeckles(ctx: CanvasRenderingContext2D, options: RenderOptions): vo
   for (const speck of layer.points) {
     const p = toScreen(camera, speck.p);
     if (p.x < 0 || p.x > camera.width || p.y < 0 || p.y > camera.height) continue;
+    // Never smaller than a pixel: zoomed out to the whole hole, sub-pixel
+    // texture rounds away to nothing and the ground goes back to being flat.
+    const size = Math.min(3, Math.max(1, speck.r * camera.scale * 0.55));
     ctx.fillStyle = speck.shade > 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)';
-    ctx.fillRect(p.x, p.y, speck.r * camera.scale * 0.5, speck.r * camera.scale * 0.5);
+    ctx.fillRect(p.x, p.y, size, size);
   }
   ctx.restore();
 }
@@ -738,10 +1065,15 @@ function drawBallAndFlight(ctx: CanvasRenderingContext2D, options: RenderOptions
   const screen = toScreen(camera, position);
   const lift = position.h * camera.scale * 0.055;
 
-  // Shadow on the ground.
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  // Shadow on the ground, thrown by the same sun as everything else: it runs
+  // away from the ball as the shot climbs and comes back to meet it on landing,
+  // which is most of what tells you how high the ball is.
+  const heightYards = position.h / 3;
+  const cast = shadowOffset(camera, heightYards * 0.8);
+  const spread = 1 + Math.min(1.4, heightYards * 0.05);
+  ctx.fillStyle = `rgba(0, 0, 0, ${0.36 / spread})`;
   ctx.beginPath();
-  ctx.ellipse(screen.x, screen.y, 3.4, 2.1, 0, 0, Math.PI * 2);
+  ctx.ellipse(screen.x + cast.x, screen.y + cast.y, 3.4 * spread, 2.1 * spread, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // The ball itself.

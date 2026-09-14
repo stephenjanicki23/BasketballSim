@@ -289,10 +289,34 @@ inside of a bend is held back before it folds through itself (a folded water
 polygon decides penalties wrongly, not just badly), and waste and coastline taper
 away at their ends rather than stopping at a straight cut.
 
+### Drawing it in three dimensions, on a flat canvas
+
 The renderer draws what that produces: mowing lines that follow the corridor,
 conifers as dark rosettes, hardwoods as bunched canopies, gorse as low cushions
-in flower, saguaro as pale columns with arms — and every shadow falling the same
-way, from a light in the north-west.
+in flower, saguaro as pale columns with arms. What stops it reading as flat
+vector art is that everything agrees about one sun, low in the north-west **of
+the course** — so when the camera turns to put the hole up the screen, the
+shadows turn with it.
+
+- **Hillshade, from the detail rather than the slope.** The height field is
+  sampled to a grid, smoothed once (the lie grid underneath is piecewise flat,
+  and differentiating that gives facets), then split: the broad fall of the hole
+  is lit gently, the local shapes on top of it — dunes, hollows, plateaus — are
+  lit hard. Lighting the raw field shades half the hole black because it climbs
+  twenty feet from tee to green. A curvature term darkens hollows and lifts the
+  crowns of ridges, a grain of value noise gives the ground texture (shading
+  only — the ball still rolls on the field the engine authored), and the whole
+  thing is mean-corrected so it models the ground instead of dimming the course.
+  It goes down in `soft-light`, so the grass keeps its own colour.
+- **Everything that stands up throws a shadow.** Trees, the built-up pad a green
+  sits on, the lip a bunker is cut into, and the ball in flight — whose shadow
+  runs away from it as the shot climbs and comes back to meet it on landing,
+  which is most of what tells you how high the ball is.
+- **Every cut of grass is a step, not a colour change.** Each band throws a
+  thread of shade across the shorter grass inside it, on the side the sun is on.
+- **Trees are sprites.** A few hundred of them on a wooded hole, painted once per
+  kind into a small canvas and stamped from there — which is what makes the soft
+  shadow under each one affordable. The whole thing holds 60 fps.
 
 ## Calibration
 
