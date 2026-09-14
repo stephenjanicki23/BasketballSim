@@ -56,6 +56,14 @@ if (await play.isVisible().catch(() => false)) await play.click();
 for (const [course, hole] of shots) {
   await page.getByRole('button', { name: 'Courses', exact: true }).first().click();
   await page.getByRole('button', { name: NAMES[course] ?? course, exact: true }).click();
+  // course:card screenshots the scorecard screen rather than playing a hole.
+  if (Number.isNaN(hole)) {
+    await page.waitForTimeout(400);
+    const path = join(outDir, `${course}-card.png`);
+    await page.locator('.screen.courses').screenshot({ path });
+    console.log(`  ${path}`);
+    continue;
+  }
   await page.locator('.card-table tbody tr').nth(hole - 1).getByRole('button', { name: 'Select' }).click();
   await page.getByRole('button', { name: `Play hole ${hole}` }).click();
   await page.waitForSelector('.course-canvas');
