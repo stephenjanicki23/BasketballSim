@@ -10,6 +10,11 @@ There are no real teams or players. `bballsim/placeholder.py` invented a
 its fixture list now live in `data/` and are what everything plays with. Delete
 them when you load real data.
 
+> **Also in this repository:** [`golf/`](golf/README.md) is a separate game —
+> *Golf Universe*, a top-down playable golf game wrapped around a fifty-player
+> simulated tour. Different stack (React + TypeScript + canvas), no shared code
+> with the basketball sim. See its own README to run it.
+
 ## Running it
 
 No dependencies. Python 3.11+.

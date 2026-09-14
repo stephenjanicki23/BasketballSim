@@ -9,7 +9,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.mjs"
+    "smoke": "npm run build && node tools/smoke.mjs",
+    "calibrate": "node tools/tsrun.mjs test/calibration.ts && node tools/tsrun.mjs test/roundCheck.ts && node tools/tsrun.mjs test/seasonCheck.ts",
+    "test": "node tools/tsrun.mjs test/regression.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

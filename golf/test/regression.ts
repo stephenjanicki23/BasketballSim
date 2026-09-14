@@ -1,0 +1,535 @@
+/**
+ * Regression tests for the simulation.
+ *
+ * These are not unit tests of arithmetic — they are the assertions that stop the
+ * game quietly stopping being golf. Driving distances, fairways hit, make
+ * percentages, scoring averages and win concentration all have a range that a
+ * real tour lives in, and every one of them is cheap to check and expensive to
+ * notice by eye.
+ *
+ *   node tools/tsrun.mjs test/regression.ts
+ */
+
+import assert from 'node:assert/strict';
+
+import { COURSES, COURSE_BY_ID } from '../src/data/courses';
+import { createTour } from '../src/data/golfers';
+import { holeGeometry, onGreen, pinForRound, terrainAt, withPin } from '../src/simulation/courseEngine';
+import { bagFor, dailyTouch, driverCarry, groupScores } from '../src/simulation/golferEngine';
+import { calmWeather, conditionsFor, windComponents } from '../src/simulation/weatherEngine';
+import { planShot, reachTable, resolveShot, sigmaForShare, type ShotContext } from '../src/simulation/shotEngine';
+import { makeProbability, planPutt, resolvePutt } from '../src/simulation/puttingEngine';
+import { playHole } from '../src/simulation/holeEngine';
+import { createRng } from '../src/simulation/rng';
+import { add, dist, scale, vec } from '../src/simulation/geometry';
+import { courseFit } from '../src/simulation/courseFit';
+import {
+  advanceSeason, createUniverse, currentTournament, seasonComplete, simulateTournament,
+} from '../src/simulation/seasonEngine';
+import { serializeUniverse } from '../src/simulation/persistence';
+import { buildLeaderboard, payout } from '../src/simulation/tournamentEngine';
+import type { Golfer } from '../src/simulation/types';
+
+let passed = 0;
+let failed = 0;
+
+function test(name: string, body: () => void): void {
+  try {
+    body();
+    passed++;
+    console.log(`  ok   ${name}`);
+  } catch (error) {
+    failed++;
+    console.log(`  FAIL ${name}`);
+    console.log(`       ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
+  }
+}
+
+function between(value: number, low: number, high: number, what: string): void {
+  assert.ok(value >= low && value <= high, `${what} was ${value.toFixed(3)}, expected ${low}–${high}`);
+}
+
+const tour = createTour();
+const byName = (name: string): Golfer => {
+  const golfer = tour.find((g) => g.name === name);
+  assert.ok(golfer, `no golfer called ${name}`);
+  return golfer;
+};
+
+// ---------------------------------------------------------------------------
+console.log('\nThe tour');
+// ---------------------------------------------------------------------------
+
+test('fifty golfers, all distinct', () => {
+  assert.equal(tour.length, 50);
+  assert.equal(new Set(tour.map((g) => g.id)).size, 50);
+  assert.equal(new Set(tour.map((g) => g.name)).size, 50);
+  assert.ok(tour.every((g) => !/^player\s*\d+$/i.test(g.name)), 'placeholder names');
+});
+
+test('every golfer is described, not just rated', () => {
+  for (const golfer of tour) {
+    assert.ok(golfer.personality.length > 20, `${golfer.name} has no personality`);
+    assert.ok(golfer.playingStyle.length > 20, `${golfer.name} has no playing style`);
+    assert.ok(golfer.preferredConditions.length > 10, `${golfer.name} has no preferred conditions`);
+    assert.ok(golfer.weakness.length > 10, `${golfer.name} has no weakness`);
+  }
+  assert.ok(new Set(tour.map((g) => g.country)).size >= 15, 'not enough nationalities');
+  assert.ok(new Set(tour.map((g) => g.archetype)).size >= 10, 'not enough archetypes');
+});
+
+test('golfers are lopsided, not uniformly good', () => {
+  // The spread of a golfer's own group scores should be comparable with the
+  // spread of ability across the field. If it is not, everybody is the same
+  // player at different volumes and the best one wins everything.
+  const internal =
+    tour.reduce((sum, golfer) => {
+      const scores = Object.values(groupScores(golfer));
+      return sum + (Math.max(...scores) - Math.min(...scores));
+    }, 0) / tour.length;
+  const abilities = tour.map((g) => g.hidden.currentAbility);
+  const external = Math.max(...abilities) - Math.min(...abilities);
+  between(internal, 12, 45, 'average spread within a golfer');
+  between(external, 8, 24, 'ability spread across the field');
+  assert.ok(internal > external * 0.8, `players are too uniform (${internal.toFixed(1)} vs ${external})`);
+});
+
+test('signature ratings survive generation', () => {
+  assert.ok(byName('Jae-won Park').ratings.putting >= 95, 'the elite putter is not an elite putter');
+  assert.ok(byName('Lars Öhlund').ratings.driverDistance >= 95, 'the power player is not long');
+  assert.ok(byName('Kaito Shirakawa').ratings.driverAccuracy >= 94, 'the precision player is not straight');
+  assert.ok(byName('Rory Ballantyne').ratings.wind >= 95, 'the wind specialist cannot play in wind');
+  assert.ok(byName('Diego Sandoval').ratings.putting <= 70, 'the ball striker can putt after all');
+});
+
+test('driver distances span a tour-realistic range', () => {
+  const totals = tour.map((g) => bagFor(g).D.total).sort((a, b) => a - b);
+  between(totals[0], 240, 275, 'shortest hitter');
+  between(totals[totals.length - 1], 300, 330, 'longest hitter');
+  for (const golfer of tour) {
+    const bag = bagFor(golfer);
+    assert.ok(bag.D.total > bag['3W'].total, `${golfer.name} hits 3 wood past driver`);
+    assert.ok(bag['7i'].total > bag['8i'].total, `${golfer.name}'s irons are out of order`);
+    between(bag['7i'].total, 140, 205, `${golfer.name} 7 iron`);
+    between(bag.SW.total, 80, 125, `${golfer.name} sand wedge`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+console.log('\nThe courses');
+// ---------------------------------------------------------------------------
+
+test('exactly three courses, eighteen holes each', () => {
+  assert.equal(COURSES.length, 3);
+  for (const course of COURSES) {
+    assert.equal(course.holes.length, 18);
+    assert.equal(new Set(course.holes.map((h) => h.index)).size, 18, `${course.name} stroke indexes`);
+    assert.equal(new Set(course.holes.map((h) => h.number)).size, 18, `${course.name} hole numbers`);
+    const pars = course.holes.map((h) => h.par);
+    assert.ok(pars.includes(3) && pars.includes(4) && pars.includes(5), `${course.name} lacks hole variety`);
+    between(course.par, 70, 73, `${course.name} par`);
+    between(course.yards, 6800, 7600, `${course.name} yardage`);
+  }
+});
+
+test('every hole builds with a pin on the green', () => {
+  for (const course of COURSES) {
+    for (const spec of course.holes) {
+      const hole = holeGeometry(course, spec.number);
+      assert.ok(onGreen(hole, hole.pin), `${course.name} #${spec.number} pin is off the green`);
+      assert.equal(terrainAt(hole, hole.tee, { onTee: true }).lie, 'tee');
+      for (let round = 1; round <= 4; round++) {
+        assert.ok(onGreen(hole, pinForRound(hole, round)), `${course.name} #${spec.number} round ${round} pin`);
+      }
+    }
+  }
+});
+
+test('no hazard swallows a green', () => {
+  for (const course of COURSES) {
+    for (const spec of course.holes) {
+      const hole = holeGeometry(course, spec.number);
+      let wet = 0;
+      const samples = 240;
+      for (let i = 0; i < samples; i++) {
+        const angle = (i / samples) * Math.PI * 2;
+        const point = add(hole.greenCenter, vec(Math.cos(angle) * spec.greenSize * 1.25, Math.sin(angle) * spec.greenSize * 1.25));
+        if (terrainAt(hole, point).lie === 'water') wet++;
+      }
+      assert.ok(wet / samples < 0.3, `${course.name} #${spec.number} is ${((wet / samples) * 100).toFixed(0)}% water around the green`);
+    }
+  }
+});
+
+test('the three courses ask different questions', () => {
+  const [coastal, desert, woodland] = COURSES;
+  assert.ok(desert.fit.distance > woodland.fit.distance * 2, 'the desert should reward length');
+  assert.ok(woodland.fit.accuracy > desert.fit.accuracy * 2, 'the parkland should reward accuracy');
+  assert.ok(coastal.fit.wind > desert.fit.wind * 2, 'the links should reward wind play');
+  const wind = byName('Rory Ballantyne');
+  const bomber = byName('Kwame Asante');
+  assert.ok(courseFit(wind, coastal).score > courseFit(wind, desert).score, 'the wind player should prefer the links');
+  assert.ok(courseFit(bomber, desert).score > courseFit(bomber, woodland).score, 'the bomber should prefer the desert');
+});
+
+// ---------------------------------------------------------------------------
+console.log('\nThe shot engine');
+// ---------------------------------------------------------------------------
+
+const desert = COURSE_BY_ID.desert;
+const conditions = conditionsFor(calmWeather(desert), 'regression');
+const rng = createRng('regression');
+
+function context(golfer: Golfer, holeNumber: number, ball: { x: number; y: number }, lie: ShotContext['lie'], onTee = false): ShotContext {
+  return { hole: holeGeometry(desert, holeNumber), golfer, ball, lie, onTee, conditions, shotIndex: 0, pressure: 0 };
+}
+
+test('dispersion is elliptical, and driver is wider than wedge', () => {
+  const golfer = byName('Marcus Vandehey');
+  const hole = holeGeometry(desert, 1);
+  const driver = planShot(context(golfer, 1, hole.tee, 'tee', true), {
+    club: 'D', shotType: 'full', target: add(hole.tee, scale(vec(0, 1), 290)),
+  });
+  const wedge = planShot(context(golfer, 1, add(hole.pin, scale(vec(0, -1), 100)), 'fairway'), {
+    club: 'GW', shotType: 'full', target: hole.pin,
+  });
+  assert.ok(driver.sigmaLat > driver.sigmaLong * 1.6, 'driver dispersion is not elliptical');
+  assert.ok(driver.sigmaLat > wedge.sigmaLat * 2.5, 'driver is not wider than a wedge');
+  assert.ok(wedge.sigmaLong > 1, 'wedges should still have distance variance');
+});
+
+test('skill tightens dispersion', () => {
+  const hole = holeGeometry(desert, 1);
+  const straight = byName('Kaito Shirakawa');
+  const wild = byName('Tevita Fonoti');
+  const plan = (golfer: Golfer) =>
+    planShot(context(golfer, 1, hole.tee, 'tee', true), { club: 'D', shotType: 'full', target: add(hole.tee, scale(vec(0, 1), 280)) });
+  assert.ok(plan(straight).sigmaLat < plan(wild).sigmaLat * 0.8, 'the accurate driver is not tighter');
+  assert.ok(plan(straight).odds.fairway > plan(wild).odds.fairway + 0.1, 'the accurate driver does not hit more fairways');
+});
+
+test('lies cost distance and control, in that order of severity', () => {
+  const golfer = byName('Marcus Vandehey');
+  const hole = holeGeometry(desert, 3);
+  const ball = add(hole.pin, scale(vec(0, -1), 200));
+  // Aimed at a target the club can reach, the engine simply swings softer, so
+  // compare what a *full* swing gets out of each lie.
+  const reach = (lie: ShotContext['lie']) => {
+    const ctx = context(golfer, 3, ball, lie);
+    const plan = planShot(ctx, { club: '5i', shotType: 'full', target: hole.pin }, { skipOdds: true });
+    return { total: reachTable(ctx, vec(0, 1)).get('5i') ?? 0, sigma: plan.sigmaLat };
+  };
+  const order: ShotContext['lie'][] = ['fairway', 'firstCut', 'lightRough', 'heavyRough', 'deepRough'];
+  for (let i = 1; i < order.length; i++) {
+    const worse = reach(order[i]);
+    const better = reach(order[i - 1]);
+    assert.ok(worse.total <= better.total + 0.01, `${order[i]} is not shorter than ${order[i - 1]}`);
+    assert.ok(worse.sigma > better.sigma, `${order[i]} is not less accurate than ${order[i - 1]}`);
+  }
+  assert.ok(reach('deepRough').total < reach('fairway').total * 0.93, 'deep rough costs too little distance');
+});
+
+test('wind changes what a shot plays like, and skill blunts it', () => {
+  const coastal = COURSE_BY_ID.coastal;
+  const hole = holeGeometry(coastal, 8);
+  const ball = add(hole.pin, scale(vec(0, -1), 165));
+  const forRating = (golfer: Golfer, speed: number) => {
+    const weather = { ...calmWeather(coastal), windSpeed: speed, gust: 0, windFrom: hole.spec.bearing };
+    const ctx: ShotContext = {
+      hole, golfer, ball, lie: 'fairway', onTee: false,
+      conditions: conditionsFor(weather, 'wind'), shotIndex: 0, pressure: 0,
+    };
+    return planShot(ctx, { club: '6i', shotType: 'full', target: hole.pin }, { skipOdds: true });
+  };
+  const specialist = byName('Rory Ballantyne');
+  const poor = byName('Tevita Fonoti');
+  assert.ok(forRating(specialist, 25).playsLike > forRating(specialist, 0).playsLike + 8, 'headwind does not lengthen the shot');
+  assert.ok(
+    forRating(specialist, 25).playsLike < forRating(poor, 25).playsLike,
+    'the wind specialist does not flight it better',
+  );
+  assert.ok(
+    forRating(specialist, 25).sigmaLat < forRating(poor, 25).sigmaLat,
+    'the wind specialist is not steadier in a gale',
+  );
+  const head = windComponents({ ...calmWeather(coastal), windSpeed: 20, windFrom: 0 }, 0);
+  between(head.head, 19, 21, 'a wind from straight ahead should be a headwind');
+});
+
+test('elevation changes what a shot plays like', () => {
+  const golfer = byName('Marcus Vandehey');
+  const hole = holeGeometry(desert, 9); // 34 feet of climb
+  const ball = add(hole.pin, scale(vec(0, -1), 170));
+  const plan = planShot(context(golfer, 9, ball, 'fairway'), { club: '7i', shotType: 'full', target: hole.pin }, { skipOdds: true });
+  assert.ok(Math.abs(plan.elevationDelta) > 4, 'no elevation change measured');
+  const expected = plan.distanceToTarget + plan.elevationDelta * (plan.elevationDelta > 0 ? 0.32 : 0.27);
+  assert.ok(Math.abs(plan.playsLike - expected) < 6, 'plays-like does not follow the elevation');
+});
+
+test('shot outcomes are believable off the tee', () => {
+  const hole = holeGeometry(desert, 1);
+  const golfer = byName('Marcus Vandehey');
+  const ctx = context(golfer, 1, hole.tee, 'tee', true);
+  const plan = planShot(ctx, { club: 'D', shotType: 'full', target: add(hole.tee, scale(vec(0, 1), 290)) });
+  let fairway = 0;
+  let total = 0;
+  const N = 2000;
+  for (let i = 0; i < N; i++) {
+    const result = resolveShot(ctx, plan, rng);
+    if (result.finalLie === 'fairway' || result.finalLie === 'firstCut') fairway++;
+    total += result.total;
+  }
+  between(total / N, 270, 330, 'average drive');
+  between(fairway / N, 0.55, 0.95, 'fairways hit on a wide desert hole');
+  // The model's own odds should agree with what the sampler does.
+  assert.ok(Math.abs(plan.odds.fairway - fairway / N) < 0.15, 'predicted odds disagree with the sampler');
+});
+
+test('dispersion zones mean what they say', () => {
+  between(sigmaForShare(0.5), 1.17, 1.18, '50% contour');
+  between(sigmaForShare(0.75), 1.66, 1.67, '75% contour');
+  between(sigmaForShare(0.9), 2.14, 2.15, '90% contour');
+});
+
+// ---------------------------------------------------------------------------
+console.log('\nPutting');
+// ---------------------------------------------------------------------------
+
+test('make percentages sit in the tour band', () => {
+  // Tour: 3ft 97%, 5ft 85%, 8ft 60%, 10ft 45%, 15ft 28%, 20ft 18%, 30ft 8%.
+  const bands: [number, number, number][] = [
+    [3, 0.9, 1.0], [5, 0.74, 0.98], [8, 0.42, 0.75], [10, 0.3, 0.6],
+    [15, 0.15, 0.36], [20, 0.09, 0.24], [30, 0.03, 0.13],
+  ];
+  for (const [feet, low, high] of bands) {
+    between(makeProbability(feet, 76), low, high, `${feet} ft make rate`);
+  }
+  for (let feet = 4; feet <= 40; feet += 4) {
+    assert.ok(makeProbability(feet, 95) > makeProbability(feet, 55), `skill does not help from ${feet} ft`);
+    assert.ok(makeProbability(feet, 76) > makeProbability(feet + 4, 76), `longer putts are not harder at ${feet} ft`);
+  }
+});
+
+test('simulated putting matches the analytic model', () => {
+  const golfer = byName('Marcus Vandehey');
+  const hole = holeGeometry(desert, 12);
+  for (const feet of [5, 10, 20]) {
+    const ball = add(hole.pin, scale(vec(0, -1), feet / 3));
+    const ctx = context(golfer, 12, ball, 'green');
+    const provisional = planPutt(ctx, hole.pin);
+    const plan = planPutt(ctx, provisional.recommendedAim);
+    let made = 0;
+    const N = 3000;
+    for (let i = 0; i < N; i++) if (resolvePutt(ctx, plan, rng).holed) made++;
+    assert.ok(
+      Math.abs(made / N - plan.makeChance) < 0.1,
+      `${feet} ft: simulated ${(made / N).toFixed(2)} vs predicted ${plan.makeChance.toFixed(2)}`,
+    );
+  }
+});
+
+test('reading the break matters', () => {
+  const golfer = byName('Marcus Vandehey');
+  const hole = holeGeometry(desert, 12);
+  const ball = add(hole.pin, scale(vec(1, -1), 4));
+  const ctx = context(golfer, 12, ball, 'green');
+  const atHole = planPutt(ctx, hole.pin);
+  const onLine = planPutt(ctx, atHole.recommendedAim);
+  if (Math.abs(atHole.breakFeet) > 0.4) {
+    assert.ok(onLine.makeChance > atHole.makeChance, 'playing the break does not help');
+  }
+  assert.ok(Math.abs(onLine.aimOffsetFeet + onLine.breakFeet) < 0.05, 'the recommended line does not cancel the break');
+});
+
+// ---------------------------------------------------------------------------
+console.log('\nPlaying a round');
+// ---------------------------------------------------------------------------
+
+test('a full round produces a plausible card', () => {
+  const golfer = byName('Marcus Vandehey');
+  golfer.fatigue = 0;
+  const roundRng = createRng('regression:round');
+  const touch = dailyTouch(golfer, roundRng.fork('touch'));
+  let strokes = 0;
+  let putts = 0;
+  let holesWithGir = 0;
+  for (let h = 1; h <= 18; h++) {
+    const base = holeGeometry(desert, h);
+    const hole = withPin(base, pinForRound(base, 2));
+    const outcome = playHole({ hole, golfer, conditions, rng: roundRng, pressure: 0.2, touch });
+    assert.ok(outcome.strokes >= 1 && outcome.strokes <= 12, `hole ${h} produced ${outcome.strokes} strokes`);
+    assert.ok(outcome.shots.length > 0, `hole ${h} recorded no shots`);
+    assert.equal(outcome.shots[outcome.shots.length - 1].holed || outcome.strokes >= 12, true, `hole ${h} never holed out`);
+    strokes += outcome.strokes;
+    putts += outcome.putts;
+    if (outcome.gir) holesWithGir++;
+  }
+  between(strokes, 60, 82, 'round total for an elite golfer');
+  between(putts, 24, 38, 'putts in a round');
+  between(holesWithGir, 8, 18, 'greens in regulation');
+  assert.ok(golfer.fatigue > 8, 'walking eighteen holes produced no fatigue');
+});
+
+test('fatigue and pressure make a golfer worse, but not a different player', () => {
+  const golfer = byName('Marcus Vandehey');
+  const hole = holeGeometry(desert, 3);
+  const ball = add(hole.pin, scale(vec(0, -1), 160));
+  const measure = (fatigue: number, pressure: number) => {
+    golfer.fatigue = fatigue;
+    const ctx = { ...context(golfer, 3, ball, 'fairway'), pressure };
+    return planShot(ctx, { club: '7i', shotType: 'full', target: hole.pin }, { skipOdds: true });
+  };
+  const fresh = measure(0, 0);
+  const tired = measure(100, 0);
+  const nervous = measure(0, 1);
+  golfer.fatigue = 0;
+  assert.ok(tired.sigmaLat > fresh.sigmaLat, 'fatigue does not cost control');
+  assert.ok(tired.sigmaLat < fresh.sigmaLat * 1.25, 'fatigue is overpowering');
+  assert.ok(nervous.sigmaLat > fresh.sigmaLat, 'pressure does not cost control');
+  assert.ok(nervous.sigmaLat < fresh.sigmaLat * 1.45, 'pressure is overpowering');
+});
+
+test('a hole is played the same way twice from the same seed', () => {
+  const golfer = byName('Ben Cartwright');
+  const play = () => {
+    golfer.fatigue = 0;
+    const hole = holeGeometry(desert, 5);
+    return playHole({ hole, golfer, conditions, rng: createRng('determinism'), pressure: 0.3 }).strokes;
+  };
+  assert.equal(play(), play());
+});
+
+// ---------------------------------------------------------------------------
+console.log('\nThe universe');
+// ---------------------------------------------------------------------------
+
+const universe = createUniverse('regression');
+
+test('a season is twenty events over three courses, with four majors', () => {
+  assert.equal(universe.schedule.length, 20);
+  assert.equal(universe.schedule.filter((t) => t.tier === 'major').length, 4);
+  assert.equal(new Set(universe.schedule.map((t) => t.courseId)).size, 3);
+  assert.equal(universe.golfers.length, 50);
+});
+
+test('a tournament cuts, pays and ranks correctly', () => {
+  const tournament = simulateTournament(universe, { fast: true });
+  assert.ok(tournament, 'no tournament played');
+  assert.equal(tournament.status, 'complete');
+  assert.equal(tournament.roundsPlayed, 4);
+  assert.ok(tournament.madeCut.length >= 30 && tournament.madeCut.length <= 40, `cut left ${tournament.madeCut.length}`);
+
+  const board = buildLeaderboard(tournament, 4);
+  const active = board.filter((r) => r.status === 'active');
+  assert.equal(active[0].position, 1);
+  for (let i = 1; i < active.length; i++) {
+    assert.ok(active[i].total >= active[i - 1].total, 'leaderboard is out of order');
+  }
+  assert.equal(active[0].golferId, tournament.winnerId);
+  for (const row of active) assert.equal(row.rounds.filter(Boolean).length, 4, 'a qualifier is missing a round');
+  for (const row of board.filter((r) => r.status === 'cut')) {
+    assert.equal(row.rounds.filter(Boolean).length, 2, 'a cut player played the weekend');
+  }
+
+  const paid = payout(tournament).reduce((sum, row) => sum + row.money, 0);
+  assert.ok(Math.abs(paid - tournament.purse) / tournament.purse < 0.02, `paid out ${paid} of a ${tournament.purse} purse`);
+  const winner = universe.golfers.find((g) => g.id === tournament.winnerId);
+  assert.ok(winner && winner.career.wins >= 1, 'the winner was not credited with a win');
+  between(board[0].toPar, -30, 2, 'winning score');
+});
+
+test('scoring across a season stays in the tour band', () => {
+  while (!seasonComplete(universe)) simulateTournament(universe, { fast: true });
+  const played = universe.golfers.filter((g) => g.season.rounds >= 20);
+  assert.ok(played.length >= 20, 'not enough golfers completed a season');
+  const averages = played.map((g) => g.season.strokes / g.season.rounds).sort((a, b) => a - b);
+  const field = averages.reduce((a, b) => a + b, 0) / averages.length;
+  between(field, 69, 75, 'field scoring average');
+  between(averages[0], 66, 71, 'best scoring average');
+  // Raw season averages are wider than the difference in ability, because a
+  // player who misses cuts only ever banks their two worst rounds of the week.
+  between(averages[averages.length - 1] - averages[0], 2, 8.5, 'spread between best and worst averages');
+  between(averages[averages.length - 1], 71, 78, 'worst qualifying average');
+
+  const winners = new Set(universe.schedule.map((t) => t.winnerId));
+  assert.ok(winners.size >= 4, `only ${winners.size} different winners in a season`);
+  const mostWins = Math.max(...universe.golfers.map((g) => g.season.wins));
+  assert.ok(mostWins <= 11, `one golfer won ${mostWins} of 20 events`);
+});
+
+test('statistics come out at tour levels', () => {
+  const sum = (pick: (g: Golfer) => number) => universe.golfers.reduce((total, g) => total + pick(g), 0);
+  between(sum((g) => g.career.driveDistanceTotal) / sum((g) => g.career.drives), 270, 305, 'field driving distance');
+  between(sum((g) => g.career.fairwaysHit) / sum((g) => g.career.fairwayAttempts), 0.45, 0.72, 'field driving accuracy');
+  between(sum((g) => g.career.greensHit) / sum((g) => g.career.greenAttempts), 0.55, 0.75, 'field greens in regulation');
+  between(sum((g) => g.career.scrambleSaves) / sum((g) => g.career.scrambleAttempts), 0.35, 0.62, 'field scrambling');
+  between((sum((g) => g.career.putts) / sum((g) => g.career.puttHoles)) * 18, 28, 33, 'field putts per round');
+  between(sum((g) => g.career.birdies) / sum((g) => g.career.holes), 0.13, 0.23, 'field birdie rate');
+});
+
+test('the news wire reports what happened', () => {
+  assert.ok(universe.news.length > 20, 'not enough stories');
+  const results = universe.news.filter((n) => n.kind === 'result');
+  assert.ok(results.length >= 15, 'not every event was reported');
+  for (const item of results) {
+    assert.ok(item.headline.length > 10 && item.body.length > 40, 'empty story');
+    assert.ok(item.golferIds.length > 0, 'a result with nobody in it');
+  }
+  const winnerNames = new Set(universe.schedule.map((t) => universe.golfers.find((g) => g.id === t.winnerId)?.name));
+  assert.ok(results.some((item) => [...winnerNames].some((name) => name && item.headline.includes(name))), 'no winner named in a headline');
+});
+
+test('the save round-trips and stays inside localStorage', () => {
+  const payload = serializeUniverse(universe);
+  const parsed = JSON.parse(payload);
+  assert.equal(parsed.golfers.length, 50);
+  assert.equal(parsed.schedule.length, 20);
+  assert.equal(parsed.season, universe.season);
+  assert.ok(payload.length < 2_500_000, `save is ${(payload.length / 1024 / 1024).toFixed(2)} MB`);
+});
+
+test('the season rolls over and the field stays at fifty', () => {
+  const before = universe.season;
+  const abilities = new Map(universe.golfers.map((g) => [g.id, g.hidden.currentAbility]));
+  const summary = advanceSeason(universe);
+  assert.equal(universe.season, before + 1);
+  assert.equal(universe.golfers.length, 50);
+  assert.equal(universe.eventIndex, 0);
+  assert.ok(summary.championName.length > 0, 'no Player of the Year');
+  assert.equal(summary.majorWinners.length, 4, 'majors were not recorded');
+  assert.ok(universe.golfers.every((g) => g.season.events === 0), 'season counters were not reset');
+  assert.ok(universe.schedule.every((t) => t.status === 'upcoming'), 'the new schedule is not fresh');
+
+  const survivors = universe.golfers.filter((g) => abilities.has(g.id));
+  const improved = survivors.filter((g) => g.hidden.currentAbility > (abilities.get(g.id) ?? 0));
+  const declined = survivors.filter((g) => g.hidden.currentAbility < (abilities.get(g.id) ?? 0));
+  assert.ok(improved.length > 3, 'nobody improved');
+  assert.ok(declined.length > 3, 'nobody declined');
+  const young = survivors.filter((g) => g.age <= 25);
+  const old = survivors.filter((g) => g.age >= 36);
+  if (young.length > 2 && old.length > 2) {
+    const delta = (list: Golfer[]) =>
+      list.reduce((sum, g) => sum + (g.hidden.currentAbility - (abilities.get(g.id) ?? 0)), 0) / list.length;
+    assert.ok(delta(young) > delta(old), 'the young are not developing faster than the old are declining');
+  }
+  assert.ok(currentTournament(universe), 'no next event');
+});
+
+test('the same seed builds the same universe', () => {
+  const a = createUniverse('twins');
+  const b = createUniverse('twins');
+  assert.equal(
+    a.schedule.map((t) => t.weather.map((w) => w.windSpeed.toFixed(3)).join()).join(),
+    b.schedule.map((t) => t.weather.map((w) => w.windSpeed.toFixed(3)).join()).join(),
+  );
+  simulateTournament(a, { fast: true });
+  simulateTournament(b, { fast: true });
+  assert.equal(a.schedule[0].winnerId, b.schedule[0].winnerId);
+  assert.equal(a.schedule[0].leaderboard[0].total, b.schedule[0].leaderboard[0].total);
+});
+
+// ---------------------------------------------------------------------------
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed === 0 ? 0 : 1);
+// keep the unused-import checker honest about helpers used only in assertions
+void dist;

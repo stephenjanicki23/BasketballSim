@@ -3,8 +3,8 @@
  *
  * The tour only has three golf courses, so each one hosts several events a year
  * — different weeks, different weather, different pin sheets, different purses.
- * Four of the twenty are majors, which are worth double points and reliably
- * play two shots harder because of where they sit in the calendar.
+ * Four of the twenty are majors, worth double points and set up two shots
+ * harder; the season ends with a richer, smaller-field finale that is not one.
  */
 
 import type { TournamentDefinition } from '../simulation/tournamentEngine';
@@ -25,9 +25,9 @@ export const SCHEDULE: readonly TournamentDefinition[] = [
   { id: 'northShore', name: 'North Shore Open', courseId: 'coastal', week: 25, purse: 8_600_000, tier: 'regular', blurb: 'Two-club wind most years. Not everybody enters.' },
   { id: 'summitClassic', name: 'Summit Classic', courseId: 'desert', week: 27, purse: 9_000_000, tier: 'regular', blurb: 'Elevation, heat and a closing stretch beside the water.' },
   { id: 'hollisbrookMasters', name: 'Hollisbrook Masters', courseId: 'woodland', week: 29, purse: 13_000_000, tier: 'invitational', blurb: 'The best field of the regular season outside the majors.' },
-  { id: 'linksChampionship', name: 'Links Championship', courseId: 'coastal', week: 31, purse: 20_000_000, tier: 'major', blurb: 'The final major. Four rounds on the headland with the claret on the line.' },
+  { id: 'linksChampionship', name: 'Links Championship', courseId: 'coastal', week: 31, purse: 20_000_000, tier: 'major', blurb: 'The fourth and final major. Four rounds on the headland with the season on the line.' },
   { id: 'autumnOpen', name: 'Autumn Open', courseId: 'woodland', week: 33, purse: 8_000_000, tier: 'regular', blurb: 'Cold mornings, soft ground, and a last chance to keep a card.' },
   { id: 'desertFinal', name: 'Desert Final', courseId: 'desert', week: 35, purse: 8_500_000, tier: 'regular', blurb: 'The last full-field event before the playoffs.' },
   { id: 'playoffOpener', name: 'Playoff Opener', courseId: 'coastal', week: 37, purse: 15_000_000, tier: 'invitational', blurb: 'Points are doubled from here. The season narrows.' },
-  { id: 'tourChampionship', name: 'Tour Championship', courseId: 'woodland', week: 39, purse: 25_000_000, tier: 'major', blurb: 'The last event of the year, and the one that names the Player of the Year.' },
+  { id: 'tourChampionship', name: 'Tour Championship', courseId: 'woodland', week: 39, purse: 25_000_000, tier: 'invitational', blurb: 'Not a major, but the richest week of the year, and the one that names the Player of the Year.' },
 ];

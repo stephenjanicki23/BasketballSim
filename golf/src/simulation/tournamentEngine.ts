@@ -96,12 +96,19 @@ const CUT_SIZE = 30;
 // Money and points
 // ---------------------------------------------------------------------------
 
-/** Share of the purse by finishing position, 1st through 30th. */
-const MONEY_SHARE = [
+/**
+ * Share of the purse by finishing position, 1st through 30th. The raw weights
+ * below are the shape of a tour payout; they are normalised at load so the
+ * whole purse is actually paid out rather than 88% of it.
+ */
+const MONEY_WEIGHTS = [
   0.180, 0.109, 0.069, 0.049, 0.041, 0.036, 0.0335, 0.031, 0.029, 0.027,
   0.025, 0.023, 0.021, 0.0195, 0.018, 0.0168, 0.0157, 0.0147, 0.0138, 0.0130,
   0.0122, 0.0114, 0.0107, 0.0100, 0.0094, 0.0088, 0.0083, 0.0078, 0.0074, 0.0070,
 ];
+
+const MONEY_TOTAL = MONEY_WEIGHTS.reduce((sum, share) => sum + share, 0);
+const MONEY_SHARE = MONEY_WEIGHTS.map((share) => share / MONEY_TOTAL);
 
 const POINTS_BASE = [
   500, 300, 190, 135, 110, 100, 90, 85, 80, 75,
