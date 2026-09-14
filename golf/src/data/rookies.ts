@@ -9,7 +9,7 @@
 
 import { buildGolfer } from './golfers';
 import { type Rng } from '../simulation/rng';
-import type { ArchetypeId, Golfer } from '../simulation/types';
+import type { ArchetypeId, Golfer, PuttingStyleId } from '../simulation/types';
 
 interface Region {
   country: string;
@@ -37,6 +37,10 @@ const REGIONS: Region[] = [
   { country: 'Thailand', flag: '🇹🇭', first: ['Anon', 'Kiat', 'Somchai', 'Narong'], last: ['Ratanakul', 'Chaiyaphum', 'Wongwan', 'Suthichai'] },
   { country: 'Denmark', flag: '🇩🇰', first: ['Magnus', 'Villads', 'Asger', 'Frode'], last: ['Kjeldsen', 'Holmgaard', 'Brandt-Nielsen', 'Vestergaard'] },
   { country: 'New Zealand', flag: '🇳🇿', first: ['Tane', 'Cooper', 'Reuben', 'Finlay'], last: ['Whitcombe', 'Ngatai', 'Marlowe', 'Ashcroft'] },
+];
+
+const PUTTING_STYLES: PuttingStyleId[] = [
+  'steady', 'steady', 'aggressor', 'conservative', 'technician', 'streaky', 'clutch', 'poorReader',
 ];
 
 const ARCHETYPES: ArchetypeId[] = [
@@ -100,6 +104,7 @@ export function createRookie(rng: Rng, season: number, index: number): Golfer {
     flag: region.flag,
     age,
     archetype,
+    puttingStyle: rng.pick(PUTTING_STYLES),
     level: Math.round(level),
     potential: Math.round(potential),
     personality: rng.pick(PERSONALITIES),

@@ -121,6 +121,9 @@ export type RatingKey =
   | 'putting'
   | 'longPutting'
   | 'shortPutting'
+  | 'lagPutting'
+  | 'greenReading'
+  | 'speedControl'
   | 'puttingPressure'
   // Mental
   | 'composure'
@@ -179,6 +182,53 @@ export interface Archetype {
   bias: Partial<Record<RatingKey, number>>;
 }
 
+/**
+ * How a golfer putts, as distinct from how well. Style biases the ratings at
+ * generation and biases the strategic choice at the hole — an aggressor takes
+ * on putts a conservative player lags.
+ */
+export type PuttingStyleId =
+  | 'aggressor'
+  | 'technician'
+  | 'conservative'
+  | 'clutch'
+  | 'streaky'
+  | 'poorReader'
+  | 'steady';
+
+export interface PuttingStyle {
+  id: PuttingStyleId;
+  name: string;
+  blurb: string;
+  /** Rating offsets applied on top of the golfer's putting ratings. */
+  bias: Partial<Record<RatingKey, number>>;
+  /** Shifts the strategic choice: positive attacks more. */
+  aggression: number;
+  /** Multiplier on day-to-day putting variance. */
+  streak: number;
+}
+
+export interface PuttingStats {
+  onePutts: number;
+  twoPutts: number;
+  threePutts: number;
+  /** Holes where the ball reached the green and was putted. */
+  greensPutted: number;
+  /** First-putt distance, in feet, summed. */
+  firstPuttFeet: number;
+  /** Made and attempted, by distance band: 0-3, 3-6, 6-10, 10-20, 20-30, 30+ ft. */
+  madeByBand: number[];
+  attemptsByBand: number[];
+  /** Putts from beyond 25 feet, and how far they finished from the hole. */
+  lagAttempts: number;
+  lagLeaveFeet: number;
+  /** Putts attempted and made with real pressure on. */
+  pressureAttempts: number;
+  pressureMade: number;
+  /** Strokes gained on the greens against the baseline. */
+  strokesGained: number;
+}
+
 export interface CareerStats {
   seasons: number;
   events: number;
@@ -208,6 +258,7 @@ export interface CareerStats {
   doubles: number;
   holes: number;
   bestFinishRank: number;
+  putting: PuttingStats;
 }
 
 export interface SeasonRecord {
@@ -230,6 +281,7 @@ export interface Golfer {
   age: number;
   turnedPro: number;
   archetype: ArchetypeId;
+  puttingStyle: PuttingStyleId;
   personality: string;
   playingStyle: string;
   preferredConditions: string;

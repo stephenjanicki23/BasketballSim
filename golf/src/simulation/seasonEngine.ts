@@ -28,7 +28,7 @@ import { previewNews, seasonNews, tournamentNews, type NewsItem } from './newsEn
 import { currentAbility, emptySeason, scoringAverage } from './golferEngine';
 import type { Golfer, SeasonRecord } from './types';
 
-export const UNIVERSE_VERSION = 3;
+export const UNIVERSE_VERSION = 4;
 
 export interface SeasonSummary {
   season: number;

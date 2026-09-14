@@ -13,12 +13,13 @@ import { type Rng, clamp, createRng } from './rng';
 import { holeGeometry, pinForRound, withPin } from './courseEngine';
 import { playHole, type HoleOutcome } from './holeEngine';
 import { conditionsFor, generateWeather } from './weatherEngine';
-import { type DailyTouch, dailyTouch } from './golferEngine';
+import { type DailyTouch, addPuttingStats, dailyTouch, emptyPuttingStats } from './golferEngine';
 import { COURSE_BY_ID } from '../data/courses';
-import type { Conditions, Golfer, Weather } from './types';
+import type { Conditions, Golfer, PuttingStats, Weather } from './types';
 
 export interface RoundStats {
   putts: number;
+  putting: PuttingStats;
   girHit: number;
   girAttempts: number;
   fairwaysHit: number;
@@ -231,14 +232,16 @@ export function pressureFor(input: PressureInput): number {
 
 function emptyStats(): RoundStats {
   return {
-    putts: 0, girHit: 0, girAttempts: 0, fairwaysHit: 0, fairwayAttempts: 0,
-    driveTotal: 0, drives: 0, penalties: 0, eagles: 0, birdies: 0, pars: 0,
-    bogeys: 0, doubles: 0, scrambleSaves: 0, scrambleAttempts: 0,
+    putts: 0, putting: emptyPuttingStats(), girHit: 0, girAttempts: 0,
+    fairwaysHit: 0, fairwayAttempts: 0, driveTotal: 0, drives: 0, penalties: 0,
+    eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0,
+    scrambleSaves: 0, scrambleAttempts: 0,
   };
 }
 
 function accumulate(stats: RoundStats, outcome: HoleOutcome): void {
   stats.putts += outcome.putts;
+  addPuttingStats(stats.putting, outcome.putting);
   stats.penalties += outcome.penalties;
   stats.girAttempts++;
   if (outcome.gir) stats.girHit++;
@@ -343,6 +346,12 @@ export function simulateRound(
         fast: options.fast,
         shotSeed: holeNumber * 11 + round * 3,
         touch: touches.get(id),
+        situation: {
+          round,
+          behind: score - leadScore,
+          holesRemaining: (ROUNDS - round) * 18 + (18 - holeNumber + 1),
+          toPar: 0,
+        },
       });
       state.strokes += outcome.strokes;
       state.holes.push(outcome.strokes);
@@ -539,6 +548,7 @@ export function applyResults(
       const s = round.stats;
       golfer.career.putts += s.putts;
       golfer.career.puttHoles += 18;
+      addPuttingStats(golfer.career.putting, s.putting);
       golfer.career.greensHit += s.girHit;
       golfer.career.greenAttempts += s.girAttempts;
       golfer.career.fairwaysHit += s.fairwaysHit;

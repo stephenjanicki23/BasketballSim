@@ -14,7 +14,7 @@ import { type Camera, toScreen } from './camera';
 import { type Vec2, blobOutline } from '../../simulation/geometry';
 import { createRng } from '../../simulation/rng';
 import { dispersionContour, sigmaForShare, type ShotPlan } from '../../simulation/shotEngine';
-import type { PuttPlan } from '../../simulation/puttingEngine';
+import type { GreenRead } from '../../simulation/puttingEngine';
 import { greenSlopeAt } from '../../simulation/courseEngine';
 import type { HoleGeometry } from '../../simulation/types';
 
@@ -24,7 +24,7 @@ export interface RenderOptions {
   ball: Vec2;
   target: Vec2 | null;
   plan: ShotPlan | null;
-  putt: PuttPlan | null;
+  putt: GreenRead | null;
   /** Ball position during an animation, with height in feet. */
   flight: { x: number; y: number; h: number } | null;
   /** The traced path so far. */
@@ -477,7 +477,12 @@ function drawGreenContours(ctx: CanvasRenderingContext2D, options: RenderOptions
   ctx.restore();
 }
 
-function drawPuttRead(ctx: CanvasRenderingContext2D, options: RenderOptions, putt: PuttPlan): void {
+/**
+ * The read, drawn but not interactive: the line the ball will take if it is
+ * struck properly, and the slope it is fighting. The player chooses a strategy,
+ * not a line, so there is nothing here to grab.
+ */
+function drawPuttRead(ctx: CanvasRenderingContext2D, options: RenderOptions, read: GreenRead): void {
   const { camera, ball, hole } = options;
   const a = toScreen(camera, ball);
   const pin = toScreen(camera, hole.pin);
@@ -485,7 +490,7 @@ function drawPuttRead(ctx: CanvasRenderingContext2D, options: RenderOptions, put
 
   // Straight line to the hole, for reference.
   ctx.setLineDash([3, 4]);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
@@ -493,52 +498,37 @@ function drawPuttRead(ctx: CanvasRenderingContext2D, options: RenderOptions, put
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // The curving path the ball will take if struck on the chosen line.
-  const steps = 26;
-  ctx.strokeStyle = 'rgba(255, 226, 150, 0.9)';
+  // The curving path a well-struck putt takes.
+  const steps = 28;
+  const bend = read.breakFeet / 3;
+  ctx.strokeStyle = 'rgba(255, 226, 150, 0.85)';
   ctx.lineWidth = 2;
   ctx.beginPath();
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const base = {
-      x: ball.x + (putt.aim.x - ball.x) * t,
-      y: ball.y + (putt.aim.y - ball.y) * t,
+      x: ball.x + (hole.pin.x - ball.x) * t,
+      y: ball.y + (hole.pin.y - ball.y) * t,
     };
-    const bend = (putt.breakFeet / 3) * (Math.pow(t, 1.8) - t) * -1;
-    const point = { x: base.x + putt.right.x * bend, y: base.y + putt.right.y * bend };
-    const screen = toScreen(camera, point);
+    const curve = bend * (Math.pow(t, 1.75) - t);
+    const screen = toScreen(camera, { x: base.x + read.right.x * curve, y: base.y + read.right.y * curve });
     if (i === 0) ctx.moveTo(screen.x, screen.y);
     else ctx.lineTo(screen.x, screen.y);
   }
   ctx.stroke();
 
-  // Where the player is starting the ball, and the read.
-  const aim = toScreen(camera, putt.aim);
-  ctx.fillStyle = 'rgba(255, 226, 150, 0.95)';
-  ctx.beginPath();
-  ctx.arc(aim.x, aim.y, 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  const recommended = toScreen(camera, putt.recommendedAim);
-  ctx.strokeStyle = 'rgba(120, 230, 160, 0.9)';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.arc(recommended.x, recommended.y, 6, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Dispersion cone: the lateral spread at the hole, in feet.
-  const spreadYards = (putt.sigmaLatFeet * 1.65) / 3;
-  const left = { x: hole.pin.x - putt.right.x * spreadYards, y: hole.pin.y - putt.right.y * spreadYards };
-  const right = { x: hole.pin.x + putt.right.x * spreadYards, y: hole.pin.y + putt.right.y * spreadYards };
-  const l = toScreen(camera, left);
-  const r = toScreen(camera, right);
-  ctx.fillStyle = 'rgba(255, 200, 90, 0.18)';
+  // Where the ball has to start to get there.
+  const startCurve = bend * -1;
+  const start = toScreen(camera, {
+    x: ball.x + read.line.x * 0.6 + read.right.x * startCurve * 0.14,
+    y: ball.y + read.line.y * 0.6 + read.right.y * startCurve * 0.14,
+  });
+  ctx.strokeStyle = 'rgba(120, 230, 160, 0.8)';
+  ctx.lineWidth = 1.4;
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
-  ctx.lineTo(l.x, l.y);
-  ctx.lineTo(r.x, r.y);
-  ctx.closePath();
-  ctx.fill();
+  ctx.lineTo(start.x, start.y);
+  ctx.stroke();
   ctx.restore();
 }
 

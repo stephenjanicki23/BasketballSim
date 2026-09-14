@@ -20,13 +20,14 @@ import { ROUNDS, recordRound, type Tournament } from '../simulation/tournamentEn
 import { clearSave, hasSave, loadUniverse, saveUniverse } from '../simulation/persistence';
 import {
   type PlaySession, conditionsForSession, createSession, hit, nextHole, nudgeAim,
-  nudgeDistance, selectClub, selectShotType, setTarget, settle, standingFor, toPlayerRound,
+  nudgeDistance, puttWith, selectClub, selectShotType, setTarget, settle, standingFor,
+  toPlayerRound,
 } from '../game/session';
 import { calmWeather, conditionsFor } from '../simulation/weatherEngine';
 import { COURSE_BY_ID } from '../data/courses';
 import type { Vec2 } from '../simulation/geometry';
 import type { ClubId, Golfer } from '../simulation/types';
-import type { ShotTypeId } from '../simulation/config';
+import type { PuttIntentId, ShotTypeId } from '../simulation/config';
 
 export type ScreenId = 'home' | 'play' | 'tournament' | 'players' | 'courses' | 'stats' | 'news';
 
@@ -70,6 +71,7 @@ interface StoreValue {
   nudge: (yards: number) => void;
   nudgeLength: (yards: number) => void;
   playShot: () => void;
+  playPutt: (intent: PuttIntentId) => void;
   completeAnimation: () => void;
   advanceHole: () => void;
 
@@ -276,6 +278,13 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     });
   }, [withGolfer]);
 
+  const playPutt = useCallback(
+    (intent: PuttIntentId) => {
+      withGolfer((s, g) => (s.status === 'aiming' ? puttWith(s, g, intent).session : s));
+    },
+    [withGolfer],
+  );
+
   const completeAnimation = useCallback(() => {
     withGolfer((s, g) => (s.status === 'animating' ? settle(s, g) : s));
     commit();
@@ -345,6 +354,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     nudge,
     nudgeLength,
     playShot,
+    playPutt,
     completeAnimation,
     advanceHole,
     resetUniverse,

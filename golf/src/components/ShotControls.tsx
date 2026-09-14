@@ -8,12 +8,13 @@
  * the reward is worth it.
  */
 
-import { CLUB_BY_ID, LIES, SHOT_TYPES, type ShotTypeId } from '../simulation/config';
+import { CLUB_BY_ID, LIES, SHOT_TYPES } from '../simulation/config';
 import { availableShotTypes, legalClubs, sigmaForShare } from '../simulation/shotEngine';
 import { bagFor } from '../simulation/golferEngine';
-import { type PlanView, sessionContext, type PlaySession } from '../game/session';
+import { sessionContext, type PlaySession } from '../game/session';
+import type { ShotPlan } from '../simulation/shotEngine';
 import { dist } from '../simulation/geometry';
-import { feet, Panel, pct, Stat, yards } from './ui';
+import { Panel, pct, Stat, yards } from './ui';
 import { useStore } from '../state/store';
 import type { ClubId, Golfer } from '../simulation/types';
 
@@ -27,7 +28,7 @@ const RISK_ROWS: { key: 'fairway' | 'green' | 'rough' | 'sand' | 'water' | 'tree
   { key: 'ob', label: 'Out of bounds', tone: '#d0655f' },
 ];
 
-export function ShotControls({ session, golfer, plan }: { session: PlaySession; golfer: Golfer; plan: PlanView }): JSX.Element {
+export function ShotControls({ session, golfer, plan }: { session: PlaySession; golfer: Golfer; plan: ShotPlan }): JSX.Element {
   const { pickClub, pickShotType, nudge, nudgeLength, playShot, zones, setZones } = useStore();
   const ctx = sessionContext(session, golfer);
   const bag = bagFor(golfer);
@@ -35,44 +36,43 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
   const lie = LIES[session.lie];
   const disabled = session.status !== 'aiming';
 
-  const clubs = session.lie === 'green' ? [] : legalClubs(ctx);
-  const types = session.lie === 'green' ? ['putt' as ShotTypeId] : availableShotTypes(ctx, distanceToTarget);
+  const clubs = legalClubs(ctx);
+  const types = availableShotTypes(ctx, distanceToTarget);
 
   return (
     <div className="shot-controls">
-      {plan.kind === 'swing' ? (
         <Panel title="The shot" className="panel--tight">
           <div className="stat-row">
-            <Stat label="To target" value={yards(plan.plan.distanceToTarget)} />
+            <Stat label="To target" value={yards(plan.distanceToTarget)} />
             <Stat
               label="Plays like"
-              value={yards(plan.plan.playsLike)}
-              hint={`${plan.plan.elevationDelta >= 0 ? '+' : ''}${Math.round(plan.plan.elevationDelta)} ft · wind ${plan.plan.wind.carryDelta >= 0 ? '+' : ''}${Math.round(plan.plan.wind.carryDelta)} yd`}
+              value={yards(plan.playsLike)}
+              hint={`${plan.elevationDelta >= 0 ? '+' : ''}${Math.round(plan.elevationDelta)} ft · wind ${plan.wind.carryDelta >= 0 ? '+' : ''}${Math.round(plan.wind.carryDelta)} yd`}
             />
-            <Stat label="Expected carry" value={yards(plan.plan.expectedCarry)} hint={`roll ${Math.round(plan.plan.expectedRoll)} yd`} />
+            <Stat label="Expected carry" value={yards(plan.expectedCarry)} hint={`roll ${Math.round(plan.expectedRoll)} yd`} />
             <Stat
               label="Swing"
-              value={`${Math.round(plan.plan.swingScale * 100)}%`}
-              hint={plan.plan.swingScale > 0.98 ? 'full' : 'controlled'}
+              value={`${Math.round(plan.swingScale * 100)}%`}
+              hint={plan.swingScale > 0.98 ? 'full' : 'controlled'}
             />
           </div>
           <div className="dispersion-summary">
             <div>
               <span className="label">Dispersion (1σ)</span>
               <strong>
-                {plan.plan.sigmaLong.toFixed(1)} yd long · {plan.plan.sigmaLat.toFixed(1)} yd wide
+                {plan.sigmaLong.toFixed(1)} yd long · {plan.sigmaLat.toFixed(1)} yd wide
               </strong>
             </div>
             <div>
               <span className="label">50% of shots finish inside</span>
               <strong>
-                {(plan.plan.sigmaLong * sigmaForShare(0.5) * 2).toFixed(0)} × {(plan.plan.sigmaLat * sigmaForShare(0.5) * 2).toFixed(0)} yd
+                {(plan.sigmaLong * sigmaForShare(0.5) * 2).toFixed(0)} × {(plan.sigmaLat * sigmaForShare(0.5) * 2).toFixed(0)} yd
               </strong>
             </div>
           </div>
-          {plan.plan.warnings.length > 0 && (
+          {plan.warnings.length > 0 && (
             <ul className="warnings">
-              {plan.plan.warnings.map((warning) => (
+              {plan.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
@@ -81,50 +81,20 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
             <div className="risk__head">
               <span>Where this shot finishes</span>
               <span>
-                {plan.plan.odds.expectedStrokes.toFixed(2)} expected strokes · {yards(plan.plan.odds.proximity)} from the pin
+                {plan.odds.expectedStrokes.toFixed(2)} expected strokes · {yards(plan.odds.proximity)} from the pin
               </span>
             </div>
-            {RISK_ROWS.filter((row) => plan.plan.odds[row.key] > 0.004).map((row) => (
+            {RISK_ROWS.filter((row) => plan.odds[row.key] > 0.004).map((row) => (
               <div className="risk__row" key={row.key}>
                 <span className="risk__label">{row.label}</span>
                 <span className="risk__bar">
-                  <span style={{ width: `${Math.min(100, plan.plan.odds[row.key] * 100)}%`, background: row.tone }} />
+                  <span style={{ width: `${Math.min(100, plan.odds[row.key] * 100)}%`, background: row.tone }} />
                 </span>
-                <span className="risk__value">{pct(plan.plan.odds[row.key], 0)}</span>
+                <span className="risk__value">{pct(plan.odds[row.key], 0)}</span>
               </div>
             ))}
           </div>
         </Panel>
-      ) : (
-        <Panel title="The putt" className="panel--tight">
-          <div className="stat-row">
-            <Stat label="Distance" value={feet(plan.plan.distanceFeet)} />
-            <Stat label="Plays like" value={feet(plan.plan.playsLikeFeet)} hint={plan.plan.speedNote} />
-            <Stat label="Break" value={plan.plan.readNote} hint={`side slope ${plan.plan.sideGrade.toFixed(1)}%`} />
-            <Stat label="Green speed" value={plan.plan.greenSpeed.toFixed(1)} hint="stimp" />
-          </div>
-          <div className="dispersion-summary">
-            <div>
-              <span className="label">Make chance</span>
-              <strong>{pct(plan.plan.makeChance, 0)}</strong>
-            </div>
-            <div>
-              <span className="label">Three-putt risk</span>
-              <strong>{pct(plan.plan.threePuttChance, 0)}</strong>
-            </div>
-            <div>
-              <span className="label">Expected putts</span>
-              <strong>{plan.plan.expectedPutts.toFixed(2)}</strong>
-            </div>
-          </div>
-          <p className="hint">
-            The green marker is the line the read says to start it on. Aiming somewhere else is a choice —
-            {Math.abs(plan.plan.aimOffsetFeet + plan.plan.breakFeet) < 0.1
-              ? ' you are on it.'
-              : ` you are ${feet(Math.abs(plan.plan.aimOffsetFeet + plan.plan.breakFeet))} off it.`}
-          </p>
-        </Panel>
-      )}
 
       <Panel title="Club" className="panel--tight">
         <div className="club-grid">
@@ -144,22 +114,10 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
               </button>
             );
           })}
-          <button
-            type="button"
-            className={session.club === 'P' ? 'club club--active' : 'club'}
-            onClick={() => pickClub('P')}
-            disabled={disabled || (session.lie !== 'green' && session.lie !== 'fringe')}
-            title="Putter"
-          >
-            <span className="club__name">Pt</span>
-            <span className="club__yards">—</span>
-          </button>
         </div>
-        {session.lie !== 'green' && (
-          <p className="hint">
-            {lie.name}: distance ×{lie.distance.toFixed(2)}, dispersion ×{lie.accuracy.toFixed(2)}. {lie.note}
-          </p>
-        )}
+        <p className="hint">
+          {lie.name}: distance ×{lie.distance.toFixed(2)}, dispersion ×{lie.accuracy.toFixed(2)}. {lie.note}
+        </p>
       </Panel>
 
       <Panel title="Shot" className="panel--tight">
@@ -210,7 +168,7 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
           </div>
         </div>
         <button type="button" className="hit" onClick={playShot} disabled={disabled}>
-          {session.lie === 'green' ? 'Putt' : `Hit ${CLUB_BY_ID[session.club].name}`}
+          Hit {CLUB_BY_ID[session.club].name}
           <span className="hit__hint">space</span>
         </button>
       </Panel>

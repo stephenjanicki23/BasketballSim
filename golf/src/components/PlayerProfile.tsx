@@ -3,13 +3,24 @@
  * courses make of them, and what their career says.
  */
 
-import { ARCHETYPES, RATING_GROUPS, RATING_LABELS, formLabel, bagFor, scoringAverage } from '../simulation/golferEngine';
+import {
+  ARCHETYPES, PUTTING_STYLES, RATING_GROUPS, RATING_LABELS, bagFor, formLabel, scoringAverage,
+} from '../simulation/golferEngine';
+import { PUTTING } from '../simulation/config';
 import { courseFit, fitVerdict } from '../simulation/courseFit';
 import { COURSES } from '../data/courses';
 import { RadarChart } from './RadarChart';
 import { Bar, Panel, RatingChip, Stat, money, ordinal, pct } from './ui';
 import { useStore } from '../state/store';
 import type { Golfer } from '../simulation/types';
+
+/** "0–3 ft", "3–6 ft", … from the configured band edges. */
+function bandLabels(): string[] {
+  const edges = PUTTING.statBands;
+  const labels = edges.map((edge, index) => `${index === 0 ? 0 : edges[index - 1]}–${edge} ft`);
+  labels.push(`${edges[edges.length - 1]}+ ft`);
+  return labels;
+}
 
 export function PlayerProfile({ golfer }: { golfer: Golfer }): JSX.Element {
   const { openProfile, userGolfer, chooseUserGolfer } = useStore();
@@ -28,6 +39,8 @@ export function PlayerProfile({ golfer }: { golfer: Golfer }): JSX.Element {
               <h2>{golfer.name}</h2>
               <p>
                 {golfer.country} · {golfer.age} · turned pro {golfer.turnedPro} · {ARCHETYPES[golfer.archetype].name}
+                {' · '}
+                {PUTTING_STYLES[golfer.puttingStyle].name} on the greens
               </p>
             </div>
           </div>
@@ -92,6 +105,62 @@ export function PlayerProfile({ golfer }: { golfer: Golfer }): JSX.Element {
               <Stat label="Eagles" value={career.eagles} hint={`${career.doubles} doubles or worse`} />
               <Stat label="Rounds" value={rounds} />
             </div>
+          </Panel>
+
+          <Panel title="On the greens" className="panel--tight">
+            {career.putting.greensPutted === 0 ? (
+              <p className="empty">No rounds played yet.</p>
+            ) : (
+              <>
+                <div className="stat-grid">
+                  <Stat label="Putts per round" value={((career.putts / Math.max(1, career.puttHoles)) * 18).toFixed(2)} />
+                  <Stat label="One-putt" value={pct(career.putting.onePutts / Math.max(1, career.putting.greensPutted))} />
+                  <Stat
+                    label="Three-putt"
+                    value={pct(career.putting.threePutts / Math.max(1, career.putting.greensPutted))}
+                    tone={career.putting.threePutts / Math.max(1, career.putting.greensPutted) > 0.045 ? 'warn' : 'good'}
+                  />
+                  <Stat
+                    label="Strokes gained"
+                    value={`${career.putting.strokesGained >= 0 ? '+' : ''}${(career.putting.strokesGained / Math.max(1, career.rounds)).toFixed(2)}`}
+                    hint="per round"
+                    tone={career.putting.strokesGained >= 0 ? 'good' : 'bad'}
+                  />
+                  <Stat label="Average first putt" value={`${(career.putting.firstPuttFeet / Math.max(1, career.putting.greensPutted)).toFixed(1)} ft`} />
+                  <Stat
+                    label="Lag leave"
+                    value={career.putting.lagAttempts ? `${(career.putting.lagLeaveFeet / career.putting.lagAttempts).toFixed(1)} ft` : '—'}
+                    hint="from 25 ft and beyond"
+                  />
+                  <Stat
+                    label="Birdie conversion"
+                    value={career.greensHit ? pct(career.birdies / career.greensHit) : '—'}
+                    hint="birdies per green hit"
+                  />
+                  <Stat
+                    label="Under pressure"
+                    value={career.putting.pressureAttempts ? pct(career.putting.pressureMade / career.putting.pressureAttempts) : '—'}
+                    hint={`${career.putting.pressureAttempts} putts`}
+                  />
+                </div>
+                <div className="putt-bands">
+                  {bandLabels().map((label, index) => {
+                    const attempts = career.putting.attemptsByBand[index] ?? 0;
+                    const made = career.putting.madeByBand[index] ?? 0;
+                    return (
+                      <div className="putt-bands__row" key={label}>
+                        <span>{label}</span>
+                        <Bar value={attempts ? (made / attempts) * 100 : 0} />
+                        <em>{attempts ? pct(made / attempts, 0) : '—'}</em>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="hint">
+                  {PUTTING_STYLES[golfer.puttingStyle].name}: {PUTTING_STYLES[golfer.puttingStyle].blurb}
+                </p>
+              </>
+            )}
           </Panel>
 
           <Panel title="Course fit" className="panel--tight">

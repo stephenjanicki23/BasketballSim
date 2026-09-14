@@ -31,6 +31,11 @@ const CATEGORIES: Category[] = [
   { id: 'earnings', label: 'Season earnings', value: (g) => g.season.earnings, format: money, qualify: 0 },
   { id: 'points', label: 'Season points', value: (g) => g.season.points, format: (v) => Math.round(v).toString(), qualify: 0 },
   { id: 'wins', label: 'Career wins', value: (g) => g.career.wins, format: (v) => v.toString(), qualify: 0 },
+  { id: 'sgPutting', label: 'Strokes gained putting', value: (g) => g.career.putting.strokesGained / Math.max(1, g.career.rounds), format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}`, qualify: 8 },
+  { id: 'onePutt', label: 'One-putt percentage', value: (g) => g.career.putting.onePutts / Math.max(1, g.career.putting.greensPutted), format: (v) => pct(v), qualify: 8 },
+  { id: 'threePutt', label: 'Three-putt avoidance', value: (g) => g.career.putting.threePutts / Math.max(1, g.career.putting.greensPutted), format: (v) => pct(v), ascending: true, qualify: 8 },
+  { id: 'lag', label: 'Lag putting', value: (g) => (g.career.putting.lagAttempts ? g.career.putting.lagLeaveFeet / g.career.putting.lagAttempts : 99), format: (v) => `${v.toFixed(2)} ft`, ascending: true, qualify: 8 },
+  { id: 'clutchPutt', label: 'Putting under pressure', value: (g) => (g.career.putting.pressureAttempts >= 12 ? g.career.putting.pressureMade / g.career.putting.pressureAttempts : 0), format: (v) => pct(v), qualify: 8 },
 ];
 
 export function StatsScreen(): JSX.Element {

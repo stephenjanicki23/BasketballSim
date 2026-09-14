@@ -24,15 +24,21 @@ import {
   reachTable,
   resolveShot,
 } from './shotEngine';
-import { planPutt, resolvePutt } from './puttingEngine';
-import { type DailyTouch, effective, fatigueForHole } from './golferEngine';
+import {
+  type PuttSituation, choosePuttIntent, puttDecision, resolvePutt,
+} from './puttingEngine';
+import { PUTTING } from './config';
+import { strokesToHoleOut } from './strokesBaseline';
+import { type DailyTouch, effective, emptyPuttingStats, fatigueForHole } from './golferEngine';
 import { terrainAt } from './courseEngine';
-import type { ClubId, Conditions, Golfer, HoleGeometry, LieType } from './types';
+import type { ClubId, Conditions, Golfer, HoleGeometry, LieType, PuttingStats } from './types';
 
 export interface ShotLog {
   stroke: number;
   club: ClubId;
   shotType: ShotTypeId | 'putt';
+  /** Which strategy a putt was played with. */
+  puttIntent?: string;
   from: Vec2;
   to: Vec2;
   lieBefore: LieType;
@@ -61,6 +67,7 @@ export interface HoleOutcome {
   /** Missed the green in regulation but still made par or better. */
   scrambled: boolean | null;
   shots: ShotLog[];
+  putting: PuttingStats;
 }
 
 export interface PlayHoleOptions {
@@ -76,9 +83,28 @@ export interface PlayHoleOptions {
   shotSeed?: number;
   /** What the golfer has with them today; generated once per round. */
   touch?: DailyTouch;
+  /** Where this golfer stands, so putting strategy can respond to it. */
+  situation?: PuttSituation;
 }
 
 const MAX_STROKES = 12;
+
+/** Which distance band a putt falls in, for the statistics. */
+export function puttBand(distanceFeet: number): number {
+  const bands = PUTTING.statBands;
+  for (let i = 0; i < bands.length; i++) if (distanceFeet <= bands[i]) return i;
+  return bands.length;
+}
+
+function recordPutt(stats: PuttingStats, distanceFeet: number, made: boolean, pressure: number): void {
+  const band = puttBand(distanceFeet);
+  stats.attemptsByBand[band]++;
+  if (made) stats.madeByBand[band]++;
+  if (pressure >= 0.5) {
+    stats.pressureAttempts++;
+    if (made) stats.pressureMade++;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Choosing a shot
@@ -242,6 +268,9 @@ export function playHole(options: PlayHoleOptions): HoleOutcome {
   let fairwayHit: boolean | null = hole.spec.par === 3 ? null : false;
   let driveDistance: number | null = null;
   let girStroke: number | null = null;
+  const putting = emptyPuttingStats();
+  let firstPuttFeet = 0;
+  let strokesGainedBaseline = 0;
 
   while (strokes < MAX_STROKES) {
     const info = terrainAt(hole, ball, { onTee });
@@ -262,26 +291,42 @@ export function playHole(options: PlayHoleOptions): HoleOutcome {
 
     if (lie === 'green') {
       if (girStroke === null) girStroke = strokes;
-      const provisional = planPutt(ctx, hole.pin);
-      const plan = planPutt(ctx, provisional.recommendedAim);
-      const result = resolvePutt(ctx, plan, rng);
+      const decision = puttDecision(ctx, strokes, hole.spec.par);
+      if (putts === 0) {
+        putting.greensPutted++;
+        putting.firstPuttFeet += decision.read.distanceFeet;
+        firstPuttFeet = decision.read.distanceFeet;
+        strokesGainedBaseline = strokesToHoleOut('green', toPinBefore);
+        if (decision.read.distanceFeet >= 25) putting.lagAttempts++;
+      }
+      // What holing this one would be worth is a fact about the hole, not about
+      // the tournament, so it is filled in here rather than by the caller.
+      const situation: PuttSituation = {
+        ...(options.situation ?? { round: 1, behind: 3, holesRemaining: 40, toPar: 0 }),
+        toPar: strokes + 1 - hole.spec.par,
+      };
+      const { intent } = choosePuttIntent(ctx, situation, decision);
+      const result = resolvePutt(ctx, intent, rng, decision.read);
       strokes++;
       putts++;
+      recordPutt(putting, decision.read.distanceFeet, result.holed, pressure);
+      if (putts === 1 && firstPuttFeet >= 25) putting.lagLeaveFeet += result.holed ? 0 : result.leaveFeet;
       shots.push({
         stroke: strokes,
         club: 'P',
         shotType: 'putt',
+        puttIntent: intent,
         from: ball,
         to: result.final,
         lieBefore: 'green',
-        lieAfter: result.holed ? 'green' : 'green',
-        distance: plan.distanceFeet / 3,
+        lieAfter: 'green',
+        distance: decision.read.distanceFeet / 3,
         toPinBefore,
         toPinAfter: result.holed ? 0 : result.leaveFeet / 3,
         penalty: 0,
         holed: result.holed,
         quality: result.holed ? 'Holed' : `${result.leaveFeet.toFixed(1)} ft left`,
-        note: result.notes.join(' '),
+        note: result.note,
       });
       if (result.holed) break;
       ball = result.final;
@@ -327,6 +372,11 @@ export function playHole(options: PlayHoleOptions): HoleOutcome {
   const gir = girStroke !== null && girStroke <= regulation;
   const scrambled = gir ? null : strokes <= par;
 
+  if (putts === 1) putting.onePutts++;
+  else if (putts === 2) putting.twoPutts++;
+  else if (putts >= 3) putting.threePutts++;
+  if (putts > 0) putting.strokesGained += strokesGainedBaseline - putts;
+
   golfer.fatigue = clamp(golfer.fatigue + fatigueForHole(golfer, conditions.weather, hole.spec.yards), 0, 100);
 
   return {
@@ -341,6 +391,7 @@ export function playHole(options: PlayHoleOptions): HoleOutcome {
     driveDistance,
     scrambled,
     shots,
+    putting,
   };
 }
 

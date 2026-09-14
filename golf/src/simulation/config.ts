@@ -262,3 +262,148 @@ export const TUNING = {
   /** Green: how firm a green has to be before an approach bounces through it. */
   greenRollBase: 0.055,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Putting
+// ---------------------------------------------------------------------------
+
+export type PuttIntentId = 'safe' | 'lag' | 'attack';
+
+export interface PuttIntentProfile {
+  id: PuttIntentId;
+  name: string;
+  verb: string;
+  blurb: string;
+  /**
+   * How far past the hole the golfer is trying to carry the ball, in feet, as
+   * a constant plus a share of the putt's length. This is the whole difference
+   * between the intents: a ball dying at the hole cannot fall in as often, and
+   * a ball hit to go four feet by does not stop next to it when it misses.
+   */
+  holdBase: number;
+  holdPerFoot: number;
+  /** Multiplier on speed-control error. Lagging is a speed-control exercise. */
+  speedSigma: number;
+  /** Multiplier on start-line error. A firmer stroke is a slightly looser one. */
+  lineSigma: number;
+  /** How much of the golfer's lag-putting rating applies to speed control. */
+  lagShare: number;
+  /** A firm putt takes less of the break, so a misread costs less sideways. */
+  breakExposure: number;
+}
+
+/**
+ * The two strategies the player chooses between, plus a third for the putts
+ * where the only sane goal is two of them.
+ */
+export const PUTT_INTENTS: Record<PuttIntentId, PuttIntentProfile> = {
+  safe: {
+    id: 'safe', name: 'Safe lag', verb: 'dies it up',
+    blurb: 'Forget the hole. Get it inside three feet and walk off with two putts.',
+    holdBase: 0.25, holdPerFoot: 0.004, speedSigma: 0.74, lineSigma: 0.96, lagShare: 0.55, breakExposure: 1.18,
+  },
+  lag: {
+    id: 'lag', name: 'Lag putt', verb: 'lags it',
+    blurb: 'Roll it at the hole with the pace to stop beside it. Takes the easy two.',
+    holdBase: 0.75, holdPerFoot: 0.012, speedSigma: 0.86, lineSigma: 1.00, lagShare: 0.40, breakExposure: 1.08,
+  },
+  attack: {
+    id: 'attack', name: 'Go for it', verb: 'goes at it',
+    blurb: 'Firm enough to take the break out of it. Holes more, and misses further.',
+    holdBase: 1.85, holdPerFoot: 0.030, speedSigma: 1.14, lineSigma: 1.03, lagShare: 0.12, breakExposure: 0.68,
+  },
+};
+
+/**
+ * Everything about how a putt behaves.
+ *
+ * `makeCurve` is the one table to change if putting feels wrong. It is the make
+ * probability for a reference tour putter — rating 72, an average-paced green,
+ * a modest break, a normal stroke — and the engine works backwards from it to
+ * the start-line error that would produce it. Skill, speed, slope, break,
+ * pressure and the chosen strategy then move that dispersion, and the make
+ * probability falls back out of it rather than being multiplied.
+ */
+export const PUTTING = {
+  /** [distance in feet, make probability for the reference putter]. */
+  makeCurve: [
+    [1, 0.995], [2, 0.975], [3, 0.930], [4, 0.850], [5, 0.750], [6, 0.640],
+    [7, 0.540], [8, 0.450], [9, 0.405], [10, 0.370], [12, 0.280], [15, 0.175],
+    [18, 0.135], [20, 0.115], [25, 0.075], [30, 0.045], [35, 0.031],
+    [40, 0.022], [50, 0.012], [60, 0.008], [80, 0.004], [110, 0.002],
+  ] as [number, number][],
+  /** The rating the curve describes. */
+  referenceRating: 72,
+  /** Start-line error falls off this fast above the reference rating, and grows this fast below it. */
+  sigmaDecayAbove: 0.0072,
+  sigmaGrowthBelow: 0.0075,
+  /**
+   * Speed control spreads much harder than the line does, and it is meant to.
+   * Beyond about twenty feet nobody holes many putts whatever their stroke, so
+   * the difference between a good putter and a poor one at range is not how many
+   * drop — it is whether the next one is two feet or six. Tie that to the same
+   * gentle curve as the line and a player with no touch is barely punished,
+   * which lets an elite ball-striker with a poor putter lead the scoring average.
+   */
+  speedDecayAbove: 0.0130,
+  speedGrowthBelow: 0.0145,
+
+  /** Effective capture width of a 4.25-inch hole, in feet, at the best pace. */
+  holeCapture: 0.210,
+  /**
+   * Pace, in feet past the hole, that holes the most putts. A ball dying at the
+   * hole wobbles off at the last roll and any misjudgement leaves it short; a
+   * ball travelling fast has less of the hole to fall into. Somewhere around a
+   * foot and a half past is the optimum, which is why "never up, never in" and
+   * "you'll never make it from there" are both true.
+   */
+  paceOptimum: 1.4,
+  /** How fast the capture width opens up below the optimum. */
+  paceRiseExponent: 0.45,
+  /** How much capture is lost between the optimum and the ceiling. */
+  paceCaptureLoss: 0.42,
+  /** Past this much pace, the ball is going too fast to drop however good the line. */
+  paceCeiling: 5.5,
+
+  /**
+   * Long putts are not missed because tour players cannot aim; they are missed
+   * because over forty feet of grass something always intervenes — a spike
+   * mark, a grain change, a foot of break misjudged three feet from the hole.
+   * This is that, lumped: the chance a putt that deserved to drop does not.
+   * Without it, working backwards from the make curve gives a forty-footer six
+   * feet of sideways error, which is not a thing that happens.
+   */
+  deflectionOnset: 6,
+  deflectionLength: 30,
+
+  /** 1σ of speed control, in feet: a constant plus a share of the putt's length. */
+  speedSigmaBase: 0.30,
+  speedSigmaPerFoot: 0.050,
+
+  /** Break, in feet: this × side slope in percent × length^exponent × (stimp / 11). */
+  breakCoefficient: 0.0075,
+  breakExponent: 1.6,
+  /** A downhill putt is struck softer and takes more of the slope. */
+  breakPerDownhillPercent: 0.06,
+
+  /** Side slope the reference make curve already allows for, in percent. */
+  referenceSideSlope: 1.2,
+  /** Feet of extra start-line error per foot of break a golfer cannot read. */
+  readSensitivity: 0.30,
+  /** Share of the break a golfer systematically under-reads, before green reading. */
+  underReadShare: 0.22,
+
+  /** How much an uphill putt plays longer, in feet per foot of rise. */
+  uphillPlaysLike: 7,
+  /** Extra speed-control error per percent of downhill and uphill grade. */
+  speedSigmaPerDownhill: 0.085,
+  speedSigmaPerUphill: 0.030,
+  /** Extra speed-control error per stimp above 11. */
+  speedSigmaPerStimp: 0.055,
+
+  /** Pressure inflates both errors by up to this much for a golfer with no nerve. */
+  pressureSigma: 0.26,
+
+  /** Distance bands used by the statistics, in feet. */
+  statBands: [3, 6, 10, 20, 30] as number[],
+} as const;

@@ -12,7 +12,7 @@ import { type Camera, fitCamera, toWorld } from './render/camera';
 import { drawHole, drawHoleMap } from './render/holeRenderer';
 import { type Vec2, blobOutline, dist, norm, sub } from '../simulation/geometry';
 import { dispersionContour, sigmaForShare, type ShotPlan } from '../simulation/shotEngine';
-import type { PuttPlan } from '../simulation/puttingEngine';
+import type { GreenRead } from '../simulation/puttingEngine';
 import type { FlightAnimation } from '../game/session';
 import type { HoleGeometry } from '../simulation/types';
 
@@ -21,7 +21,7 @@ export interface CourseViewProps {
   ball: Vec2;
   target: Vec2 | null;
   plan: ShotPlan | null;
-  putt: PuttPlan | null;
+  putt: GreenRead | null;
   shotLines: { from: Vec2; to: Vec2 }[];
   animation: FlightAnimation | null;
   onAnimationDone: () => void;
@@ -87,7 +87,6 @@ export function CourseView(props: CourseViewProps): JSX.Element {
       );
     } else if (puttingView) {
       points.push(...blobOutline(hole.green, 16), hole.pin);
-      if (target) points.push(target);
     } else {
       points.push(hole.pin);
       if (target) points.push(target);

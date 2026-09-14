@@ -119,30 +119,57 @@ await step('start a practice hole', async () => {
   await page.waitForSelector('.course-canvas');
 });
 
-await step('aim and hit three shots', async () => {
-  for (let i = 0; i < 3; i++) {
-    const box = await page.locator('.course-canvas').boundingBox();
-    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * (0.34 + i * 0.04));
-    await page.waitForTimeout(160);
-    const hit = page.locator('.hit').first();
-    if (await hit.isVisible()) await hit.click();
-    await page.waitForTimeout(2600);
+let sawPuttPanel = 0;
+await step('play the hole out, putting by strategy', async () => {
+  for (let i = 0; i < 9; i++) {
+    const putting = await page.locator('.putt-options').isVisible().catch(() => false);
+    if (putting) {
+      // No aiming on the green: pick a strategy and the engine rolls it.
+      const options = page.locator('.putt-option .hit');
+      const count = await options.count();
+      sawPuttPanel = Math.max(sawPuttPanel, count);
+      await options.nth(i % 2 === 0 ? Math.min(count - 1, 1) : 0).click();
+      await page.waitForTimeout(2200);
+    } else {
+      const box = await page.locator('.course-canvas').boundingBox();
+      await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * (0.34 + i * 0.03));
+      await page.waitForTimeout(160);
+      const hit = page.locator('.shot-controls .hit').first();
+      if (await hit.isVisible()) await hit.click();
+      await page.waitForTimeout(2600);
+    }
+    if (await page.locator('.play__interstitial').isVisible().catch(() => false)) break;
   }
+});
+
+await step('the putting panel offered a real choice', async () => {
+  if (sawPuttPanel < 2) throw new Error(`putting panel offered ${sawPuttPanel} options`);
 });
 
 await step('screenshot the play screen', async () => {
   await page.screenshot({ path: 'dist/smoke-play.png' });
 });
 
+await step('no manual putting controls exist', async () => {
+  if (await page.locator('.putt-options').isVisible().catch(() => false)) {
+    const aimVisible = await page.locator('.aim-controls').isVisible().catch(() => false);
+    if (aimVisible) throw new Error('aim controls are showing on the green');
+  }
+});
+
 await step('whole-hole view and zones', async () => {
   await page.getByRole('button', { name: 'Whole hole' }).click();
   await page.waitForTimeout(300);
   await page.getByRole('button', { name: 'Shot view' }).click();
-  await page.getByLabel('90%').check();
+  // The dispersion toggles only exist while there is a swing to disperse.
+  const zone = page.getByLabel('90%');
+  if (await zone.isVisible().catch(() => false)) await zone.check();
 });
 
 await step('leave the round', async () => {
-  await page.getByRole('button', { name: 'Leave the round' }).click();
+  const leave = page.getByRole('button', { name: 'Leave the round' });
+  if (await leave.isVisible().catch(() => false)) await leave.click();
+  else await page.getByRole('button', { name: 'Home', exact: true }).first().click();
 });
 
 await step('play a tournament round and post it', async () => {

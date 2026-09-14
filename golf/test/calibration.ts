@@ -10,7 +10,7 @@ import { holeGeometry, terrainAt } from '../src/simulation/courseEngine';
 import { bagFor, driverCarry } from '../src/simulation/golferEngine';
 import { calmWeather, conditionsFor } from '../src/simulation/weatherEngine';
 import { planShot, resolveShot, type ShotContext } from '../src/simulation/shotEngine';
-import { makeProbability, planPutt, resolvePutt } from '../src/simulation/puttingEngine';
+import { makeProbability, puttDecision, resolvePutt } from '../src/simulation/puttingEngine';
 import { createRng } from '../src/simulation/rng';
 import { add, scale, vec, pointAlongPolyline, perp } from '../src/simulation/geometry';
 import type { Golfer } from '../src/simulation/types';
@@ -99,19 +99,13 @@ for (const name of ['Jae-won Park', 'Marcus Vandehey', 'Hugo Marchetti', 'Tevita
   for (const feet of [3, 5, 8, 10, 15, 20, 30, 40]) {
     const ball = add(puttHole.pin, scale(vec(0, -1), feet / 3));
     const ctx = contextFor(g, 12, ball, 'green', false);
-    const plan = planPutt(ctx, plan0(ctx, feet));
+    const plan = puttDecision(ctx);
     let made = 0;
     const N = 4000;
-    for (let i = 0; i < N; i++) if (resolvePutt(ctx, plan, rng).holed) made++;
+    for (let i = 0; i < N; i++) if (resolvePutt(ctx, 'attack', rng, plan.read).holed) made++;
     cells.push(`${feet}ft ${((made / N) * 100).toFixed(0)}%`);
   }
   console.log(`  ${g.name.padEnd(20)} putting ${String(g.ratings.putting).padStart(2)}  ${cells.join('  ')}`);
-}
-
-function plan0(ctx: ShotContext, _feet: number) {
-  // Aim at the recommended line: what a player following the read would do.
-  const provisional = planPutt(ctx, ctx.hole.pin);
-  return provisional.recommendedAim;
 }
 
 console.log('\n--- Analytic make probability (no simulation) ---');

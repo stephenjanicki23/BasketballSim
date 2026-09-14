@@ -13,7 +13,7 @@
 
 import { type Vec2, add, dist, norm, scale, sub } from '../simulation/geometry';
 import { createRng, type Rng } from '../simulation/rng';
-import { CLUB_BY_ID, LIES, SHOT_TYPES, type ShotTypeId } from '../simulation/config';
+import { CLUB_BY_ID, LIES, PUTT_INTENTS, SHOT_TYPES, type ShotTypeId } from '../simulation/config';
 import {
   type ShotContext,
   type ShotPlan,
@@ -24,19 +24,28 @@ import {
   planShot,
   resolveShot,
 } from '../simulation/shotEngine';
-import { type PuttPlan, type PuttResult, planPutt, resolvePutt } from '../simulation/puttingEngine';
+import {
+  type PuttDecision, type PuttResult, type PuttSituation, puttDecision, resolvePutt,
+} from '../simulation/puttingEngine';
 import { holeGeometry, pinForRound, terrainAt, withPin } from '../simulation/courseEngine';
-import { type DailyTouch, bagFor, clubForDistance, dailyTouch, fatigueForHole } from '../simulation/golferEngine';
+import {
+  type DailyTouch, addPuttingStats, bagFor, clubForDistance, dailyTouch, emptyPuttingStats,
+  fatigueForHole,
+} from '../simulation/golferEngine';
 import { chooseShot } from '../simulation/holeEngine';
 import { conditionsFor } from '../simulation/weatherEngine';
 import { COURSE_BY_ID } from '../data/courses';
 import { pressureFor, type RoundStats, type Tournament } from '../simulation/tournamentEngine';
-import type { ClubId, Conditions, Golfer, HoleGeometry, LieType } from '../simulation/types';
+import { strokesToHoleOut } from '../simulation/strokesBaseline';
+import { puttBand } from '../simulation/holeEngine';
+import type { ClubId, Conditions, Golfer, HoleGeometry, LieType, PuttingStats } from '../simulation/types';
+import type { PuttIntentId } from '../simulation/config';
 
 export interface ShotRecord {
   stroke: number;
   club: ClubId;
   shotType: ShotTypeId | 'putt';
+  puttIntent?: PuttIntentId;
   from: Vec2;
   to: Vec2;
   lieBefore: LieType;
@@ -91,6 +100,12 @@ export interface PlaySession {
   /** Set when the player has nudged the aim off the default. */
   aimTouched: boolean;
 
+  /** Putting is a choice, not an aim: these track the hole's putting state. */
+  puttsThisHoleStats: PuttingStats;
+  firstPuttFeet: number;
+  strokesGainedBaseline: number;
+  situation: PuttSituation;
+
   status: SessionStatus;
   animation: FlightAnimation | null;
   lastResult: { quality: string; note: string; distance: number; toPin: number } | null;
@@ -118,7 +133,7 @@ export interface SessionSetup {
 
 export function emptyRoundStats(): RoundStats {
   return {
-    putts: 0, girHit: 0, girAttempts: 0, fairwaysHit: 0, fairwayAttempts: 0,
+    putts: 0, putting: emptyPuttingStats(), girHit: 0, girAttempts: 0, fairwaysHit: 0, fairwayAttempts: 0,
     driveTotal: 0, drives: 0, penalties: 0, eagles: 0, birdies: 0, pars: 0,
     bogeys: 0, doubles: 0, scrambleSaves: 0, scrambleAttempts: 0,
   };
@@ -155,10 +170,10 @@ export function sessionContext(session: PlaySession, golfer: Golfer): ShotContex
  * the one aim the player would never choose, so it is a bad default.
  */
 export function defaultTarget(session: PlaySession, golfer: Golfer): Vec2 {
+  // On the green there is nothing to aim: the hole is the target and the
+  // strategy is the decision.
+  if (session.lie === 'green') return sessionHole(session).pin;
   const ctx = sessionContext(session, golfer);
-  if (session.lie === 'green') {
-    return planPutt(ctx, sessionHole(session).pin).recommendedAim;
-  }
   const plan = chooseShot(ctx, createRng(`${session.seed}:suggest:${session.holeNumber}:${session.strokesThisHole}`), false);
   return plan.request.target;
 }
@@ -223,6 +238,15 @@ export function createSession(setup: SessionSetup): PlaySession {
     status: 'aiming',
     animation: null,
     lastResult: null,
+    puttsThisHoleStats: emptyPuttingStats(),
+    firstPuttFeet: 0,
+    strokesGainedBaseline: 0,
+    situation: {
+      round: setup.round,
+      behind: setup.standing?.behind ?? 3,
+      holesRemaining: 40,
+      toPar: 0,
+    },
     conditions: setup.conditions,
     touch: dailyTouch(setup.golfer, createRng(`${seed}:touch:${setup.round}`)),
     pressure: 0.1,
@@ -257,6 +281,9 @@ export function startHole(
     animation: null,
     lastResult: null,
     aimTouched: false,
+    puttsThisHoleStats: emptyPuttingStats(),
+    firstPuttFeet: 0,
+    strokesGainedBaseline: 0,
   };
   const hole = sessionHole(next);
   next.ball = hole.tee;
@@ -270,6 +297,12 @@ export function startHole(
     holeIndex: hole.spec.index,
     fieldSize: standing?.fieldSize ?? 50,
   });
+  next.situation = {
+    round: next.round,
+    behind: standing?.behind ?? 3,
+    holesRemaining: next.mode === 'tournament' ? (4 - next.round) * 18 + (19 - holeNumber) : 40,
+    toPar: 0,
+  };
   next.target = defaultTarget(next, golfer);
   next.club = suggestedClub(next, golfer, next.target);
   next.shotType = suggestedShotType(next, next.target);
@@ -336,14 +369,19 @@ export interface CurrentPlan {
 }
 export interface CurrentPutt {
   kind: 'putt';
-  plan: PuttPlan;
+  decision: PuttDecision;
 }
 export type PlanView = CurrentPlan | CurrentPutt;
 
+export function isPutting(session: PlaySession): boolean {
+  return session.lie === 'green';
+}
+
 export function currentPlan(session: PlaySession, golfer: Golfer): PlanView {
   const ctx = sessionContext(session, golfer);
-  if (session.club === 'P' || session.shotType === 'putt') {
-    return { kind: 'putt', plan: planPutt(ctx, session.target) };
+  if (isPutting(session)) {
+    const hole = sessionHole(session);
+    return { kind: 'putt', decision: puttDecision(ctx, session.strokesThisHole, hole.spec.par) };
   }
   return { kind: 'swing', plan: planShot(ctx, { club: session.club, shotType: session.shotType, target: session.target }) };
 }
@@ -354,49 +392,92 @@ export interface HitOutcome {
   putt?: PuttResult;
 }
 
+/**
+ * Play the putt with the chosen strategy. No aiming, no power meter: the player
+ * has already made the only decision there is, and this rolls the ball.
+ */
+export function puttWith(session: PlaySession, golfer: Golfer, intent: PuttIntentId): HitOutcome {
+  const ctx = sessionContext(session, golfer);
+  const hole = sessionHole(session);
+  const rng: Rng = createRng(`${session.seed}:${session.holeNumber}:putt:${session.strokesThisHole}:${session.shotIndex}`);
+  const decision = puttDecision(ctx, session.strokesThisHole, hole.spec.par);
+  const situation: PuttSituation = { ...session.situation, toPar: session.strokesThisHole + 1 - hole.spec.par };
+  void situation;
+  const result = resolvePutt(ctx, intent, rng, decision.read);
+
+  const next: PlaySession = {
+    ...session,
+    strokeStart: session.ball,
+    shotIndex: session.shotIndex + 1,
+    puttsThisHoleStats: { ...session.puttsThisHoleStats,
+      madeByBand: [...session.puttsThisHoleStats.madeByBand],
+      attemptsByBand: [...session.puttsThisHoleStats.attemptsByBand] },
+  };
+
+  if (session.puttsThisHole === 0) {
+    next.puttsThisHoleStats.greensPutted++;
+    next.puttsThisHoleStats.firstPuttFeet += decision.read.distanceFeet;
+    next.firstPuttFeet = decision.read.distanceFeet;
+    next.strokesGainedBaseline = strokesToHoleOut('green', decision.read.distanceFeet / 3);
+    if (decision.read.distanceFeet >= 25) next.puttsThisHoleStats.lagAttempts++;
+  }
+  const band = puttBand(decision.read.distanceFeet);
+  next.puttsThisHoleStats.attemptsByBand[band]++;
+  if (result.holed) next.puttsThisHoleStats.madeByBand[band]++;
+  if (session.pressure >= 0.5) {
+    next.puttsThisHoleStats.pressureAttempts++;
+    if (result.holed) next.puttsThisHoleStats.pressureMade++;
+  }
+  if (session.puttsThisHole === 0 && next.firstPuttFeet >= 25) {
+    next.puttsThisHoleStats.lagLeaveFeet += result.holed ? 0 : result.leaveFeet;
+  }
+
+  next.strokesThisHole++;
+  next.puttsThisHole++;
+  next.stats = { ...session.stats, putts: session.stats.putts + 1 };
+  next.shots = [
+    ...session.shots,
+    {
+      stroke: next.strokesThisHole,
+      club: 'P',
+      shotType: 'putt',
+      puttIntent: intent,
+      from: session.ball,
+      to: result.final,
+      lieBefore: session.lie,
+      lieAfter: 'green',
+      distance: decision.read.distanceFeet / 3,
+      toPinAfter: result.holed ? 0 : result.leaveFeet / 3,
+      penalty: 0,
+      holed: result.holed,
+      quality: result.holed ? 'Holed' : `${result.leaveFeet.toFixed(1)} ft left`,
+      note: result.note,
+    },
+  ];
+  next.animation = {
+    path: [],
+    rollPath: [],
+    duration: 0.8 + Math.min(1.5, decision.read.distanceFeet * 0.022),
+    putt: result.path,
+  };
+  next.lastResult = {
+    quality: result.holed ? 'Holed' : 'Missed',
+    note: result.note,
+    distance: decision.read.distanceFeet / 3,
+    toPin: result.holed ? 0 : result.leaveFeet / 3,
+  };
+  next.ball = result.final;
+  next.lie = 'green';
+  next.status = 'animating';
+  next.log = [...session.log, puttLine(next.strokesThisHole, intent, decision, result)];
+  return { session: next, putt: result };
+}
+
 /** Play the shot. The session comes back in `animating`. */
 export function hit(session: PlaySession, golfer: Golfer): HitOutcome {
   const ctx = sessionContext(session, golfer);
   const rng: Rng = createRng(`${session.seed}:${session.holeNumber}:${session.strokesThisHole}:${session.shotIndex}`);
   const next: PlaySession = { ...session, strokeStart: session.ball, shotIndex: session.shotIndex + 1 };
-
-  if (session.club === 'P' || session.shotType === 'putt') {
-    const plan = planPutt(ctx, session.target);
-    const result = resolvePutt(ctx, plan, rng);
-    next.strokesThisHole++;
-    next.puttsThisHole++;
-    next.stats.putts++;
-    next.shots = [
-      ...session.shots,
-      {
-        stroke: next.strokesThisHole,
-        club: 'P',
-        shotType: 'putt',
-        from: session.ball,
-        to: result.final,
-        lieBefore: session.lie,
-        lieAfter: 'green',
-        distance: plan.distanceFeet / 3,
-        toPinAfter: result.holed ? 0 : result.leaveFeet / 3,
-        penalty: 0,
-        holed: result.holed,
-        quality: result.holed ? 'Holed' : `${result.leaveFeet.toFixed(1)} ft left`,
-        note: result.notes.join(' '),
-      },
-    ];
-    next.animation = { path: [], rollPath: [], duration: 0.9 + plan.distanceFeet * 0.03, putt: result.path };
-    next.lastResult = {
-      quality: result.holed ? 'Holed' : 'Missed',
-      note: result.notes.join(' ') || (result.holed ? '' : `${result.leaveFeet.toFixed(1)} feet left.`),
-      distance: plan.distanceFeet / 3,
-      toPin: result.holed ? 0 : result.leaveFeet / 3,
-    };
-    next.ball = result.final;
-    next.lie = 'green';
-    next.status = 'animating';
-    next.log = [...session.log, puttLine(next.strokesThisHole, plan, result)];
-    return { session: next, putt: result };
-  }
 
   const plan = planShot(ctx, { club: session.club, shotType: session.shotType, target: session.target });
   const result = resolveShot(ctx, plan, rng);
@@ -481,7 +562,7 @@ function completeHole(session: PlaySession, golfer: Golfer): PlaySession {
   next.holeScores = [...session.holeScores];
   next.holeScores[hole.spec.number - 1] = strokes;
 
-  const stats = { ...session.stats };
+  const stats = { ...session.stats, putting: session.stats.putting };
   stats.girAttempts++;
   const gir = session.girStroke !== null && session.girStroke <= par - 2;
   if (gir) stats.girHit++;
@@ -503,6 +584,17 @@ function completeHole(session: PlaySession, golfer: Golfer): PlaySession {
   else if (toPar === 0) stats.pars++;
   else if (toPar === 1) stats.bogeys++;
   else stats.doubles++;
+
+  const holePutting = { ...session.puttsThisHoleStats };
+  if (session.puttsThisHole === 1) holePutting.onePutts++;
+  else if (session.puttsThisHole === 2) holePutting.twoPutts++;
+  else if (session.puttsThisHole >= 3) holePutting.threePutts++;
+  if (session.puttsThisHole > 0) {
+    holePutting.strokesGained += session.strokesGainedBaseline - session.puttsThisHole;
+  }
+  stats.putting = { ...stats.putting,
+    madeByBand: [...stats.putting.madeByBand], attemptsByBand: [...stats.putting.attemptsByBand] };
+  addPuttingStats(stats.putting, holePutting);
   next.stats = stats;
 
   golfer.fatigue = Math.min(100, golfer.fatigue + fatigueForHole(golfer, session.conditions.weather, hole.spec.yards));
@@ -574,10 +666,11 @@ function swingLine(stroke: number, club: ClubId, plan: ShotPlan, result: ShotRes
   return `${stroke}. ${shapeText}, ${Math.round(result.total)} yards (${miss}), ${Math.round(dist(result.final, plan.center) + 0)} yards from the target — ${lie}.`;
 }
 
-function puttLine(stroke: number, plan: PuttPlan, result: PuttResult): string {
-  const length = Math.round(plan.distanceFeet);
-  if (result.holed) return `${stroke}. Putt from ${length} feet — holed.`;
-  return `${stroke}. Putt from ${length} feet — ${result.leaveFeet.toFixed(1)} feet left${result.notes.length ? `, ${result.notes.join(' ').toLowerCase()}` : ''}.`;
+function puttLine(stroke: number, intent: PuttIntentId, decision: PuttDecision, result: PuttResult): string {
+  const length = Math.round(decision.read.distanceFeet);
+  const verb = PUTT_INTENTS[intent].verb;
+  if (result.holed) return `${stroke}. From ${length} feet, ${verb} — holed.`;
+  return `${stroke}. From ${length} feet, ${verb} — ${result.note.toLowerCase()}`;
 }
 
 /** Record the finished round into a tournament. */

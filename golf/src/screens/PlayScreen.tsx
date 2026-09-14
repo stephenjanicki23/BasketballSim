@@ -6,6 +6,7 @@
 import { useEffect, useMemo } from 'react';
 import { CourseView } from '../components/CourseView';
 import { ShotControls } from '../components/ShotControls';
+import { PuttPanel } from '../components/PuttPanel';
 import { GolferCard, HoleCard, Scorecard } from '../components/GolferPanel';
 import { WindDial } from '../components/WindDial';
 import { Panel, Stat, toPar, toParClass, yards } from '../components/ui';
@@ -13,12 +14,17 @@ import { useStore } from '../state/store';
 import { COURSE_BY_ID } from '../data/courses';
 import { LIES } from '../simulation/config';
 import { currentPlan, holesPlayed, roundToPar, scoreName, sessionHole } from '../game/session';
+import { choosePuttIntent } from '../simulation/puttingEngine';
+import { sessionContext } from '../game/session';
 import { describeWeather } from '../simulation/weatherEngine';
 import { dist } from '../simulation/geometry';
 
 export function PlayScreen(): JSX.Element {
   const store = useStore();
-  const { session, golfer: lookup, zones, playShot, completeAnimation, advanceHole, finishSessionRound, abandonSession, aim, openProfile } = store;
+  const {
+    session, golfer: lookup, zones, playShot, playPutt, completeAnimation, advanceHole,
+    finishSessionRound, abandonSession, aim, openProfile,
+  } = store;
 
   const golfer = session ? lookup(session.golferId) : undefined;
 
@@ -32,10 +38,10 @@ export function PlayScreen(): JSX.Element {
       if (event.target instanceof HTMLInputElement) return;
       if (event.code === 'Space') {
         event.preventDefault();
-        if (session.status === 'aiming') playShot();
-        else if (session.status === 'holeComplete') advanceHole();
+        if (session.status === 'holeComplete') advanceHole();
+        else if (session.status === 'aiming' && session.lie !== 'green') playShot();
       }
-      if (session.status !== 'aiming') return;
+      if (session.status !== 'aiming' || session.lie === 'green') return;
       if (event.key === 'ArrowLeft') store.nudge(event.shiftKey ? -10 : -3);
       if (event.key === 'ArrowRight') store.nudge(event.shiftKey ? 10 : 3);
       if (event.key === 'ArrowUp') store.nudgeLength(event.shiftKey ? 10 : 3);
@@ -101,12 +107,12 @@ export function PlayScreen(): JSX.Element {
           ball={session.ball}
           target={session.target}
           plan={plan.kind === 'swing' ? plan.plan : null}
-          putt={plan.kind === 'putt' ? plan.plan : null}
+          putt={plan.kind === 'putt' ? plan.decision.read : null}
           shotLines={session.shots.map((shot) => ({ from: shot.from, to: shot.to }))}
           animation={session.animation}
           onAnimationDone={completeAnimation}
           onAim={aim}
-          interactive={session.status === 'aiming'}
+          interactive={session.status === 'aiming' && plan.kind === 'swing'}
           puttingView={putting}
           windFrom={session.conditions.weather.windFrom}
           windSpeed={session.conditions.weather.windSpeed}
@@ -144,7 +150,11 @@ export function PlayScreen(): JSX.Element {
 
         <div className="play__log">
           {session.log.length === 0 ? (
-            <p className="empty">Click the course to aim, pick a club, and hit it.</p>
+            <p className="empty">
+              {putting
+                ? 'Read the green, pick a strategy, and let him putt it.'
+                : 'Click the course to aim, pick a club, and hit it.'}
+            </p>
           ) : (
             [...session.log].reverse().slice(0, 6).map((line, index) => (
               <p key={`${line}-${index}`} className={index === 0 ? 'latest' : ''}>
@@ -156,7 +166,20 @@ export function PlayScreen(): JSX.Element {
       </main>
 
       <aside className="play__right">
-        <ShotControls session={session} golfer={golfer} plan={plan} />
+        {plan.kind === 'putt' ? (
+          <PuttPanel
+            decision={plan.decision}
+            golfer={golfer}
+            holeNumber={hole.spec.number}
+            recommended={
+              choosePuttIntent(sessionContext(session, golfer), session.situation, plan.decision).intent
+            }
+            onChoose={playPutt}
+            disabled={session.status !== 'aiming'}
+          />
+        ) : (
+          <ShotControls session={session} golfer={golfer} plan={plan.plan} />
+        )}
         <button type="button" className="ghost ghost--wide" onClick={abandonSession}>
           Leave the round
         </button>

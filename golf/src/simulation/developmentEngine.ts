@@ -17,7 +17,7 @@ const PHYSICAL: RatingKey[] = ['driverDistance', 'ballSpeed', 'stamina', 'fatigu
 const TECHNICAL: RatingKey[] = [
   'driverAccuracy', 'launch', 'longIron', 'midIron', 'shortIron', 'wedgeAccuracy',
   'approachConsistency', 'chipping', 'pitching', 'bunkerPlay', 'recovery',
-  'putting', 'longPutting', 'shortPutting',
+  'putting', 'longPutting', 'shortPutting', 'lagPutting', 'greenReading', 'speedControl',
 ];
 const MENTAL: RatingKey[] = [
   'composure', 'decisionMaking', 'courseManagement', 'clutch', 'consistency',
@@ -52,14 +52,14 @@ export function developGolfer(golfer: Golfer, rng: Rng, seasonRank: number): Dev
   const growth = Math.max(0, gap) * youth * 0.20 * (0.45 + temperament) * seasonBoost * rng.range(0.5, 1.5);
 
   // Physical decline, gentle at first and then not.
-  const decline = age > 30 ? (age - 30) * 0.34 * rng.range(0.6, 1.5) : 0;
+  const decline = age > 30 ? (age - 30) * 0.40 * rng.range(0.6, 1.5) : 0;
 
   for (const key of PHYSICAL) {
     const change = growth * 0.9 - decline * 1.25 + rng.range(-0.8, 0.8);
     golfer.ratings[key] = clamp(Math.round(golfer.ratings[key] + change), 10, 99);
   }
   for (const key of TECHNICAL) {
-    const change = growth * 1.05 - decline * 0.28 + rng.range(-1.1, 1.1);
+    const change = growth * 1.05 - decline * 0.32 + rng.range(-1.1, 1.1);
     golfer.ratings[key] = clamp(Math.round(golfer.ratings[key] + change), 10, 99);
   }
   for (const key of MENTAL) {

@@ -102,16 +102,79 @@ A few things the model insists on:
   rating decides. You are not made to do arithmetic the caddie should do — but a
   poor wind player will still get pushed.
 
-### Putting
+## Putting is a decision, not an aiming exercise
 
-Deliberately not a precision minigame. You see the slope arrows, the break, the
-pace, the make percentage and the three-putt risk, plus a marker on the line the
-read says to start the ball on. Click it and only execution is left; aim
-somewhere else and that is a choice you have made.
+There is no line to draw and no meter to time. When the ball is on the green the
+engine reads it and offers a strategy:
+
+```
+4th hole — 26.8 ft for par
+Medium · Slight break left to right · Moderate uphill
+Putt difficulty  ★★★☆☆          Estimated make chance  7%
+
+LAG PUTT        make 6%   3-putt 1%   leave 1.5 ft   inside 3 ft 90%
+GO FOR IT       make 7%   3-putt 5%   leave 2.7 ft   inside 3 ft 64%
+```
+
+The player presses one button and the ball rolls. A third option — a safe lag
+that forgets the hole entirely — appears only on the putts where it is a real
+alternative: forty feet and up, severe slopes, glass greens, or a long one with
+the tournament on it.
+
+**The strategies are not a make-percentage multiplier.** Going for it holds the
+ball about two feet past the hole instead of nine inches, and everything follows
+from that: a ball dying at the hole cannot fall in as often, a firm putt takes
+much less of the break so a misread costs less, and a ball hit to finish four
+feet by does not stop next to the hole when it misses. The numbers on the panel
+are the same arithmetic the ball then obeys.
+
+That produces a real trade-off that changes with the situation. From six feet,
+attacking wins on expected strokes and everybody does it. From forty-five, lagging
+wins by a fifth of a stroke and only somebody who needs a birdie should think
+otherwise. And what "needs a birdie" means is the leaderboard: two behind with
+three to play, a putt that grades out marginally worse is the right one.
+
+### How the numbers are built
+
+`PUTTING.makeCurve` in `config.ts` is the make probability for a reference tour
+putter, and it is the one table to change if putting feels wrong. The engine
+inverts it once at load into the start-line error that would produce it; a real
+putt then scales that dispersion by the golfer's ratings, the green's speed and
+slope, the break they have to read, the pressure they are under and the strategy
+they chose — and the make probability falls back out of the dispersion.
+
+Two pieces of that are worth naming because the model does not work without them:
+
+- **The hole is widest at about a foot and a half past.** A ball dying at the
+  hole wobbles off at the last roll and any misjudgement leaves it short; a ball
+  travelling fast has less of the hole to drop into. Both "never up, never in"
+  and "you'll never make it from there" are true, and an optimum between them is
+  what makes lagging and attacking genuinely different.
+- **Long putts are not missed because tour players cannot aim.** Working
+  backwards from the make curve alone gives a forty-footer six feet of sideways
+  error, which is not a thing that happens. There is an explicit deflection term
+  — the chance that a putt which deserved to drop meets a spike mark, a grain
+  change or a foot of break misjudged three feet out. With it, the inverted
+  dispersion lands on the physically sensible value at every distance, and the
+  leave distances and three-putt rates come right at the same time.
 
 Make probabilities are computed analytically rather than by sampling, because the
 hole is a fifth of a foot wide and any quadrature cheap enough to run inside a
 season simulation misses it entirely.
+
+### Who putts how
+
+Beyond Putting, Short Putting, Long Putting and Putting Under Pressure, golfers
+have **Lag Putting**, **Green Reading** and **Speed Control**, and a putting
+personality that biases both those ratings and the strategy they favour: The
+Aggressor, The Technician, The Conservative, The Clutch Putter, The Streaky
+Putter, The Poor Green Reader. A misread is not symmetric either — a golfer who
+under-reads a breaking putt misses on the low side, and green reading is what
+pays for it.
+
+The simulated field makes the same choice through the same function. A
+conservative player protecting a lead lags from fourteen feet; an aggressor two
+behind on Sunday takes on eighteen.
 
 ## The universe
 
@@ -164,14 +227,30 @@ Every number below is asserted by `npm test`, and the reports behind them are in
 | Driving distance | 260–309 yd, field 289 | 270–325, field 299 |
 | Driving accuracy | field 54–62%, best 68% | field 61%, best 73% |
 | Greens in regulation | field 60–73% | ~65% |
-| Scrambling | 50% | 58% |
-| Putts per round | field 30.6–32.5 | 29 |
-| Make % at 3 / 10 / 20 / 30 ft | 98 / 45 / 16 / 8 | 97 / 45 / 18 / 8 |
+| Scrambling | 38–49% | 58% |
+| Putts per round | field 30.6–31.6 | 29 |
+| Make % at 3 / 5 / 8 / 15 / 30 ft (average putter) | 93 / 72 / 44 / 17 / 4 | 97 / 77 / 50 / 23 / 7 |
+| Make % at 8 ft, elite / poor | 54 / 37 | 57 / 42 |
+| Three-putts per round | 0.30–0.56 | 0.54 |
+| Three-putt from 45 ft, lag / attack | 9% / 18% | 12% (mixed) |
 | Penalty strokes per round | 0.1–0.3 | ~0.25 |
-| Field scoring average (calm) | +0.3 to +1.9 | ~+1 |
+| Field scoring average (calm) | 0.0 to +0.9 | ~+1 |
 | Field scoring average (links, 19 mph, rain) | +5.9 | +4 to +6 |
 | Winning score | −13.9 average | ~−14 |
-| Different winners in 60 events | 13, best player 23% | 15–20, best player 10–25% |
+| Different winners in 80 events | 12, best player 40% | 15–20, best player 10–25% |
+
+One number is out of band and worth naming: **win concentration**. The scoring
+distribution is right — the best player is about 2.2 strokes a round better than
+the field, the whole tour spans 4.3 strokes, and winning scores average −13 — but
+the top two golfers still take about 70% of the events. Two things cause it, and
+only one is a modelling choice. A fifty-player field is small: with a real
+150-player field, the same distribution would produce far more winners, because
+the best of the other 149 is much further out than the best of the other 49. And
+the putting redesign correctly cut three-putts from about one a round to about
+0.4, which is the real tour rate but removes a large source of bad luck for good
+players. Raising day-to-day variance to compensate was tried and made it worse:
+dispersion costs strokes faster than it saves them, so a wider wobble widens the
+gap between the best and the worst rather than closing it.
 
 Two structural findings came out of getting there, and both are load-bearing:
 
@@ -180,6 +259,16 @@ but the engine was recomputing roll from the approach-shot green model on
 landing — so every chip finished twelve yards short. Scrambling was 13%. Giving
 green complexes their own apron, so that missing a green leaves you in greenside
 rough rather than in deep grass, took it the rest of the way to 50%.
+
+**Putting skill has to bite on pace, not just on line.** Tying speed control to
+the same gentle rating curve as the start line left a golfer with no touch barely
+punished, because beyond twenty feet almost nobody holes anything anyway — and
+the engine's own optimal lag strategy then protected bad putters from the
+three-putts that should be their weakness. An elite ball-striker with a poor
+putter led the scoring average, which is not a thing that happens. Speed control
+now spreads roughly twice as hard with rating as the line does, which is where
+the brief said long-range skill should show: not in hole-outs, in whether the
+next one is two feet or six.
 
 **A single `level` per golfer made every skill correlated.** The best player was
 simultaneously the longest, the straightest, the best iron player and the best
@@ -205,6 +294,7 @@ different volumes.
 
 ## Controls
 
-Click the course to aim. Space plays the shot and advances to the next hole.
-Arrow keys nudge the aim (hold shift for ten yards). Scroll to zoom, drag to pan,
-and "Whole hole" to see the hole end to end.
+Off the green: click the course to aim, space plays the shot, arrow keys nudge
+the aim (hold shift for ten yards). On the green: pick a strategy — there is
+nothing to aim. Space advances to the next hole. Scroll to zoom, drag to pan, and
+"Whole hole" to see the hole end to end.

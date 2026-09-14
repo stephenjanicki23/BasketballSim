@@ -15,6 +15,9 @@ import type {
   ClubDefinition,
   ClubId,
   Golfer,
+  PuttingStats,
+  PuttingStyle,
+  PuttingStyleId,
   RatingKey,
   Ratings,
   Weather,
@@ -28,7 +31,7 @@ export const RATING_GROUPS: { id: string; name: string; keys: RatingKey[] }[] = 
   { id: 'driving',    name: 'Driving',    keys: ['driverDistance', 'driverAccuracy', 'launch', 'ballSpeed', 'drivingPressure'] },
   { id: 'approach',   name: 'Approach',   keys: ['longIron', 'midIron', 'shortIron', 'wedgeAccuracy', 'approachConsistency'] },
   { id: 'shortGame',  name: 'Short Game', keys: ['chipping', 'pitching', 'bunkerPlay', 'recovery'] },
-  { id: 'putting',    name: 'Putting',    keys: ['putting', 'longPutting', 'shortPutting', 'puttingPressure'] },
+  { id: 'putting',    name: 'Putting',    keys: ['putting', 'shortPutting', 'longPutting', 'lagPutting', 'greenReading', 'speedControl', 'puttingPressure'] },
   { id: 'mental',     name: 'Mental',     keys: ['composure', 'decisionMaking', 'courseManagement', 'clutch', 'consistency'] },
   { id: 'physical',   name: 'Physical',   keys: ['stamina', 'fatigueResistance'] },
   { id: 'conditions', name: 'Conditions', keys: ['wind', 'rain', 'coldWeather', 'hotWeather', 'difficultLies'] },
@@ -50,8 +53,11 @@ export const RATING_LABELS: Record<RatingKey, string> = {
   bunkerPlay: 'Bunker Play',
   recovery: 'Recovery Shots',
   putting: 'Putting',
-  longPutting: 'Long Putting',
   shortPutting: 'Short Putting',
+  longPutting: 'Long Putting',
+  lagPutting: 'Lag Putting',
+  greenReading: 'Green Reading',
+  speedControl: 'Speed Control',
   puttingPressure: 'Putting Under Pressure',
   composure: 'Composure',
   decisionMaking: 'Decision Making',
@@ -86,7 +92,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
   ballStriker: {
     id: 'ballStriker', name: 'Ball Striker',
     blurb: 'Hits it flush all day and leaves the strokes on the green.',
-    bias: { longIron: 18, midIron: 18, shortIron: 14, approachConsistency: 14, putting: -12, longPutting: -10, shortPutting: -8 },
+    bias: { longIron: 18, midIron: 18, shortIron: 14, approachConsistency: 14, putting: -12, longPutting: -10, shortPutting: -8, greenReading: -8, speedControl: -9 },
   },
   shortGame: {
     id: 'shortGame', name: 'Short Game Wizard',
@@ -96,7 +102,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
   elitePutter: {
     id: 'elitePutter', name: 'Elite Putter',
     blurb: 'Can gain six strokes on the greens and merely survive everywhere else.',
-    bias: { putting: 22, longPutting: 16, shortPutting: 20, puttingPressure: 14, longIron: -8, driverAccuracy: -5, approachConsistency: -6 },
+    bias: { putting: 22, longPutting: 16, shortPutting: 20, lagPutting: 14, greenReading: 16, speedControl: 15, puttingPressure: 14, longIron: -8, driverAccuracy: -5, approachConsistency: -6 },
   },
   windSpecialist: {
     id: 'windSpecialist', name: 'Wind Specialist',
@@ -116,7 +122,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
   veteran: {
     id: 'veteran', name: 'Veteran',
     blurb: 'The body is going. The head and the hands are not.',
-    bias: { composure: 18, courseManagement: 18, decisionMaking: 14, chipping: 10, putting: 6, driverDistance: -14, ballSpeed: -14, stamina: -16, fatigueResistance: -12 },
+    bias: { composure: 18, courseManagement: 18, decisionMaking: 14, chipping: 10, putting: 6, greenReading: 12, lagPutting: 8, driverDistance: -14, ballSpeed: -14, stamina: -16, fatigueResistance: -12 },
   },
   prospect: {
     id: 'prospect', name: 'Young Prospect',
@@ -140,6 +146,67 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
   },
 };
 
+/**
+ * Putting personalities.
+ *
+ * These are not a separate system bolted on beside the ratings — a style biases
+ * the ratings it describes, so "The Technician" really does have better speed
+ * control and the engine needs to know nothing else about him. The one thing a
+ * style adds on top is a standing preference in the strategic choice: given two
+ * options that grade out nearly level, the aggressor takes on the putt.
+ */
+export const PUTTING_STYLES: Record<PuttingStyleId, PuttingStyle> = {
+  aggressor: {
+    id: 'aggressor', name: 'The Aggressor',
+    blurb: 'Takes on putts other players lag. Holes more of them, and three-putts more too.',
+    bias: { putting: 4, shortPutting: 6, lagPutting: -10, speedControl: -6 },
+    aggression: 0.30,
+    streak: 1.1,
+  },
+  technician: {
+    id: 'technician', name: 'The Technician',
+    blurb: 'Speed control to a foot. Everything finishes where he meant it to.',
+    bias: { speedControl: 14, lagPutting: 8, putting: 3 },
+    aggression: 0.02,
+    streak: 0.82,
+  },
+  conservative: {
+    id: 'conservative', name: 'The Conservative',
+    blurb: 'Almost never three-putts, and almost never holes one from distance either.',
+    bias: { lagPutting: 15, speedControl: 9, longPutting: -6, shortPutting: 2 },
+    aggression: -0.28,
+    streak: 0.88,
+  },
+  clutch: {
+    id: 'clutch', name: 'The Clutch Putter',
+    blurb: 'The stroke does not change when it matters. Sometimes it gets better.',
+    bias: { puttingPressure: 16, shortPutting: 6, greenReading: 3 },
+    aggression: 0.12,
+    streak: 0.95,
+  },
+  streaky: {
+    id: 'streaky', name: 'The Streaky Putter',
+    blurb: 'Holes everything for two days and nothing for two more.',
+    bias: { putting: 6, speedControl: -7, puttingPressure: -5 },
+    aggression: 0.15,
+    streak: 1.75,
+  },
+  poorReader: {
+    id: 'poorReader', name: 'The Poor Green Reader',
+    blurb: 'A good stroke on the wrong line. Severe greens undo him.',
+    bias: { greenReading: -17, putting: 3, speedControl: 4 },
+    aggression: -0.05,
+    streak: 1.05,
+  },
+  steady: {
+    id: 'steady', name: 'Orthodox',
+    blurb: 'No particular tendency. Reads it, hits it, moves on.',
+    bias: {},
+    aggression: 0,
+    streak: 1,
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Composites
 // ---------------------------------------------------------------------------
@@ -148,7 +215,8 @@ const ABILITY_WEIGHTS: Partial<Record<RatingKey, number>> = {
   driverDistance: 1.1, driverAccuracy: 1.2, ballSpeed: 0.5, launch: 0.25, drivingPressure: 0.5,
   longIron: 1.0, midIron: 1.3, shortIron: 1.3, wedgeAccuracy: 1.0, approachConsistency: 1.2,
   chipping: 0.9, pitching: 0.8, bunkerPlay: 0.6, recovery: 0.6,
-  putting: 1.5, longPutting: 0.7, shortPutting: 0.9, puttingPressure: 0.6,
+  putting: 1.3, shortPutting: 0.9, longPutting: 0.6, lagPutting: 0.6, greenReading: 0.6,
+  speedControl: 0.7, puttingPressure: 0.6,
   composure: 0.8, decisionMaking: 0.7, courseManagement: 0.9, clutch: 0.4, consistency: 1.1,
   stamina: 0.35, fatigueResistance: 0.3,
   wind: 0.35, rain: 0.2, coldWeather: 0.15, hotWeather: 0.15, difficultLies: 0.4,
@@ -377,12 +445,17 @@ export interface DailyTouch {
 export const NEUTRAL_TOUCH: DailyTouch = { driving: 1, approach: 1, short: 1, putting: 1 };
 
 export function dailyTouch(golfer: Golfer, rng: Rng): DailyTouch {
-  // Kept deliberately small. Dispersion costs strokes faster than it saves them,
-  // so a large day-to-day wobble does not just add variance — it pushes the whole
-  // field's scoring up, and it punishes the already-wide players twice.
+  // Kept deliberately small through the bag. Dispersion costs strokes faster
+  // than it saves them, so a large day-to-day wobble does not just add variance
+  // — it pushes the whole field's scoring up, and punishes the already-wide
+  // players twice.
   const spread = 0.055 + (100 - effective(golfer, 'consistency')) * 0.0010;
-  const draw = () => Math.exp(rng.normal() * spread);
-  return { driving: draw(), approach: draw(), short: draw(), putting: draw() };
+  const draw = (scale = 1) => Math.exp(rng.normal() * spread * scale);
+  // Putting is the exception, and everyone who has played knows why: a player's
+  // driving is roughly the same every week and their putter is not. It is by
+  // some distance the streakiest part of tour golf, and if it is not modelled
+  // that way the best putter in the field wins far too often.
+  return { driving: draw(), approach: draw(), short: draw(), putting: draw(2.1) };
 }
 
 /** Fat-tail probability for this golfer: inconsistent players blow up more often. */
@@ -421,6 +494,31 @@ export function blankRatings(value = 50): Ratings {
   return Object.fromEntries(keys.map((k) => [k, value])) as Ratings;
 }
 
+export function emptyPuttingStats(): PuttingStats {
+  return {
+    onePutts: 0, twoPutts: 0, threePutts: 0, greensPutted: 0, firstPuttFeet: 0,
+    madeByBand: [0, 0, 0, 0, 0, 0], attemptsByBand: [0, 0, 0, 0, 0, 0],
+    lagAttempts: 0, lagLeaveFeet: 0, pressureAttempts: 0, pressureMade: 0, strokesGained: 0,
+  };
+}
+
+export function addPuttingStats(into: PuttingStats, from: PuttingStats): void {
+  into.onePutts += from.onePutts;
+  into.twoPutts += from.twoPutts;
+  into.threePutts += from.threePutts;
+  into.greensPutted += from.greensPutted;
+  into.firstPuttFeet += from.firstPuttFeet;
+  into.lagAttempts += from.lagAttempts;
+  into.lagLeaveFeet += from.lagLeaveFeet;
+  into.pressureAttempts += from.pressureAttempts;
+  into.pressureMade += from.pressureMade;
+  into.strokesGained += from.strokesGained;
+  for (let i = 0; i < into.madeByBand.length; i++) {
+    into.madeByBand[i] += from.madeByBand[i];
+    into.attemptsByBand[i] += from.attemptsByBand[i];
+  }
+}
+
 export function emptyCareer(): Golfer['career'] {
   return {
     seasons: 0, events: 0, wins: 0, majors: 0, top10s: 0, cutsMade: 0, earnings: 0,
@@ -428,6 +526,7 @@ export function emptyCareer(): Golfer['career'] {
     fairwaysHit: 0, fairwayAttempts: 0, greensHit: 0, greenAttempts: 0,
     scrambleSaves: 0, scrambleAttempts: 0, putts: 0, puttHoles: 0,
     birdies: 0, eagles: 0, pars: 0, bogeys: 0, doubles: 0, holes: 0, bestFinishRank: 0,
+    putting: emptyPuttingStats(),
   };
 }
 
