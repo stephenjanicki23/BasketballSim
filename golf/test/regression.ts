@@ -24,10 +24,14 @@ import { createRng } from '../src/simulation/rng';
 import { add, dist, scale, vec } from '../src/simulation/geometry';
 import { courseFit } from '../src/simulation/courseFit';
 import {
-  advanceSeason, createUniverse, currentTournament, seasonComplete, simulateTournament,
+  advanceSeason, createUniverse, currentTournament, seasonComplete, simulateNextRound,
+  simulateTournament,
 } from '../src/simulation/seasonEngine';
+import {
+  conditionsForSession, createSession, hit, nextHole, settle, standingFor, toPlayerRound,
+} from '../src/game/session';
 import { serializeUniverse } from '../src/simulation/persistence';
-import { buildLeaderboard, payout } from '../src/simulation/tournamentEngine';
+import { buildLeaderboard, payout, recordRound } from '../src/simulation/tournamentEngine';
 import type { Golfer } from '../src/simulation/types';
 
 let passed = 0;
@@ -513,6 +517,55 @@ test('the season rolls over and the field stays at fifty', () => {
     assert.ok(delta(young) > delta(old), 'the young are not developing faster than the old are declining');
   }
   assert.ok(currentTournament(universe), 'no next event');
+});
+
+test('a played round posts into the tournament and the field plays around it', () => {
+  const world = createUniverse('played');
+  const me = world.golfers[7];
+  world.userGolferId = me.id;
+  const event = currentTournament(world);
+  assert.ok(event, 'no event to play');
+
+  // Play all eighteen holes through the session API, the way the screen does:
+  // take the caddie's suggested line, hit, settle, move on.
+  let session = createSession({
+    mode: 'tournament',
+    golfer: me,
+    courseId: event.courseId,
+    round: 1,
+    conditions: conditionsForSession(event, 1),
+    seed: 'played:round1',
+    standing: standingFor(event, me.id, event.field.length),
+  });
+  let guard = 0;
+  while (session.status !== 'roundComplete' && guard++ < 400) {
+    if (session.status === 'aiming') session = hit(session, me).session;
+    else if (session.status === 'animating') session = settle(session, me);
+    else if (session.status === 'holeComplete') session = nextHole(session, me);
+  }
+  assert.equal(session.status, 'roundComplete', 'the round never finished');
+  assert.equal(session.holeScores.filter((s) => s !== null).length, 18, 'not every hole was scored');
+  assert.ok(session.log.length >= 18, 'no commentary was written');
+  assert.ok(session.shots.every((shot) => shot.stroke > 0), 'a shot was logged without a stroke');
+
+  const card = toPlayerRound(session);
+  between(card.strokes, 60, 90, 'played round total');
+  assert.equal(card.holeScores.length, 18);
+  assert.equal(card.strokes, card.holeScores.reduce((a, b) => a + b, 0), 'card does not add up');
+
+  recordRound(event, me.id, 1, card);
+  simulateNextRound(world, { skipGolferId: me.id, fast: true });
+
+  assert.equal(event.roundsPlayed, 1);
+  const board = buildLeaderboard(event, 1);
+  assert.equal(board.length, event.field.length, 'somebody is missing from the board');
+  const mine = board.find((row) => row.golferId === me.id);
+  assert.ok(mine, 'the played round is not on the leaderboard');
+  assert.equal(mine.rounds[0], card.strokes, 'the posted score does not match the card');
+  assert.ok(board.every((row) => row.rounds[0] !== null), 'the field did not all play');
+  // And the played round is not double-counted when the next one is simulated.
+  simulateNextRound(world, { fast: true });
+  assert.equal(buildLeaderboard(event, 2).find((row) => row.golferId === me.id)?.rounds[0], card.strokes);
 });
 
 test('the same seed builds the same universe', () => {
