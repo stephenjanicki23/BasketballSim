@@ -27,15 +27,15 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st, 2nd, 3rd, 4th, 17th and 18th are traced, not derived.** Their
- *    overheads arrived as images, so those six are read straight off the
+ * 3. **The 1st to the 5th, and the 17th and 18th, are traced, not derived.**
+ *    Their overheads arrived as images, so those seven are read straight off the
  *    photograph — the line of play, the lake that runs the whole left side of the
  *    1st, the wooded gully on the inside of the 2nd's elbow, the chute the 3rd is
  *    played out of, the timber down both sides of the 4th, the pond that is all
  *    of the 17th, the green outlines, the stream down the right of the 18th — and
  *    the card sets the scale, as it does everywhere. Tracing removes invention as
- *    well as adding fact: the 4th had a brook crossing it at 320 yards, and the
- *    photograph has no brook. They were traced by eye rather than
+ *    well as adding fact: the 4th had a brook crossing it at 320 yards and the
+ *    5th was a forced carry over wetland, and the photographs show neither. They were traced by eye rather than
  *    digitised, so call them accurate to a few yards, not to the yard. The hole
  *    card in the game says which holes these are, because a derived hole is the
  *    right length and the right shape of corner but not the right hole: the 2nd
@@ -47,7 +47,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other twelve the same way, trace its overhead and drop
+ * To finish any of the other eleven the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -164,13 +164,13 @@ const holes: HoleSpec[] = [
     ],
     landforms: [{ at: 0.5, rise: -12, length: 120 }],
     elevation: { landing: -8, green: -18 }, greenSize: 14, pin: { x: 3, y: 3 },
-    greenSlope: { x: -1.6, y: 1.6 }, trees: 0.66,
+    greenSlope: { x: -1.6, y: 1.6 }, trees: 0.12,
     bunkers: [
       { along: 176, lateral: -14, size: 6, kind: 'greenside', deep: true },
       { along: 192, lateral: 13, size: 5, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'A long iron from a shelf in the trees, all carry over wetland to a green eighteen feet below the tee. The drop is worth a club, the wind up there is worth another, and they do not always point the same way.',
+    strategy: 'A hundred and ninety-three straight downhill through a gap in the timber. The whole right side of the green is a clover of sand and the trees are hard against it on the left: the miss is short, and everyone knows it.',
   },
   {
     number: 6, name: 'Hard Left', par: 4, yards: 380, bearing: 152, index: 9,
@@ -441,6 +441,31 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  5: {
+    tee: [755, 2347],
+    // Dead straight, and the ground in between is mown rather than the wetland
+    // carry the derived version invented for it.
+    playLine: [[755, 2347], [755, 1108]],
+    pin: [755, 1108],
+    green: [
+      [762, 979], [809, 996], [840, 1035], [834, 1093], [797, 1134],
+      [748, 1141], [711, 1110], [701, 1052], [725, 1006],
+    ],
+    bunkers: [
+      // The clover: the whole right side of the green sits behind it.
+      { shape: [[790, 1276], [831, 1253], [846, 1276], [878, 1270], [896, 1302], [872, 1329], [884, 1361], [849, 1375], [819, 1355], [790, 1364], [772, 1332], [784, 1302]], kind: 'greenside', deep: true },
+      { shape: [[878, 1042], [916, 1030], [942, 1056], [937, 1112], [913, 1156], [884, 1165], [869, 1130], [872, 1080]], kind: 'greenside' },
+      { shape: [[656, 1080], [685, 1071], [699, 1095], [682, 1121], [656, 1115]], kind: 'greenside' },
+    ],
+    trees: [
+      { shape: [[541, 907], [607, 896], [622, 1141], [612, 1463], [597, 1756], [585, 2049], [571, 2283], [530, 2341], [515, 1902], [512, 1317]], density: 0.52, canopy: [5, 10] },
+      { shape: [[878, 1434], [951, 1463], [977, 1756], [971, 2078], [942, 2312], [875, 2371], [861, 2049], [866, 1698]], density: 0.5, canopy: [5, 10] },
+      { shape: [[600, 1178], [655, 1166], [672, 1220], [650, 1266], [604, 1257], [588, 1216]], density: 0.55, canopy: [5, 9] },
+      { shape: [[878, 937], [951, 960], [960, 1024], [907, 1024], [872, 989]], density: 0.5, canopy: [4, 9] },
+    ],
+    paths: [{ line: [[858, 1522], [837, 1698], [814, 1888], [790, 2049], [767, 2195]], width: 3 }],
+    widths: [{ at: 0.06, half: 10 }, { at: 0.35, half: 13 }, { at: 0.60, half: 14 }, { at: 0.85, half: 13 }, { at: 1, half: 14 }],
+  },
   4: {
     tee: [626, 2344],
     // A gentle S: 251 out to the marker, forty-odd yards right of the line, then
