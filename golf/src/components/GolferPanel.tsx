@@ -74,6 +74,17 @@ export function HoleCard({ hole, session }: { hole: HoleGeometry; session: PlayS
           </span>
         </div>
         <p className="hole-card__strategy">{hole.spec.strategy}</p>
+        {/* Where this hole's shape came from. On a real course that is worth
+            saying out loud: a hole traced off the club's own overhead is the
+            hole, and a hole built from its card is the right length, the right
+            par and the right corner, but its shape is somebody's reading. */}
+        {course.real && (
+          <p className={`hole-card__source ${hole.spec.centreline ? 'is-traced' : ''}`}>
+            {hole.spec.centreline
+              ? 'Traced from the club’s overhead'
+              : 'Shaped from the card — not yet traced'}
+          </p>
+        )}
         <div className="stat-row stat-row--compact">
           <Stat label="Green" value={`${Math.round(hole.spec.greenSize * 2)} yd across`} hint={`slope ${Math.hypot(hole.spec.greenSlope.x, hole.spec.greenSlope.y).toFixed(1)}%`} />
           <Stat

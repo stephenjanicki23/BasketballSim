@@ -437,6 +437,7 @@ export const REVERE_CONCORD: Course = {
   id: 'concord',
   name: 'Revere Concord',
   location: 'Henderson, Nevada',
+  real: true,
   style: 'desert',
   par: card.reduce((sum, h) => sum + h.par, 0),
   yards: card.reduce((sum, h) => sum + h.yards, 0),

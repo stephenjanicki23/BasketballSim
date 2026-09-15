@@ -277,10 +277,17 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     if (b.shape) return { shape: shapeFromPolygon(b.shape), kind, deep };
     const { point, tangent } = pointAlongPolyline(centerline, Math.min(b.along, length));
     const r = perp(tangent);
-    const center = add(point, scale(r, b.lateral));
+    let center = add(point, scale(r, b.lateral));
     const axis = Math.atan2(tangent.y, tangent.x) + (b.kind === 'fairway' ? 0 : rng.range(-0.7, 0.7));
-    const blob = blobFrom(center, b.size, `${course.id}:${spec.number}:bunker:${i}`, b.stretch ?? (b.kind === 'fairway' ? 1.7 : 1.25), axis, 0.22);
-    return { shape: shapeFromBlob(blob, 44), kind, deep };
+    const stretch = b.stretch ?? (b.kind === 'fairway' ? 1.7 : 1.25);
+    const blob = blobFrom(center, b.size, `${course.id}:${spec.number}:bunker:${i}`, stretch, axis, 0.22);
+    // A bunker is beside a green, never on it. An `along`/`lateral` pair that
+    // lands the blob on the putting surface is an authoring slip — the sand
+    // draws over the green and the hole reads as a mistake — so slide it back
+    // out until it clears the edge. A *traced* bunker is never moved: if the
+    // photograph puts the sand there, that is where the sand is.
+    const shape = clearOf(shapeFromBlob(blob, 44), green, greenMiddle, right);
+    return { shape, kind, deep };
   });
 
   // --- Water ---------------------------------------------------------------
@@ -444,7 +451,11 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     for (let i = 0; i < specimens; i++) {
       const along = rng.range(length * 0.22, length * 0.95);
       const side = rng.chance(0.5) ? -1 : 1;
-      plant(along, side * (halfWidth(along) + rng.range(3, 13)), rng.range(5, 11), rng.range(0, 1));
+      // Off the corridor, not off the fairway: where the hole has no mown
+      // ground at all — the carry on a par 3, a forced carry over water — the
+      // fairway half-width is zero, and planting a tree three yards off that
+      // put an oak in the middle of the flight path.
+      plant(along, side * (Math.max(halfWidth(along), 12) + rng.range(3, 13)), rng.range(5, 11), rng.range(0, 1));
     }
   }
 
@@ -499,6 +510,28 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   // itself is built from the exact one, so this cannot become self-referential.
   built.elevationAt = (p: Vec2) => gridElevationAt(built, p);
   return built;
+}
+
+/**
+ * Slide a shape out of the green until it no longer touches it, along the line
+ * from the green's middle. Measured rather than estimated: a blob's outline runs
+ * well past its nominal radius, and a squashed one runs further still across its
+ * axis than along it.
+ */
+function clearOf(shape: Shape, green: Shape, greenMiddle: Vec2, fallback: Vec2): Shape {
+  let current = shape;
+  for (let pass = 0; pass < 4; pass++) {
+    let bite = 0;
+    for (const p of current.outline) bite = Math.max(bite, -green.edgeDistance(p));
+    // The other way round as well: a small green can sit inside a big bunker.
+    for (const q of green.outline) if (current.contains(q)) bite = Math.max(bite, -current.edgeDistance(q));
+    if (bite <= 0) return current;
+    const away = sub(current.centre, greenMiddle);
+    const direction = Math.hypot(away.x, away.y) > 1e-6 ? norm(away) : fallback;
+    const step = scale(direction, bite + 1.2);
+    current = shapeFromPolygon(current.outline.map((p) => add(p, step)));
+  }
+  return current;
 }
 
 /**

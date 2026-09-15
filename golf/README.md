@@ -464,6 +464,29 @@ and both are now in the game:
   the best of them shot, and where the round would have finished. Seven under at
   Concord in still air is a good round — and fourth of twenty-five.
 
+## Does it look like a golf hole?
+
+`test/holeAudit.ts` runs over every hole of every venue and fails on the things
+that read to a player as the course being *broken* rather than hard, none of
+which the scorecard or the trace checks would notice:
+
+- **sand or water drawn across a putting surface.** A greenside bunker is placed
+  by a distance along the hole and an offset across it, and a blob grown from
+  that pair can bleed onto the green. Nine holes across four courses were doing
+  it — The Ranch's 12th had sand over a third of its green. Generated bunkers now
+  slide out until they clear the edge, measured off the blob's own outline rather
+  than its nominal radius, since a squashed blob runs much further across its
+  axis than along it. A *traced* bunker is never moved: if the photograph puts
+  the sand there, that is where the sand is.
+- **a tree standing in the line of play.** Where a hole has no mown ground at all
+  — the carry on a par 3 — the fairway half-width is zero, and the procedural
+  scatter was planting specimen trees three yards off that: an oak in the middle
+  of the flight path. They now measure from the corridor, not the fairway.
+- **a tee inside a hazard**, and how narrow the narrowest driving corridor on
+  each course is.
+
+It runs as part of `npm test`.
+
 ## Calibration
 
 Every number below is asserted by `npm test`, and the reports behind them are in

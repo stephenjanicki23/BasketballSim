@@ -552,6 +552,13 @@ export interface Course {
   tees?: TeeSet[];
   name: string;
   location: string;
+  /**
+   * True where the venue is a reconstruction of a real course rather than an
+   * invented one. It changes nothing in the simulation; it is what lets the game
+   * say, hole by hole, whether the shape being played was traced from the club's
+   * own overhead or built from its card.
+   */
+  real?: boolean;
   style: CourseStyleId;
   par: number;
   yards: number;

@@ -528,6 +528,7 @@ export const THE_RANCH: Course = {
   id: 'ranch',
   name: 'The Ranch',
   location: 'Southwick, Massachusetts',
+  real: true,
   style: 'parkland',
   par: card.reduce((sum, hole) => sum + hole.par, 0),
   yards: card.reduce((sum, hole) => sum + hole.yards, 0),

@@ -12,7 +12,7 @@
     "smoke": "npm run build && node tools/smoke.mjs",
     "artifact": "npm run build && node tools/artifact.mjs",
     "calibrate": "node tools/tsrun.mjs test/calibration.ts && node tools/tsrun.mjs test/roundCheck.ts && node tools/tsrun.mjs test/seasonCheck.ts",
-    "test": "node tools/tsrun.mjs test/regression.ts"
+    "test": "node tools/tsrun.mjs test/regression.ts && node tools/tsrun.mjs test/holeAudit.ts && node tools/tsrun.mjs test/scorecard.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
