@@ -440,8 +440,8 @@ measurements and which are not:
   that lives in the image rather than in the numbers. Drop a trace into `TRACES` in the
   course file and the photograph replaces it, at the card's own scale, with
   nothing else to change — the 17th and the 18th are the worked examples.
-- **Eleven holes are traced, not derived** — the whole front nine, and the 17th
-  and 18th, as their overheads arrive. They are read straight off the photograph: the lake that runs
+- **Twelve holes are traced, not derived** — the whole front nine, the 10th, and
+  the 17th and 18th, as their overheads arrive. They are read straight off the photograph: the lake that runs
   the entire left side of the 1st from two hundred yards out to past the green,
   the wooded gully on the inside of the 2nd's elbow, the pond that is a hundred
   and fifty of the 17th's hundred and eighty-two yards, the green outlines, the

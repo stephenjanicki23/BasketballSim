@@ -27,8 +27,8 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st to the 9th, and the 17th and 18th, are traced, not derived.**
- *    Their overheads arrived as images, so those eleven are read straight off the
+ * 3. **The 1st to the 10th, and the 17th and 18th, are traced, not derived.**
+ *    Their overheads arrived as images, so those twelve are read straight off the
  *    photograph — the line of play, the lake that runs the whole left side of the
  *    1st, the wooded gully on the inside of the 2nd's elbow, the chute the 3rd is
  *    played out of, the timber down both sides of the 4th, the pond that is all
@@ -47,7 +47,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other seven the same way, trace its overhead and drop
+ * To finish any of the other six the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -271,7 +271,7 @@ const holes: HoleSpec[] = [
       { along: 434, lateral: -13, size: 5, kind: 'greenside', deep: true },
     ],
     water: [],
-    strategy: 'Four hundred and forty-three on the card and forty feet of it straight down, which is the only reason it is playable. The green falls away from you: everything wants to be pin high or short.',
+    strategy: 'Four hundred and forty-three with forty feet of drop in it, out to the right and back left. Native grass down both sides and a green that falls away from you: everything wants to be pin high or short.',
   },
   {
     number: 11, name: 'Plateau', par: 4, yards: 389, bearing: 118, index: 6,
@@ -441,6 +441,29 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  10: {
+    tee: [591, 2347],
+    // 229 out to a marker fifty-six yards RIGHT of the line, 207 back left and
+    // downhill. The derived version bent left.
+    playLine: [[591, 2347], [755, 1698], [585, 1108]],
+    pin: [585, 1108],
+    green: [
+      [591, 1024], [620, 1039], [632, 1068], [623, 1101], [594, 1118],
+      [565, 1109], [550, 1080], [556, 1046],
+    ],
+    bunkers: [
+      { shape: [[500, 1130], [538, 1118], [556, 1150], [536, 1179], [503, 1171]], kind: 'greenside', deep: true },
+      { shape: [[670, 1302], [711, 1294], [729, 1326], [705, 1352], [670, 1344]], kind: 'fairway' },
+    ],
+    // Trees only where there are trees: the wood behind the green. Both sides of
+    // this hole are native grass, which is the rough gradient rather than
+    // anything traced — the lesson of the 9th.
+    trees: [
+      { shape: [[439, 907], [615, 893], [761, 937], [790, 1010], [629, 1024], [483, 1010]], density: 0.5, canopy: [5, 10] },
+    ],
+    paths: [{ line: [[812, 1171], [878, 1390], [907, 1610], [878, 1829], [819, 2049], [732, 2195], [629, 2283]], width: 3 }],
+    widths: [{ at: 0.08, half: 16 }, { at: 0.35, half: 19 }, { at: 0.55, half: 19 }, { at: 0.80, half: 17 }, { at: 1, half: 14 }],
+  },
   9: {
     tee: [755, 2345],
     // 295 out to a marker forty-five yards LEFT of the line, 233 back right to a
