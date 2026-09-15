@@ -251,7 +251,7 @@ const holes: HoleSpec[] = [
       { along: 530, lateral: -13, size: 5, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'Out to the left to a marker at 295, then 233 back to the right and uphill to a green below the clubhouse. A stand of hardwood sits between the two legs, so going at the green in two means going over it rather than round it.',
+    strategy: 'Out to the left to a marker at 295, then 233 back to the right and uphill to a green below the clubhouse. A stand of hardwood sits between the two legs, so going at it in two means going over them — and the ground short and right of the green is fescue, which is no bail-out at all.',
   },
   {
     number: 10, name: 'The Drop', par: 4, yards: 443, bearing: 196, index: 12,
@@ -448,23 +448,25 @@ const TRACES: Partial<Record<number, TracedHole>> = {
     playLine: [[755, 2345], [648, 1655], [752, 1108]],
     pin: [752, 1108],
     green: [
-      [761, 1010], [799, 1024], [819, 1060], [814, 1106], [781, 1136],
-      [740, 1139], [714, 1109], [708, 1062], [729, 1027],
+      [762, 1039], [783, 1047], [794, 1067], [791, 1092], [773, 1108],
+      [750, 1110], [736, 1094], [733, 1068], [744, 1048]
     ],
     bunkers: [
-      { shape: [[612, 1171], [656, 1159], [676, 1189], [656, 1223], [615, 1215]], kind: 'greenside', deep: true },
-      { shape: [[591, 1232], [632, 1223], [650, 1253], [626, 1282], [594, 1273]], kind: 'greenside' },
       { shape: [[688, 1578], [726, 1569], [743, 1598], [720, 1627], [688, 1618]], kind: 'fairway' },
     ],
     trees: [
-      // The stand of hardwood between the two legs: the second shot is played
-      // along its left edge, and cutting the corner means going over it.
-      { shape: [[730, 1156], [830, 1141], [870, 1259], [864, 1463], [826, 1610], [760, 1639], [724, 1522], [718, 1317]], density: 0.62, canopy: [5, 10] },
+      // The stand of hardwood between the two legs. It ends well short of the
+      // green: the ground beside the putting surface on the right is fescue, not
+      // timber, and the corridor runs out into it rather than into trees.
+      { shape: [[770, 1290], [860, 1270], [880, 1400], [870, 1560], [800, 1640], [745, 1560], [740, 1400]], density: 0.62, canopy: [5, 10] },
       { shape: [[790, 1683], [890, 1698], [915, 1902], [900, 2137], [860, 2312], [800, 2371], [775, 2137], [781, 1888]], density: 0.5, canopy: [5, 10] },
       { shape: [[483, 1171], [570, 1150], [592, 1400], [585, 1700], [565, 1950], [540, 2166], [490, 2280], [462, 2000], [468, 1600], [474, 1330]], density: 0.45, canopy: [5, 9] },
     ],
     paths: [{ line: [[480, 2078], [520, 1946], [550, 1815], [570, 1683], [580, 1551], [570, 1405], [560, 1288]], width: 3 }],
-    widths: [{ at: 0.08, half: 18 }, { at: 0.35, half: 20 }, { at: 0.55, half: 19 }, { at: 0.78, half: 17 }, { at: 1, half: 16 }],
+    // Wide through the driving zone, but the mown ground runs out fast at the
+    // green: twenty yards right of the pin is fescue, and fescue is not a
+    // bail-out.
+    widths: [{ at: 0.08, half: 19 }, { at: 0.35, half: 22 }, { at: 0.55, half: 22 }, { at: 0.80, half: 19 }, { at: 0.92, half: 11 }, { at: 1, half: 9 }],
   },
   8: {
     tee: [755, 2347],
@@ -497,8 +499,8 @@ const TRACES: Partial<Record<number, TracedHole>> = {
     playLine: [[755, 2347], [755, 1734], [755, 1108]],
     pin: [755, 1108],
     green: [
-      [761, 1021], [797, 1036], [816, 1071], [808, 1115], [776, 1144],
-      [735, 1141], [711, 1109], [708, 1065], [729, 1033],
+      [761, 1034], [789, 1046], [804, 1073], [797, 1108], [773, 1130],
+      [741, 1128], [722, 1103], [719, 1069], [736, 1044]
     ],
     bunkers: [
       { shape: [[790, 1156], [828, 1144], [849, 1173], [828, 1206], [793, 1197]], kind: 'greenside', deep: true },
