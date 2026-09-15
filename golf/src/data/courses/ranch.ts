@@ -27,12 +27,15 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 17th and the 18th are traced, not derived.** Their overheads arrived
- *    as images, so those two are read straight off the photograph — the line of
- *    play, the pond that is all of the 17th, the green outlines, the wood on the
- *    inside of the 18th's turn and the stream down its right — and the card sets
- *    the scale, as it does everywhere. They were traced by eye rather than
- *    digitised, so call them accurate to a few yards, not to the yard.
+ * 3. **The 1st, the 17th and the 18th are traced, not derived.** Their overheads
+ *    arrived as images, so those three are read straight off the photograph —
+ *    the line of play, the lake that runs the whole left side of the 1st, the
+ *    pond that is all of the 17th, the green outlines, the wood on the inside of
+ *    the 18th's turn and the stream down its right — and the card sets the
+ *    scale, as it does everywhere. They were traced by eye rather than
+ *    digitised, so call them accurate to a few yards, not to the yard. The hole
+ *    card in the game says which holes these are, because a derived hole is the
+ *    right length and the right shape of corner but not the right hole.
  * 4. **Elevation is inferred.** Plan-view overheads carry no contours, so the
  *    fall of each hole comes from the site — a property that runs from roughly
  *    250 feet at the entrance to better than 600 at the top of the hill, with
@@ -40,7 +43,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other sixteen the same way, trace its overhead and drop
+ * To finish any of the other fifteen the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -82,7 +85,7 @@ const holes: HoleSpec[] = [
       { along: 506, lateral: 15, size: 6, kind: 'greenside' },
     ],
     water: [{ along: 484, lateral: -27, size: 20, stretch: 1.3, label: 'the farm pond' }],
-    strategy: 'Away from the clubhouse and downhill, turning left the whole way. The pond sits against the left of the green, so the lay-up wants to be right of centre even though the hole is moving the other way.',
+    strategy: 'Downhill away from the clubhouse with the lake down the entire left — it starts two hundred yards out and does not stop until past the green. The marker at 298 is out to the right for a reason, and the green is perched on the bank, so the third shot is played away from the flag more often than at it.',
   },
   {
     number: 2, name: 'The Elbow', par: 4, yards: 397, bearing: 84, index: 11,
@@ -434,6 +437,40 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  1: {
+    tee: [580, 2271],
+    // The marker at 298, with 195 left to the green.
+    playLine: [[580, 2271], [755, 1504], [577, 1024]],
+    pin: [577, 1024],
+    green: [
+      [588, 941], [612, 951], [623, 977], [620, 1010], [603, 1030],
+      [580, 1035], [562, 1021], [555, 992], [562, 961],
+    ],
+    // The lake. It starts about two hundred yards off the tee and runs the whole
+    // rest of the hole down the left, up to and past the green, which is perched
+    // on the bank of it — the reason the second shot is played out to the right.
+    water: [[
+      [505, 907], [439, 937], [414, 1010], [383, 1141], [373, 1288], [380, 1434],
+      [402, 1566], [442, 1661], [498, 1709], [553, 1683], [574, 1551], [585, 1434],
+      [597, 1317], [585, 1215], [562, 1112], [536, 1024], [518, 958],
+    ]],
+    bunkers: [
+      { shape: [[632, 969], [656, 958], [667, 977], [656, 998], [635, 992]], kind: 'greenside' },
+      { shape: [[673, 948], [702, 934], [726, 945], [720, 966], [685, 969]], kind: 'greenside' },
+      { shape: [[729, 945], [758, 937], [773, 954], [749, 969], [726, 963]], kind: 'greenside' },
+      { shape: [[626, 1036], [650, 1030], [661, 1048], [644, 1062], [626, 1053]], kind: 'greenside', deep: true },
+      { shape: [[837, 1144], [863, 1133], [881, 1150], [866, 1168], [840, 1165]], kind: 'fairway' },
+    ],
+    // The clubhouse and the buildings behind the tee.
+    ob: [[[378, 2049], [515, 2037], [536, 2283], [439, 2356], [375, 2283]]],
+    trees: [
+      { shape: [[900, 1010], [977, 1039], [983, 1493], [948, 1903], [893, 2093], [846, 2049], [896, 1756], [915, 1464], [893, 1229]], density: 0.4, canopy: [4, 8] },
+      { shape: [[632, 1578], [685, 1566], [708, 1607], [697, 1654], [653, 1668], [626, 1636]], density: 0.6, canopy: [5, 9] },
+      { shape: [[629, 2283], [761, 2298], [790, 2415], [659, 2429]], density: 0.5, canopy: [4, 8] },
+    ],
+    paths: [{ line: [[615, 2078], [688, 1946], [761, 1800], [822, 1654], [866, 1493], [878, 1346], [852, 1215], [814, 1112], [755, 1010], [682, 937]], width: 3 }],
+    widths: [{ at: 0.08, half: 20 }, { at: 0.42, half: 24 }, { at: 0.62, half: 22 }, { at: 0.86, half: 17 }, { at: 1, half: 16 }],
+  },
   17: {
     tee: [755, 2530],
     pin: [761, 1092],
