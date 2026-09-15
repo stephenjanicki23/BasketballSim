@@ -27,19 +27,31 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st to the 10th, and the 17th and 18th, are traced, not derived.**
- *    Their overheads arrived as images, so those twelve are read straight off the
- *    photograph — the line of play, the lake that runs the whole left side of the
- *    1st, the wooded gully on the inside of the 2nd's elbow, the chute the 3rd is
- *    played out of, the timber down both sides of the 4th, the pond that is all
- *    of the 17th, the green outlines, the stream down the right of the 18th — and
+ * 3. **Every hole is traced.** All eighteen overheads arrived as images, so
+ *    every hole is read straight off the photograph — the line of play, the lake
+ *    that runs the whole left side of the 1st, the wooded gully on the inside of
+ *    the 2nd's elbow, the chute the 3rd is played out of, the fescue the 8th is
+ *    carried over, the two ponds flanking the 16th green, the pond that is all of
+ *    the 17th, the green outlines, the stream down the right of the 18th — and
  *    the card sets the scale, as it does everywhere. Tracing removes invention as
- *    well as adding fact: the 4th had a brook crossing it at 320 yards and the
- *    5th was a forced carry over wetland, and the photographs show neither. They were traced by eye rather than
- *    digitised, so call them accurate to a few yards, not to the yard. The hole
- *    card in the game says which holes these are, because a derived hole is the
- *    right length and the right shape of corner but not the right hole: the 2nd
- *    turns 116 yards *left* to its marker, and the derived version turned right.
+ *    well as adding fact: the 4th had a brook crossing it at 320 yards, the 5th
+ *    was a forced carry over wetland, the 10th had a fairway bunker at the 229
+ *    marker that turned out to be two sprinkler heads, and the photographs show
+ *    none of them. The later holes were measured off the image rather than read
+ *    by eye — the mown edge found row by row, the sand found by flood-filling the
+ *    pale pixels — but call the lot accurate to a few yards, not to the yard.
+ *    A derived hole is the right length and the right shape of corner but not the
+ *    right hole: the 2nd turns 116 yards *left* to its marker, and the derived
+ *    version turned right.
+ * 3b. **A traced line follows the fairway, not the overlay's chords.** On the
+ *    13th, 14th, 15th and 16th the overlay's straight chords between its three
+ *    dots run along or outside the edge of the fairway, and a corridor centred on
+ *    one of those would mow timber. Those lines are traced down the fairway
+ *    itself, through the tee, the printed marker and the pin, with `corners`
+ *    saying which point the marker sits on so the leg check still knows where a
+ *    leg ends. The 15th is the one exception to "through the marker": there the
+ *    marker sits on the fairway's right edge against the wood, so the corner is
+ *    placed at the same distance from the tee but in the fairway.
  * 4. **Elevation is inferred.** Plan-view overheads carry no contours, so the
  *    fall of each hole comes from the site — a property that runs from roughly
  *    250 feet at the entrance to better than 600 at the top of the hill, with
@@ -441,6 +453,181 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  16: {
+    tee: [754, 2368],
+    // Six hundred and eleven, and the only hole on the course with water on it:
+    // two ponds, one hard against the left of the green and one just beyond its
+    // right. 326 out to a marker, 273 home. Traced down the fairway; legs come
+    // out at 332 and 279 against the 333 and 278 the card asks for.
+    playLine: [
+      [754, 2368], [730, 2280], [696, 2180], [664, 2080], [634, 1980], [600, 1880],
+      [578, 1780], [580, 1685], [592, 1590], [608, 1500], [630, 1410], [664, 1330],
+      [700, 1250], [730, 1180], [754, 1122],
+    ],
+    corners: [7],
+    pin: [754, 1123],
+    green: [
+      [726, 1097], [734, 1087], [749, 1083], [764, 1086], [777, 1096], [784, 1111],
+      [783, 1129], [777, 1144], [764, 1156], [749, 1161], [734, 1156], [725, 1144],
+      [721, 1127], [721, 1110],
+    ],
+    // Left of the green, and beyond its right. Nothing else on the hole is
+    // water, and nothing else on the course is either.
+    water: [
+      [
+        [595, 1045], [635, 1038], [670, 1055], [690, 1090], [685, 1130], [665, 1165],
+        [675, 1200], [690, 1235], [685, 1275], [655, 1295], [620, 1290], [595, 1260],
+        [585, 1215], [570, 1170], [568, 1125], [575, 1080],
+      ],
+      [
+        [820, 1215], [870, 1208], [915, 1230], [935, 1270], [930, 1310], [905, 1350],
+        [865, 1370], [825, 1355], [805, 1320], [802, 1275], [807, 1238],
+      ],
+    ],
+    bunkers: [
+      {
+        shape: [[800, 1125], [812, 1118], [822, 1124], [824, 1136], [816, 1144], [824, 1152], [828, 1162], [820, 1170], [808, 1168], [800, 1158], [797, 1144], [796, 1132]],
+        kind: 'greenside', deep: true,
+      },
+    ],
+    trees: [
+      {
+        shape: [
+          [696, 1140], [682, 1180], [669, 1220], [653, 1260], [632, 1300],
+          [612, 1340], [592, 1380], [571, 1420], [544, 1460], [494, 1500],
+          [496, 1540], [498, 1580], [510, 1620], [514, 1660], [513, 1700],
+          [508, 1740], [510, 1780], [508, 1820], [514, 1860], [522, 1900],
+          [536, 1940], [582, 1980], [596, 2020], [611, 2060], [627, 2100],
+          [616, 2140], [630, 2180], [652, 2220], [668, 2260], [682, 2300],
+          [682, 2340], [572, 2340], [572, 2300], [558, 2260], [542, 2220],
+          [520, 2180], [506, 2140], [520, 2100], [536, 2060], [516, 2020],
+          [472, 1980], [450, 1940], [450, 1900], [450, 1860], [450, 1820],
+          [450, 1780], [450, 1740], [450, 1700], [450, 1660], [450, 1620],
+          [450, 1580], [450, 1540], [450, 1500], [450, 1460], [482, 1420],
+          [496, 1380], [502, 1340], [522, 1300], [584, 1260], [604, 1220],
+          [602, 1180], [599, 1140],
+        ],
+        density: 0.42, canopy: [4, 9],
+      },
+      {
+        shape: [
+          [798, 1140], [790, 1180], [782, 1220], [772, 1260], [764, 1300],
+          [746, 1340], [716, 1380], [692, 1420], [680, 1460], [674, 1500],
+          [668, 1540], [674, 1580], [682, 1620], [692, 1660], [674, 1700],
+          [648, 1740], [638, 1780], [641, 1820], [644, 1860], [655, 1900],
+          [670, 1940], [686, 1980], [696, 2020], [705, 2060], [714, 2100],
+          [726, 2140], [739, 2180], [754, 2220], [767, 2260], [780, 2300],
+          [790, 2340], [879, 2340], [866, 2300], [840, 2260], [830, 2220],
+          [812, 2180], [792, 2140], [782, 2100], [780, 2060], [780, 2020],
+          [752, 1980], [724, 1940], [700, 1900], [692, 1860], [700, 1820],
+          [718, 1780], [758, 1740], [784, 1700], [802, 1660], [792, 1620],
+          [784, 1580], [774, 1540], [782, 1500], [784, 1460], [802, 1420],
+          [826, 1380], [856, 1340], [874, 1300], [882, 1260], [892, 1220],
+          [900, 1180], [903, 1140],
+        ],
+        density: 0.45, canopy: [4, 9],
+      },
+    ],
+    paths: [{
+      line: [[935, 1145], [870, 1150], [820, 1170], [800, 1195], [770, 1280], [730, 1380], [685, 1435]],
+      width: 3,
+    }],
+    widths: [
+      { at: 0.04, half: 16 }, { at: 0.12, half: 16 }, { at: 0.20, half: 15 },
+      { at: 0.30, half: 20 }, { at: 0.40, half: 17 }, { at: 0.50, half: 26 },
+      { at: 0.60, half: 28 }, { at: 0.70, half: 26 }, { at: 0.80, half: 18 },
+      { at: 0.90, half: 15 }, { at: 1, half: 20 },
+    ],
+  },
+  15: {
+    tee: [636, 2370],
+    // Three hundred and fifty, and the shortest par 4 on the card. The overlay's
+    // 204 marker sits on the fairway's RIGHT edge, hard against the wood — put
+    // the corner there and the corridor mows twenty yards of timber — so the
+    // line is traced down the fairway and the corner placed at the same distance
+    // from the tee. Legs: 202 and 148 against the 203 and 147 the card asks for.
+    playLine: [
+      [636, 2370], [658, 2240], [678, 2090], [684, 1950], [690, 1830], [686, 1740],
+      [676, 1650], [660, 1560], [648, 1460], [632, 1360], [620, 1270], [626, 1190], [636, 1122],
+    ],
+    corners: [6],
+    pin: [636, 1122],
+    green: [
+      [600, 1075], [620, 1068], [640, 1069], [657, 1079], [664, 1095], [662, 1113],
+      [657, 1133], [647, 1152], [632, 1167], [615, 1178], [600, 1182], [588, 1172],
+      [580, 1152], [579, 1130], [583, 1108], [591, 1088],
+    ],
+    // The sprawl of sand down the left sits at about a hundred and fifty yards —
+    // not where a drive finishes but where a lay-up does, which is the choice
+    // this hole asks. Three lobes of it. One more tight against the right of the
+    // green, where the ground falls away into the wood.
+    bunkers: [
+      {
+        shape: [[668, 1150], [682, 1145], [695, 1152], [700, 1165], [696, 1180], [686, 1194], [672, 1200], [662, 1190], [660, 1172], [662, 1158]],
+        kind: 'greenside', deep: true,
+      },
+      {
+        shape: [[622, 1740], [636, 1726], [652, 1734], [656, 1750], [646, 1762], [630, 1762], [620, 1752]],
+        kind: 'fairway',
+      },
+      {
+        shape: [[610, 1776], [620, 1758], [640, 1768], [660, 1786], [668, 1802], [658, 1814], [640, 1816], [624, 1800], [612, 1790]],
+        kind: 'fairway', deep: true,
+      },
+      {
+        shape: [[596, 1828], [612, 1818], [630, 1824], [646, 1834], [648, 1848], [634, 1856], [616, 1864], [602, 1850]],
+        kind: 'fairway', deep: true,
+      },
+    ],
+    trees: [
+      {
+        shape: [
+          [581, 1140], [576, 1180], [573, 1220], [566, 1260], [565, 1300],
+          [566, 1340], [567, 1380], [569, 1420], [566, 1460], [564, 1500],
+          [574, 1540], [579, 1580], [587, 1620], [595, 1660], [604, 1700],
+          [617, 1740], [628, 1780], [635, 1820], [629, 1860], [623, 1900],
+          [617, 1940], [613, 1980], [609, 2020], [605, 2060], [594, 2100],
+          [601, 2140], [598, 2180], [596, 2220], [594, 2260], [570, 2300],
+          [576, 2340], [456, 2340], [450, 2300], [474, 2260], [556, 2220],
+          [566, 2180], [546, 2140], [474, 2100], [508, 2060], [532, 2020],
+          [566, 1980], [536, 1940], [528, 1900], [516, 1860], [538, 1820],
+          [546, 1780], [524, 1740], [502, 1700], [480, 1660], [478, 1620],
+          [468, 1580], [454, 1540], [444, 1500], [446, 1460], [478, 1420],
+          [496, 1380], [498, 1340], [484, 1300], [468, 1260], [456, 1220],
+          [456, 1180], [462, 1140],
+        ],
+        density: 0.5, canopy: [4, 9],
+      },
+      {
+        shape: [
+          [686, 1140], [678, 1180], [674, 1220], [676, 1260], [683, 1300],
+          [693, 1340], [704, 1380], [715, 1420], [725, 1460], [734, 1500],
+          [760, 1540], [756, 1580], [754, 1620], [760, 1660], [759, 1700],
+          [755, 1740], [752, 1780], [746, 1820], [748, 1860], [750, 1900],
+          [752, 1940], [770, 1980], [766, 2020], [756, 2060], [749, 2100],
+          [741, 2140], [734, 2180], [725, 2220], [715, 2260], [705, 2300],
+          [698, 2340], [798, 2340], [772, 2300], [766, 2260], [820, 2220],
+          [826, 2180], [852, 2140], [820, 2100], [876, 2060], [886, 2020],
+          [890, 1980], [870, 1940], [854, 1900], [854, 1860], [866, 1820],
+          [872, 1780], [872, 1740], [872, 1700], [876, 1660], [874, 1620],
+          [876, 1580], [880, 1540], [854, 1500], [814, 1460], [792, 1420],
+          [782, 1380], [794, 1340], [768, 1300], [766, 1260], [756, 1220],
+          [770, 1180], [780, 1140],
+        ],
+        density: 0.55, canopy: [4, 10],
+      },
+    ],
+    paths: [{
+      line: [[620, 2030], [700, 2050], [765, 2090], [755, 2130], [700, 2270], [715, 2360], [745, 2450]],
+      width: 3,
+    }],
+    widths: [
+      { at: 0.05, half: 13 }, { at: 0.15, half: 16 }, { at: 0.25, half: 18 },
+      { at: 0.35, half: 16 }, { at: 0.45, half: 12 }, { at: 0.55, half: 20 },
+      { at: 0.65, half: 21 }, { at: 0.75, half: 18 }, { at: 0.85, half: 14 },
+      { at: 0.93, half: 11 }, { at: 1, half: 12 },
+    ],
+  },
   14: {
     tee: [540, 2356],
     // A dogleg: 254 out to a marker well right, 183 back left to a green set
