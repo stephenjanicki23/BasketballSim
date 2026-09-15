@@ -326,6 +326,33 @@ shadows turn with it.
   cut grass. Before this, a par 3 whose corridor does not start for seventy yards
   opened with the ball apparently teed up in the hay.
 
+## On a phone
+
+The play screen is a HUD over the course rather than a page of panels, because a
+phone has one screen and a golf shot needs one decision. Four things sit at the
+corners — who is playing and where they stand, the hole and the wind, the club
+and the lie — and the swing button sits in the middle of the bottom edge, where a
+thumb is. **Nothing is ever a scroll away from being hit**: the play screen is
+sized to `100dvh` minus the chrome, measured rather than assumed (the nav wraps,
+the banner comes and goes), so the course fills exactly what is left and the page
+does not scroll at any size from 360 × 640 up.
+
+- **The club chip opens the bag** — the whole set with its yardages, tap to pick.
+- **Card** and **Numbers** slide the two panels in as drawers, so the scorecard,
+  the conditions, the dispersion and the odds are one tap away rather than gone.
+- **Caddie** puts the aim, the club and the shot type back where the caddie would
+  have them: one tap to a sensible shot, then adjust.
+- **On the green** the two strategies take the whole bar with their make
+  percentages on them. There is still no line to drag and no meter to time.
+
+The same HUD is drawn on a desktop, where the panels stay open beside it. Two
+layout bugs came out of building it, both worth naming: the canvas used to sit in
+the flow and size itself from its container *while the container sized itself
+from the canvas*, which is a loop that quietly inflates until the page scrolls —
+it is absolutely positioned now; and the grid was `align-items: start`, so a
+column asking for `height: 100%` was asking a row that was sizing itself from
+that column.
+
 ## Sound
 
 Synthesised, not sampled. The game ships as one page with no assets beside it, so

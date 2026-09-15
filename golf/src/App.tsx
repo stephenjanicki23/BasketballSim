@@ -1,6 +1,6 @@
 /** Shell: navigation, the busy indicator, and the profile overlay. */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { HomeScreen } from './screens/HomeScreen';
 import { PlayScreen } from './screens/PlayScreen';
@@ -32,8 +32,23 @@ export function App(): JSX.Element {
   const profile = profileId ? golfer(profileId) : null;
   const [sound, setSound] = useState(soundOn());
 
+  // The play screen sizes the course to whatever the chrome leaves behind, and
+  // the chrome is not a fixed height: the nav wraps on a phone, the banner comes
+  // and goes. Measure it and publish it as a variable rather than guessing.
+  const chromeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = chromeRef.current;
+    if (!element) return;
+    const publish = () => document.documentElement.style.setProperty('--chrome-h', `${Math.round(element.getBoundingClientRect().height)}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="app">
+      <div ref={chromeRef} className="app__chrome">
       <header className="topbar">
         <div className="topbar__brand">
           <span className="topbar__mark">⛳</span>
@@ -107,6 +122,8 @@ export function App(): JSX.Element {
           </button>
         </div>
       )}
+
+      </div>
 
       <main className="content">
         {screen === 'home' && <HomeScreen />}

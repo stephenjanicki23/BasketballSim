@@ -80,9 +80,6 @@ em { font-style: normal; color: var(--text-dim); }
   padding: 10px 18px;
   background: linear-gradient(180deg, #1c2530, #151c23);
   border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
-  z-index: 20;
 }
 .topbar__brand { display: flex; align-items: center; gap: 10px; }
 .topbar__mark { font-size: 22px; }
@@ -271,8 +268,13 @@ tr.cut { opacity: 0.5; }
   grid-template-columns: 300px minmax(0, 1fr) 330px;
   gap: 12px;
   padding: 12px;
-  align-items: start;
-  height: calc(100vh - 52px);
+  /* Stretch, so the columns have a definite height to resolve against: the
+     course fills what is left of the screen rather than the screen filling to
+     fit the course. */
+  align-items: stretch;
+  /* Whatever the chrome is actually using — the nav wraps, the banner comes and
+     goes — the course gets the rest and the page never scrolls. */
+  height: calc(100dvh - var(--chrome-h, 72px));
 }
 .play__left, .play__right { display: flex; flex-direction: column; gap: 11px; overflow-y: auto; max-height: 100%; padding-right: 3px; }
 .play__centre { display: flex; flex-direction: column; gap: 10px; min-width: 0; height: 100%; }
@@ -295,7 +297,10 @@ tr.cut { opacity: 0.5; }
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
   background: #0d1410;
 }
-.course-canvas { display: block; }
+/* Absolute, so the canvas can never grow its own container: the wrapper is
+   measured, the canvas is drawn to that size, and a canvas in the flow would
+   make that a loop. */
+.course-canvas { display: block; position: absolute; inset: 0; }
 .course-canvas--interactive { cursor: crosshair; }
 .course-view__controls { position: absolute; top: 9px; left: 9px; display: flex; gap: 6px; }
 .course-view__controls button { background: rgba(12, 18, 14, 0.78); backdrop-filter: blur(3px); font-size: 11px; padding: 4px 9px; }
@@ -601,3 +606,166 @@ tr.cut { opacity: 0.5; }
 .putt-bands { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 .putt-bands__row { display: grid; grid-template-columns: 62px 1fr 38px; gap: 8px; align-items: center; font-size: 10.5px; color: var(--text-dim); }
 .putt-bands__row em { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ HUD */
+/* Drawn over the course: the shot, and nothing that is not the shot. Every
+   chip is glass over the grass, so the course stays the thing you are reading. */
+
+.hud { position: absolute; inset: 0; pointer-events: none; font-variant-numeric: tabular-nums; }
+.hud button, .hud__chip { pointer-events: auto; }
+
+.hud__corner { position: absolute; top: 9px; display: flex; flex-direction: column; gap: 3px; }
+.hud__corner--tl { left: 9px; align-items: flex-start; }
+.hud__corner--tr { right: 9px; align-items: flex-end; text-align: right; max-width: 54%; }
+.hud__corner--tl { max-width: 54%; }
+
+.hud__chip {
+  display: flex; align-items: baseline; gap: 8px;
+  background: rgba(10, 16, 13, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px; padding: 5px 10px;
+  backdrop-filter: blur(4px);
+  color: var(--text);
+}
+.hud__chip--static { cursor: default; }
+.hud__name { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; }
+.hud__par { font-size: 11px; color: var(--text-dim); letter-spacing: 0.06em; }
+.hud__score { font-size: 15px; font-weight: 700; }
+.hud__score.under { color: var(--under); }
+.hud__score.over { color: var(--over); }
+.hud__sub { font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 5px; }
+.hud__sub--right { justify-content: flex-end; }
+.hud__dim { color: var(--text-faint); }
+.hud__wind-arrow { color: var(--accent); }
+
+/* The bottom of the screen is one stack: picker, tabs, then the bar. Nothing
+   is positioned against anything else, so nothing can end up on top of it. */
+.hud__bottom {
+  position: absolute; left: 0; right: 0; bottom: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 0 9px;
+}
+.hud__bar {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+/* On the green the two strategies are the whole interface. */
+.hud__bar--putting .hud__putts { width: 100%; max-width: 460px; }
+.hud__bar--putting .hud__putt { flex: 1; }
+.hud__chip--club, .hud__chip--lie { flex-direction: column; align-items: flex-start; gap: 1px; min-width: 96px; }
+.hud__chip--lie { align-items: flex-end; min-width: 68px; }
+.hud__chip--club.is-open { border-color: var(--accent-dim); }
+.hud__chip:disabled { opacity: 0.55; }
+
+.hud__action { display: flex; justify-content: center; flex: 1; }
+.hud__swing {
+  background: linear-gradient(180deg, #4fbc80, #35935f);
+  border: none; color: #05170d; font-weight: 700; font-size: 16px;
+  letter-spacing: 0.04em; padding: 13px 40px; border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.hud__swing:hover:not(:disabled) { background: linear-gradient(180deg, #5ccb8d, #3ba169); }
+.hud__swing:disabled { opacity: 0.4; }
+
+.hud__putts { display: flex; gap: 6px; }
+.hud__putt {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: rgba(10, 16, 13, 0.82); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px; padding: 8px 14px; min-width: 76px;
+}
+.hud__putt strong { font-size: 12px; }
+.hud__putt span { font-size: 11px; color: var(--text-dim); }
+.hud__putt.is-caddie { border-color: var(--accent-dim); box-shadow: 0 0 0 1px rgba(98, 201, 140, 0.25) inset; }
+
+/* One tap to everything else. */
+.hud__tabs { display: flex; gap: 5px; }
+.hud__tabs button {
+  background: rgba(10, 16, 13, 0.72); border: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 11px; padding: 4px 11px; border-radius: 999px; backdrop-filter: blur(4px);
+}
+
+/* Club and shot pickers, over the bottom of the course. */
+.hud__sheet {
+  order: -1; width: 100%;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 5px;
+  background: rgba(10, 16, 13, 0.86); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px; padding: 7px; backdrop-filter: blur(6px);
+}
+.hud__sheet--wide { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+.hud__sheet button {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 7px 4px; font-size: 12px; border-radius: 6px;
+}
+.hud__sheet button span { font-size: 10px; color: var(--text-dim); }
+.hud__sheet button.is-active { border-color: var(--accent-dim); color: var(--accent); }
+
+/* The minimap would sit under the bar, so it moves to the side. */
+.course-view__map { top: 50%; bottom: auto; transform: translateY(-50%); }
+.course-view__controls { top: 9px; left: 50%; transform: translateX(-50%); }
+
+/* ------------------------------------------------------- the phone layout */
+/* The course is the screen. The panels either side become drawers, the log and
+   the status bar go away entirely — the HUD already says all three of those
+   things — and the swing button is always under your thumb. */
+
+/* The columns stop fitting well before a phone, so the HUD layout takes over at
+   the same width the three-column one gives up at. */
+@media (max-width: 1180px) {
+  /* The chrome shrinks to a strip: a mark, the nav, and the controls. */
+  .topbar { padding: 6px 9px; gap: 7px; }
+  .topbar__brand small { display: none; }
+  .topbar__brand strong { font-size: 13px; }
+  .topbar__mark { font-size: 18px; }
+  .topbar__nav button { padding: 5px 9px; font-size: 12px; }
+  .topbar__you small { display: none; }
+  .banner { font-size: 11.5px; padding: 6px 9px; }
+
+  /* The tablet rule above lets the page grow; a phone does the opposite, so the
+     height comes back explicitly here. */
+  .play { padding: 0; gap: 0; grid-template-columns: minmax(0, 1fr); height: calc(100dvh - var(--chrome-h, 92px)); }
+  .play__left, .play__right { top: var(--chrome-h, 92px); }
+  .play__scrim { inset: var(--chrome-h, 92px) 0 0; }
+  /* The view buttons move below the player chip rather than across it. */
+  .course-view__controls { top: 72px; left: 9px; transform: none; }
+  .course-view__controls button { font-size: 10.5px; padding: 3px 8px; }
+  .topbar__you { padding: 3px 7px; gap: 6px; }
+  .topbar__you strong { font-size: 11.5px; }
+  .topbar .ghost--small { padding: 3px 7px; font-size: 10.5px; }
+  .topbar__nav { gap: 2px; }
+  .play__status, .play__log { display: none; }
+  .play__centre { height: 100%; gap: 0; }
+  .course-view { border-radius: 0; border-left: none; border-right: none; min-height: 0; }
+  .course-view__map { display: none; }
+
+  .play__left, .play__right {
+    position: fixed; bottom: 0; width: min(88vw, 360px); z-index: 40;
+    background: var(--bg); padding: 11px; margin: 0; max-height: none;
+    box-shadow: var(--shadow); transition: transform 0.18s ease-out;
+  }
+  .play__left { left: 0; transform: translateX(-102%); }
+  .play__right { right: 0; transform: translateX(102%); }
+  .play--drawer-left .play__left { transform: translateX(0); }
+  .play--drawer-right .play__right { transform: translateX(0); }
+  .play__scrim { position: fixed; z-index: 35; background: rgba(0, 0, 0, 0.45); border: none; }
+
+  .play__interstitial { position: absolute; left: 9px; right: 9px; bottom: 96px; z-index: 30; }
+  .hud__chip--club, .hud__chip--lie { min-width: 0; }
+  .hud__chip--club .hud__sub, .hud__chip--lie .hud__sub { font-size: 10.5px; }
+  .hud__swing { padding: 14px 30px; }
+}
+
+@media (max-width: 860px) and (orientation: portrait) {
+  /* Room for a thumb: the stack sits clear of the bottom edge. */
+  .hud__bottom { bottom: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play__left, .play__right { transition: none; }
+}
+
+.app__chrome { position: sticky; top: 0; z-index: 20; }
+
+@media (max-width: 620px) {
+  /* At this width the name of the game is not worth a row of the screen. */
+  .topbar__brand strong { display: none; }
+}

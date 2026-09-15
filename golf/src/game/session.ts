@@ -347,6 +347,22 @@ export function selectShotType(session: PlaySession, shotType: ShotTypeId): Play
 }
 
 /** Nudge the aim sideways, in yards, for players who would rather not click precisely. */
+/**
+ * Put the aim, the club and the shot type back where the caddie would have them.
+ * On a phone this is the difference between a playable interface and a fiddly
+ * one: one tap gets you a sensible shot, and you adjust from there.
+ */
+export function takeCaddieLine(session: PlaySession, golfer: Golfer): PlaySession {
+  if (session.status !== 'aiming' || session.lie === 'green') return session;
+  const target = defaultTarget(session, golfer);
+  const next: PlaySession = { ...session, target, aimTouched: false };
+  return {
+    ...next,
+    club: suggestedClub(next, golfer, target),
+    shotType: suggestedShotType(next, target),
+  };
+}
+
 export function nudgeAim(session: PlaySession, yards: number): PlaySession {
   const direction = norm(sub(session.target, session.ball));
   const side = { x: direction.y, y: -direction.x };

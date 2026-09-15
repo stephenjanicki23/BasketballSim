@@ -34,6 +34,8 @@ export interface CourseViewProps {
   showDispersion: boolean;
   /** Developer overlay: the source image and the traced geometry over it. */
   debug?: DebugOptions | null;
+  /** Drawn over the course: the HUD. */
+  children?: React.ReactNode;
 }
 
 function rotationFor(direction: Vec2): number {
@@ -43,7 +45,7 @@ function rotationFor(direction: Vec2): number {
 export function CourseView(props: CourseViewProps): JSX.Element {
   const {
     hole, ball, target, plan, putt, animation, onAnimationDone, onAim,
-    interactive, puttingView, windFrom, windSpeed, showZones, showDispersion, shotLines, debug,
+    interactive, puttingView, windFrom, windSpeed, showZones, showDispersion, shotLines, debug, children,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -295,6 +297,7 @@ export function CourseView(props: CourseViewProps): JSX.Element {
       <div className="course-view__map">
         <canvas ref={mapRef} />
       </div>
+      {children}
     </div>
   );
 }

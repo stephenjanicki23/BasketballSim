@@ -20,6 +20,7 @@ import { describeWeather } from '../simulation/weatherEngine';
 import { dist } from '../simulation/geometry';
 import { benchmarkRound } from '../simulation/benchmark';
 import { DebugPanel } from '../components/DebugPanel';
+import { Hud } from '../components/Hud';
 import type { DebugOptions } from '../components/render/holeRenderer';
 import { roundTotal } from '../game/session';
 import { useShotSounds } from '../audio/useShotSounds';
@@ -28,8 +29,12 @@ export function PlayScreen(): JSX.Element {
   const store = useStore();
   const {
     session, golfer: lookup, zones, playShot, playPutt, completeAnimation, advanceHole,
-    finishSessionRound, abandonSession, aim, openProfile,
+    finishSessionRound, abandonSession, aim, openProfile, caddieLine, pickClub, pickShotType,
   } = store;
+
+  // On a phone the panels are a drawer rather than a scroll: the course fills
+  // the screen, the HUD carries the shot, and everything else slides in.
+  const [drawer, setDrawer] = useState<'left' | 'right' | null>(null);
 
   const golfer = session ? lookup(session.golferId) : undefined;
 
@@ -100,6 +105,7 @@ export function PlayScreen(): JSX.Element {
     const handler = (event: KeyboardEvent) => {
       if (!session) return;
       if (event.target instanceof HTMLInputElement) return;
+      if (event.key === 'Escape') setDrawer(null);
       if (event.code === 'Space') {
         event.preventDefault();
         if (session.status === 'holeComplete') advanceHole();
@@ -133,7 +139,8 @@ export function PlayScreen(): JSX.Element {
   const holeToPar = session.strokesThisHole > 0 ? session.strokesThisHole - par : 0;
 
   return (
-    <div className="play">
+    <div className={`play ${drawer ? `play--drawer play--drawer-${drawer}` : ''}`}>
+      {drawer && <button type="button" className="play__scrim" aria-label="Close" onClick={() => setDrawer(null)} />}
       <aside className="play__left">
         <GolferCard golfer={golfer} course={course} onOpen={() => openProfile(golfer.id)} />
         <HoleCard hole={hole} session={session} />
@@ -183,7 +190,29 @@ export function PlayScreen(): JSX.Element {
           windSpeed={session.conditions.weather.windSpeed}
           showZones={zones}
           showDispersion={plan.kind === 'swing'}
-        />
+        >
+          {session.status !== 'roundComplete' && (
+            <Hud
+              session={session}
+              golfer={golfer}
+              hole={hole}
+              putt={
+                plan.kind === 'putt'
+                  ? {
+                      decision: plan.decision,
+                      recommended: choosePuttIntent(sessionContext(session, golfer), session.situation, plan.decision).intent,
+                      onChoose: playPutt,
+                    }
+                  : null
+              }
+              onSwing={playShot}
+              onPickClub={pickClub}
+              onPickShotType={pickShotType}
+              onCaddie={caddieLine}
+              onDrawer={(side) => setDrawer((current) => (current === side ? null : side))}
+            />
+          )}
+        </CourseView>
 
         {session.status === 'holeComplete' && (
           <div className="play__interstitial">

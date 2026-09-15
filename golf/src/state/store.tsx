@@ -20,7 +20,7 @@ import { ROUNDS, recordRound, type Tournament } from '../simulation/tournamentEn
 import { clearSave, hasSave, loadUniverse, saveUniverse } from '../simulation/persistence';
 import {
   type PlaySession, conditionsForSession, createSession, hit, nextHole, nudgeAim,
-  nudgeDistance, puttWith, selectClub, selectShotType, setTarget, settle, standingFor,
+  nudgeDistance, puttWith, selectClub, selectShotType, setTarget, settle, standingFor, takeCaddieLine,
   toPlayerRound,
 } from '../game/session';
 import { conditionsFor, generateWeather } from '../simulation/weatherEngine';
@@ -72,6 +72,8 @@ interface StoreValue {
   nudge: (yards: number) => void;
   nudgeLength: (yards: number) => void;
   playShot: () => void;
+  /** Take the caddie's club, aim and shot type. */
+  caddieLine: () => void;
   playPutt: (intent: PuttIntentId) => void;
   completeAnimation: () => void;
   advanceHole: () => void;
@@ -299,6 +301,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   const pickShotType = useCallback((type: ShotTypeId) => withGolfer((s) => selectShotType(s, type)), [withGolfer]);
   const nudge = useCallback((yards: number) => withGolfer((s) => nudgeAim(s, yards)), [withGolfer]);
   const nudgeLength = useCallback((yards: number) => withGolfer((s) => nudgeDistance(s, yards)), [withGolfer]);
+  const caddieLine = useCallback(() => withGolfer((s, g) => takeCaddieLine(s, g)), [withGolfer]);
 
   const playShot = useCallback(() => {
     withGolfer((s, g) => {
@@ -383,6 +386,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     nudge,
     nudgeLength,
     playShot,
+    caddieLine,
     playPutt,
     completeAnimation,
     advanceHole,
