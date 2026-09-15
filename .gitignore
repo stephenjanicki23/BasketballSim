@@ -16,3 +16,4 @@ golf/node_modules/
 golf/dist/
 # Composed from dist/ by tools/artifact.mjs when publishing.
 golf/artifact/
+golf/tsconfig.tsbuildinfo
