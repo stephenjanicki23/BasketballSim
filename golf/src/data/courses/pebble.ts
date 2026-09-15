@@ -346,39 +346,68 @@ const TRACES: Partial<Record<number, TracedHole>> = {
         kind: 'greenside', deep: true,
       },
     ],
-    // The two sides are not the same and are not drawn the same. North of the
-    // corridor — left, walking to the green — the photograph shows open mown
-    // ground with buildings well beyond it, so that band is a scattering rather
-    // than a wall. South of it is the real barrier: a dense belt of cypress and
-    // pine with the houses behind, and a ball in there is a ball you are not
-    // playing from. Both inner edges measured out from the line until the turf
-    // stops.
+    // Where the trees actually are, not where the turf stops. The canopy was
+    // measured band by band out from the line of play — dark textured green
+    // only, so roofs, roads and car parks do not count as timber — and what it
+    // shows is not two continuous walls. The right has a real belt, tight off
+    // the tee and dense again through the corner, and then it stops: the second
+    // half of the hole is open on that side. The left is open through the middle
+    // altogether. Nothing at all stands within ten yards of the line of play.
     trees: [
+      // Tight off the tee: the chute.
       {
         shape: [
-          [68, 1819], [129, 1773], [189, 1728], [250, 1683], [311, 1637],
-          [370, 1590], [423, 1533], [473, 1473], [528, 1422], [588, 1374],
-          [657, 1340], [727, 1307], [848, 1284], [924, 1291], [1000, 1290],
-          [1076, 1288], [1152, 1286], [1228, 1285], [1303, 1283],
-          [1300, 1133], [1224, 1135], [1149, 1136], [1073, 1138], [997, 1140],
-          [921, 1141], [845, 1134], [637, 1187], [567, 1220], [498, 1254],
-          [439, 1301], [383, 1353], [333, 1413], [280, 1470], [221, 1517],
-          [160, 1562], [99, 1608], [39, 1653], [-22, 1699],
+          [136, 1910], [163, 1889], [191, 1869], [218, 1848], [245, 1828],
+          [273, 1807], [300, 1787], [348, 1850], [320, 1871], [293, 1891],
+          [266, 1912], [238, 1932], [211, 1953], [184, 1973],
         ],
-        density: 0.16, canopy: [5, 11],
+        density: 0.58, canopy: [5, 11],
+      },
+      // The belt down the right through the corner — eighty to ninety-five per
+      // cent canopy twenty to thirty yards off the line, and the reason the
+      // drive has to hold the left half of the fairway.
+      {
+        shape: [
+          [389, 1747], [440, 1709], [491, 1671], [542, 1632], [593, 1594],
+          [644, 1556], [695, 1518], [756, 1599], [705, 1637], [654, 1675],
+          [603, 1713], [552, 1751], [501, 1790], [450, 1828],
+        ],
+        density: 0.62, canopy: [5, 12],
+      },
+      // Thinning out around the houses right of the green.
+      {
+        shape: [
+          [843, 1457], [907, 1455], [970, 1454], [1034, 1453], [1098, 1451],
+          [1161, 1450], [1225, 1449], [1227, 1528], [1163, 1529], [1099, 1531],
+          [1036, 1532], [972, 1534], [908, 1535], [845, 1536],
+        ],
+        density: 0.3, canopy: [4, 10],
+      },
+      // Left of the tee shot, and then nothing on that side for two hundred
+      // yards.
+      {
+        shape: [
+          [108, 1804], [141, 1780], [174, 1755], [206, 1731], [239, 1706],
+          [272, 1681], [305, 1657], [253, 1587], [220, 1612], [187, 1637],
+          [154, 1661], [122, 1686], [89, 1710], [56, 1735],
+        ],
+        density: 0.34, canopy: [4, 10],
       },
       {
         shape: [
-          [152, 1931], [213, 1886], [273, 1840], [334, 1795], [395, 1749],
-          [455, 1704], [516, 1658], [581, 1618], [648, 1581], [713, 1542],
-          [779, 1503], [842, 1460], [928, 1449], [1003, 1440], [1079, 1435],
-          [1155, 1443], [1231, 1447], [1307, 1450],
-          [1310, 1600], [1234, 1597], [1158, 1593], [1082, 1585], [1007, 1590],
-          [931, 1599], [855, 1609], [803, 1662], [738, 1701], [671, 1738],
-          [606, 1778], [545, 1824], [485, 1869], [424, 1915], [363, 1960],
-          [303, 2006], [242, 2051],
+          [867, 1297], [912, 1296], [958, 1295], [1003, 1294], [1049, 1293],
+          [1094, 1292], [1140, 1292], [1138, 1205], [1092, 1206], [1047, 1207],
+          [1001, 1208], [956, 1209], [910, 1210], [865, 1211],
         ],
-        density: 0.5, canopy: [5, 11],
+        density: 0.22, canopy: [4, 10],
+      },
+      // Behind the green.
+      {
+        shape: [
+          [1209, 1319], [1240, 1318], [1270, 1318], [1300, 1317], [1316, 1317],
+          [1314, 1223], [1298, 1223], [1268, 1224], [1238, 1224], [1207, 1225],
+        ],
+        density: 0.36, canopy: [4, 10],
       },
     ],
     paths: [{ line: [[1120, 1470], [1200, 1462], [1280, 1452], [1360, 1444], [1430, 1440]], width: 3 }],
