@@ -27,8 +27,8 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st to the 8th, and the 17th and 18th, are traced, not derived.**
- *    Their overheads arrived as images, so those ten are read straight off the
+ * 3. **The 1st to the 9th, and the 17th and 18th, are traced, not derived.**
+ *    Their overheads arrived as images, so those eleven are read straight off the
  *    photograph — the line of play, the lake that runs the whole left side of the
  *    1st, the wooded gully on the inside of the 2nd's elbow, the chute the 3rd is
  *    played out of, the timber down both sides of the 4th, the pond that is all
@@ -47,7 +47,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other eight the same way, trace its overhead and drop
+ * To finish any of the other seven the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -251,7 +251,7 @@ const holes: HoleSpec[] = [
       { along: 530, lateral: -13, size: 5, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'Five hundred and thirty-seven uphill and bending right twice, back toward the barn. Three good ones and it is a birdie hole; two good ones and a hanging lie and it is not.',
+    strategy: 'Out to the left to a marker at 295, then 233 back to the right and uphill to a green below the clubhouse. A stand of hardwood sits between the two legs, so going at the green in two means going over it rather than round it.',
   },
   {
     number: 10, name: 'The Drop', par: 4, yards: 443, bearing: 196, index: 12,
@@ -441,6 +441,31 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  9: {
+    tee: [755, 2345],
+    // 295 out to a marker forty-five yards LEFT of the line, 233 back right to a
+    // green below the clubhouse. The derived version bent right, twice.
+    playLine: [[755, 2345], [648, 1655], [752, 1108]],
+    pin: [752, 1108],
+    green: [
+      [761, 1010], [799, 1024], [819, 1060], [814, 1106], [781, 1136],
+      [740, 1139], [714, 1109], [708, 1062], [729, 1027],
+    ],
+    bunkers: [
+      { shape: [[612, 1171], [656, 1159], [676, 1189], [656, 1223], [615, 1215]], kind: 'greenside', deep: true },
+      { shape: [[591, 1232], [632, 1223], [650, 1253], [626, 1282], [594, 1273]], kind: 'greenside' },
+      { shape: [[688, 1578], [726, 1569], [743, 1598], [720, 1627], [688, 1618]], kind: 'fairway' },
+    ],
+    trees: [
+      // The stand of hardwood between the two legs: the second shot is played
+      // along its left edge, and cutting the corner means going over it.
+      { shape: [[730, 1156], [830, 1141], [870, 1259], [864, 1463], [826, 1610], [760, 1639], [724, 1522], [718, 1317]], density: 0.62, canopy: [5, 10] },
+      { shape: [[790, 1683], [890, 1698], [915, 1902], [900, 2137], [860, 2312], [800, 2371], [775, 2137], [781, 1888]], density: 0.5, canopy: [5, 10] },
+      { shape: [[483, 1171], [570, 1150], [592, 1400], [585, 1700], [565, 1950], [540, 2166], [490, 2280], [462, 2000], [468, 1600], [474, 1330]], density: 0.45, canopy: [5, 9] },
+    ],
+    paths: [{ line: [[480, 2078], [520, 1946], [550, 1815], [570, 1683], [580, 1551], [570, 1405], [560, 1288]], width: 3 }],
+    widths: [{ at: 0.08, half: 18 }, { at: 0.35, half: 20 }, { at: 0.55, half: 19 }, { at: 0.78, half: 17 }, { at: 1, half: 16 }],
+  },
   8: {
     tee: [755, 2347],
     playLine: [[755, 2347], [755, 1108]],
