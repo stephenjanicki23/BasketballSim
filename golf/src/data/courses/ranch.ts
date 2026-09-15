@@ -27,8 +27,8 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st to the 7th, and the 17th and 18th, are traced, not derived.**
- *    Their overheads arrived as images, so those nine are read straight off the
+ * 3. **The 1st to the 8th, and the 17th and 18th, are traced, not derived.**
+ *    Their overheads arrived as images, so those ten are read straight off the
  *    photograph — the line of play, the lake that runs the whole left side of the
  *    1st, the wooded gully on the inside of the 2nd's elbow, the chute the 3rd is
  *    played out of, the timber down both sides of the 4th, the pond that is all
@@ -47,7 +47,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other nine the same way, trace its overhead and drop
+ * To finish any of the other eight the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -230,7 +230,7 @@ const holes: HoleSpec[] = [
       { along: 206, lateral: -13, size: 5, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'Two hundred and four off a pad in the trees, twenty-two feet downhill, to a big green with sand down the whole right side. A three is worth more than the card suggests.',
+    strategy: 'Two hundred and four downhill, and three bunkers across the front of the green mean there is no running it on. Long is trees, short is sand: the only miss is left, and the pin is usually behind the middle one.',
   },
   {
     number: 9, name: 'Home Field', par: 5, yards: 537, bearing: 350, index: 5,
@@ -441,6 +441,28 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  8: {
+    tee: [755, 2347],
+    playLine: [[755, 2347], [755, 1108]],
+    pin: [755, 1108],
+    green: [
+      [765, 992], [810, 1007], [839, 1047], [835, 1101], [807, 1143],
+      [758, 1160], [713, 1140], [691, 1096], [693, 1041], [726, 1006],
+    ],
+    // Three bunkers across the front and left of it: there is no run-up.
+    bunkers: [
+      { shape: [[594, 1130], [635, 1118], [659, 1147], [641, 1182], [600, 1173]], kind: 'greenside', deep: true },
+      { shape: [[699, 1218], [743, 1206], [764, 1238], [740, 1297], [705, 1288], [691, 1253]], kind: 'greenside' },
+      { shape: [[784, 1226], [828, 1215], [852, 1247], [828, 1282], [790, 1276]], kind: 'greenside' },
+    ],
+    trees: [
+      { shape: [[837, 1010], [937, 1024], [972, 1317], [978, 1683], [960, 2049], [922, 2283], [849, 2371], [813, 2049], [819, 1610], [828, 1259]], density: 0.5, canopy: [5, 10] },
+      { shape: [[521, 1902], [585, 1888], [609, 2049], [597, 2254], [556, 2371], [512, 2283], [503, 2049]], density: 0.5, canopy: [5, 9] },
+      { shape: [[615, 966], [732, 948], [819, 972], [813, 1010], [688, 1024], [620, 1007]], density: 0.45, canopy: [4, 9] },
+    ],
+    paths: [{ line: [[585, 2137], [615, 1990], [659, 1829], [688, 1654], [697, 1463], [688, 1288], [697, 1141]], width: 3 }],
+    widths: [{ at: 0.06, half: 10 }, { at: 0.35, half: 14 }, { at: 0.60, half: 16 }, { at: 0.85, half: 15 }, { at: 1, half: 15 }],
+  },
   7: {
     tee: [755, 2347],
     // 200 and 200, and dead straight — the one hole where the printed legs and
