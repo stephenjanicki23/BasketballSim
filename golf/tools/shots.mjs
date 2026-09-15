@@ -3,10 +3,14 @@
  * Screenshot holes from the built app, so a layout can be looked at rather than
  * inferred from numbers. Useful after changing course geometry.
  *
- *   npm run build && node tools/shots.mjs [course:hole ...] [--out DIR]
+ *   npm run build && node tools/shots.mjs [course:hole ...] [--out DIR] [--bare]
  *
  * Defaults to a hole from each venue. Images land in dist/ unless --out says
  * otherwise, one per hole, named course-hole.png.
+ *
+ * --bare hides the HUD and the panels, leaving the ground on its own. That is
+ * the view to hold up against the overhead a hole was traced from, because the
+ * chrome otherwise sits over the green.
  */
 import { chromium } from 'playwright-core';
 import { createServer } from 'node:http';
@@ -68,13 +72,21 @@ for (const [course, hole] of shots) {
   await page.locator('.card-table tbody tr').nth(hole - 1).getByRole('button', { name: 'Select' }).click();
   await page.getByRole('button', { name: `Play hole ${hole}` }).click();
   await page.waitForSelector('.course-canvas');
+  if (args.includes('--bare')) {
+    await page.addStyleTag({
+      content:
+        '.hud, .play__status, .play__log, .play__left, .play__right, .course-view__controls, .course-view__map, button' +
+        ' { visibility: hidden !important; } .course-canvas { visibility: visible !important; }',
+    });
+  }
   await page.waitForTimeout(600);
   // --debug presses D for the trace check: source image plus traced geometry.
   if (args.includes('--debug')) {
     await page.keyboard.press('d');
     await page.waitForTimeout(900);
   }
-  const path = join(outDir, `${course}-${hole}${args.includes('--debug') ? '-debug' : ''}.png`);
+  const suffix = args.includes('--debug') ? '-debug' : args.includes('--bare') ? '-bare' : '';
+  const path = join(outDir, `${course}-${hole}${suffix}.png`);
   await page.locator('.course-canvas').screenshot({ path });
   console.log(`  ${path}`);
   const leave = page.getByRole('button', { name: /Leave the round/ }).first();

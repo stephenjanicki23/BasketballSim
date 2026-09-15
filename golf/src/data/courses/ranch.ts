@@ -447,30 +447,79 @@ const TRACES: Partial<Record<number, TracedHole>> = {
     // downhill. The derived version bent left.
     playLine: [[591, 2347], [755, 1698], [585, 1108]],
     pin: [585, 1108],
+    // Re-measured. The first pass outlined the whole shelf; this is the smooth
+    // part, thirty by thirty-five, centred on the overlay's marker.
     green: [
-      [591, 1024], [620, 1039], [632, 1068], [623, 1101], [594, 1118],
-      [565, 1109], [550, 1080], [556, 1046],
+      [545, 1090], [556, 1070], [576, 1059], [600, 1058], [620, 1068], [630, 1088],
+      [633, 1112], [628, 1136], [612, 1153], [590, 1159], [568, 1153], [553, 1136], [546, 1112],
     ],
+    // One bunker on this hole, and it is the kidney left of the green. The
+    // fairway bunker the first pass put at the 229 marker is not there: what is
+    // there, on the photograph, is a pair of sprinkler heads.
     bunkers: [
-      { shape: [[500, 1130], [538, 1118], [556, 1150], [536, 1179], [503, 1171]], kind: 'greenside', deep: true },
-      { shape: [[670, 1302], [711, 1294], [729, 1326], [705, 1352], [670, 1344]], kind: 'fairway' },
+      {
+        shape: [
+          [515, 1118], [530, 1120], [540, 1133], [539, 1148], [529, 1155], [534, 1170],
+          [530, 1186], [518, 1194], [505, 1188], [498, 1170], [495, 1153], [500, 1134], [508, 1120],
+        ],
+        kind: 'greenside', deep: true,
+      },
     ],
-    // Trees only where there are trees: the wood behind the green. Both sides of
-    // this hole are native grass, which is the rough gradient rather than
-    // anything traced — the lesson of the 9th.
+    // Trees only where there are trees: the wood across the back of the green,
+    // and the scrubby line down the left shoulder above the mound. Everything
+    // else down both sides is native grass, traced below.
     trees: [
       { shape: [[439, 907], [615, 893], [761, 937], [790, 1010], [629, 1024], [483, 1010]], density: 0.5, canopy: [5, 10] },
+      { shape: [[452, 1075], [508, 1062], [530, 1180], [534, 1320], [524, 1450], [486, 1480], [458, 1370], [448, 1220]], density: 0.36, canopy: [4, 8] },
     ],
-    // Both sides of the 10th are native grass rather than rough: the lumpy
-    // mound left of the driving zone, the strip below it, and the shelf beyond
-    // the cart path on the right.
+    // Both sides are native grass, and this pass measured it rather than
+    // guessed: the mown edge was found row by row off the photograph, out from
+    // the line of play until the turf stops being turf. Left is the lumpy mound
+    // through the driving zone running unbroken down to the tee; right is the
+    // shelf beyond the cart path.
     fescue: [
-      [[595, 1460], [650, 1475], [685, 1540], [680, 1620], [665, 1700], [650, 1780], [630, 1860], [605, 1910], [580, 1890], [568, 1800], [565, 1700], [572, 1590], [580, 1510]],
-      [[578, 1940], [630, 1970], [655, 2050], [650, 2150], [630, 2240], [600, 2300], [565, 2270], [550, 2170], [552, 2050]],
-      [[855, 1760], [900, 1800], [925, 1880], [935, 1980], [920, 2080], [890, 2170], [850, 2210], [825, 2140], [830, 2030], [840, 1910]],
+      [
+        [552, 1200], [542, 1250], [528, 1300], [562, 1350], [558, 1400],
+        [605, 1450], [615, 1500], [659, 1550], [673, 1600], [693, 1650],
+        [716, 1700], [712, 1750], [678, 1800], [643, 1850], [616, 1900],
+        [624, 1950], [634, 2000], [636, 2050], [623, 2100], [587, 2150],
+        [552, 2200], [539, 2250], [544, 2300], [474, 2300], [466, 2250],
+        [461, 2200], [478, 2150], [498, 2100], [529, 2050], [531, 2000],
+        [531, 1950], [510, 1900], [552, 1850], [596, 1800], [642, 1750],
+        [646, 1700], [608, 1650], [582, 1600], [564, 1550], [535, 1500],
+        [531, 1450], [488, 1400], [491, 1350], [457, 1300], [471, 1250],
+        [482, 1200],
+      ],
+      [
+        [717, 1200], [728, 1250], [744, 1300], [770, 1350], [792, 1400],
+        [822, 1450], [850, 1500], [876, 1550], [890, 1600], [859, 1650],
+        [849, 1700], [833, 1750], [844, 1800], [820, 1850], [796, 1900],
+        [774, 1950], [762, 2000], [748, 2050], [730, 2100], [697, 2150],
+        [667, 2200], [647, 2250], [641, 2300], [738, 2300], [735, 2250],
+        [737, 2200], [767, 2150], [800, 2100], [835, 2050], [859, 2000],
+        [882, 1950], [896, 1900], [912, 1850], [925, 1800], [906, 1750],
+        [919, 1700], [929, 1650], [960, 1600], [946, 1550], [920, 1500],
+        [892, 1450], [862, 1400], [840, 1350], [814, 1300], [798, 1250],
+        [787, 1200],
+      ],
     ],
-    paths: [{ line: [[812, 1171], [878, 1390], [907, 1610], [878, 1829], [819, 2049], [732, 2195], [629, 2283]], width: 3 }],
-    widths: [{ at: 0.08, half: 16 }, { at: 0.35, half: 19 }, { at: 0.55, half: 19 }, { at: 0.80, half: 17 }, { at: 1, half: 14 }],
+    paths: [{
+      line: [
+        [812, 1160], [770, 1235], [782, 1300], [800, 1380], [806, 1460], [798, 1545], [806, 1625],
+        [820, 1710], [835, 1790], [852, 1870], [874, 1950], [888, 2030], [872, 2110], [820, 2165],
+        [740, 2200], [650, 2230], [570, 2255],
+      ],
+      width: 3,
+    }],
+    // Measured the same way as the fescue, row by row: the tee shot is played up
+    // a neck barely a dozen yards either side of the line, the hole opens out
+    // through the driving zone into fifty-odd yards of mown grass, then pinches
+    // again onto the green's shelf.
+    widths: [
+      { at: 0.05, half: 12 }, { at: 0.15, half: 13 }, { at: 0.28, half: 20 },
+      { at: 0.38, half: 25 }, { at: 0.50, half: 28 }, { at: 0.62, half: 28 },
+      { at: 0.75, half: 26 }, { at: 0.88, half: 22 }, { at: 1, half: 17 },
+    ],
   },
   9: {
     tee: [755, 2345],
