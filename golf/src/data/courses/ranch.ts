@@ -27,12 +27,13 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st, 2nd, 17th and 18th are traced, not derived.** Their overheads
- *    arrived as images, so those four are read straight off the photograph — the
- *    line of play, the lake that runs the whole left side of the 1st, the wooded
- *    gully on the inside of the 2nd's elbow, the pond that is all of the 17th,
- *    the green outlines, the stream down the right of the 18th — and the card
- *    sets the scale, as it does everywhere. They were traced by eye rather than
+ * 3. **The 1st, 2nd, 3rd, 17th and 18th are traced, not derived.** Their
+ *    overheads arrived as images, so those five are read straight off the
+ *    photograph — the line of play, the lake that runs the whole left side of the
+ *    1st, the wooded gully on the inside of the 2nd's elbow, the chute the 3rd is
+ *    played out of, the pond that is all of the 17th, the green outlines, the
+ *    stream down the right of the 18th — and the card sets the scale, as it does
+ *    everywhere. They were traced by eye rather than
  *    digitised, so call them accurate to a few yards, not to the yard. The hole
  *    card in the game says which holes these are, because a derived hole is the
  *    right length and the right shape of corner but not the right hole: the 2nd
@@ -44,7 +45,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other fourteen the same way, trace its overhead and drop
+ * To finish any of the other thirteen the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -130,7 +131,7 @@ const holes: HoleSpec[] = [
       { along: 414, lateral: 13, size: 5, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'Thirty-four feet of climb between two walls of hardwood, which is a club and a half of it. Nobody minds a four here and the field average says so.',
+    strategy: 'Out of a chute of hardwood, bending right to the marker at 289 and back left up the hill to the green. Thirty-four feet of climb is a club and a half of it, and the wood down the left runs the whole way: nobody minds a four here.',
   },
   {
     number: 4, name: 'Stone Wall', par: 4, yards: 428, bearing: 300, index: 1,
@@ -438,6 +439,35 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  3: {
+    tee: [568, 2198],
+    // Out to the right to the marker at 289, then 141 back to the left. The
+    // corner stands about sixty yards off the line, so it is a bend rather than
+    // the elbow the 2nd is — but it is not the straight hole the card implied.
+    playLine: [[568, 2198], [754, 1380], [566, 995]],
+    pin: [566, 995],
+    green: [
+      [574, 919], [603, 931], [620, 958], [615, 998], [591, 1024],
+      [559, 1027], [539, 1004], [533, 966], [547, 934],
+    ],
+    bunkers: [
+      { shape: [[626, 969], [656, 960], [670, 983], [653, 1010], [626, 1001]], kind: 'greenside' },
+      { shape: [[571, 1089], [603, 1080], [620, 1106], [597, 1136], [571, 1124]], kind: 'greenside', deep: true },
+      { shape: [[699, 1060], [732, 1051], [749, 1077], [726, 1100], [699, 1092]], kind: 'fairway' },
+      { shape: [[632, 1264], [667, 1256], [685, 1285], [661, 1311], [632, 1302]], kind: 'fairway' },
+      { shape: [[641, 1317], [676, 1311], [691, 1337], [667, 1361], [641, 1352]], kind: 'fairway' },
+    ],
+    trees: [
+      // The wood down the left runs the whole length of the hole.
+      { shape: [[366, 834], [439, 814], [515, 896], [544, 1112], [521, 1375], [483, 1639], [439, 1902], [383, 2078], [351, 1756], [348, 1317], [354, 1024]], density: 0.5, canopy: [5, 10] },
+      // And the tee shot is played out of a chute between two stands.
+      { shape: [[512, 1639], [585, 1624], [615, 1756], [600, 1961], [556, 2122], [505, 2092], [495, 1844]], density: 0.58, canopy: [5, 10] },
+      { shape: [[688, 1668], [776, 1639], [819, 1756], [802, 1902], [720, 1932], [676, 1815]], density: 0.55, canopy: [5, 10] },
+      { shape: [[849, 1024], [937, 1068], [958, 1288], [907, 1463], [843, 1375], [834, 1171]], density: 0.45, canopy: [4, 9] },
+    ],
+    paths: [{ line: [[761, 945], [819, 1024], [863, 1171], [884, 1317], [872, 1463], [828, 1595], [761, 1727], [688, 1902], [629, 2078]], width: 3 }],
+    widths: [{ at: 0.08, half: 15 }, { at: 0.38, half: 19 }, { at: 0.62, half: 18 }, { at: 0.85, half: 15 }, { at: 1, half: 15 }],
+  },
   2: {
     tee: [755, 2274],
     // Out to the left to the marker at 216, and 175 back to the right from it.
