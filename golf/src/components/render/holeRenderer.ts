@@ -72,6 +72,18 @@ export interface DebugOptions {
   };
 }
 
+/** One closed loop added to whatever path is already open. */
+function subpath(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly Vec2[]): void {
+  if (points.length === 0) return;
+  const first = toScreen(camera, points[0]);
+  ctx.moveTo(first.x, first.y);
+  for (let i = 1; i < points.length; i++) {
+    const p = toScreen(camera, points[i]);
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.closePath();
+}
+
 function path(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly Vec2[]): void {
   if (points.length === 0) return;
   ctx.beginPath();
@@ -547,6 +559,9 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
     ctx.restore();
   }
 
+  // --- Native grass --------------------------------------------------------
+  drawFescue(ctx, options);
+
   // --- The teeing ground ---------------------------------------------------
   drawTeeBox(ctx, options);
 
@@ -1012,6 +1027,86 @@ function drawElevation(ctx: CanvasRenderingContext2D, options: RenderOptions): v
   ctx.globalAlpha = 0.18;
   ctx.drawImage(layer.canvas, 0, 0);
   ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+interface TuftLayer {
+  tufts: { p: Vec2; angle: number; length: number; lean: number }[];
+}
+
+const fescueCache = new Map<string, TuftLayer>();
+
+/**
+ * Fescue is drawn as what it is: a paler, yellower mat with the grass itself
+ * standing up out of it. The blades are scattered once per hole and then kept,
+ * because grass that reshuffles every frame reads as static, not wind.
+ */
+function fescueTufts(hole: HoleGeometry): TuftLayer {
+  const key = `${hole.course.id}:${hole.spec.number}`;
+  const cached = fescueCache.get(key);
+  if (cached) return cached;
+  const rng = createRng(`${key}:fescue`);
+  const tufts: TuftLayer['tufts'] = [];
+  for (const zone of hole.fescue) {
+    const { minX, minY, maxX, maxY } = zone.shape.bounds;
+    const area = (maxX - minX) * (maxY - minY);
+    // One blade per four square yards of the zone's box, then thrown away if it
+    // fell outside the outline, which is cheaper than sampling the polygon.
+    const tries = Math.min(4000, Math.round(area / 4));
+    for (let i = 0; i < tries; i++) {
+      const p = { x: rng.range(minX, maxX), y: rng.range(minY, maxY) };
+      if (!zone.shape.contains(p)) continue;
+      tufts.push({
+        p,
+        angle: rng.range(0, Math.PI * 2),
+        length: rng.range(1.1, 2.6),
+        lean: rng.range(-0.5, 0.5),
+      });
+    }
+  }
+  const layer = { tufts };
+  fescueCache.set(key, layer);
+  return layer;
+}
+
+function drawFescue(ctx: CanvasRenderingContext2D, options: RenderOptions): void {
+  const { camera, hole } = options;
+  const palette = hole.style.palette;
+  if (!hole.fescue.length) return;
+  for (const zone of hole.fescue) {
+    path(ctx, camera, zone.shape.outline);
+    ctx.fillStyle = palette.fescue;
+    ctx.fill();
+    // A soft darker hem, so the edge of the mown grass reads as a mowing line
+    // rather than a drawn border.
+    ctx.strokeStyle = palette.fescueDark;
+    ctx.lineWidth = Math.min(6, Math.max(1, 1.6 * camera.scale));
+    ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // The blades themselves only earn their pixels once you are close enough to
+  // see them.
+  if (camera.scale < 0.5) return;
+  ctx.save();
+  ctx.beginPath();
+  for (const zone of hole.fescue) subpath(ctx, camera, zone.shape.outline);
+  ctx.clip();
+  ctx.strokeStyle = palette.fescueDark;
+  ctx.lineWidth = Math.min(2.2, Math.max(0.7, 0.55 * camera.scale));
+  ctx.lineCap = 'round';
+  const wind = (options.windFrom * Math.PI) / 180;
+  const sway = Math.sin(options.time * 1.3) * 0.18 * Math.min(1, options.windSpeed / 18);
+  ctx.beginPath();
+  for (const tuft of fescueTufts(hole).tufts) {
+    const base = toScreen(camera, tuft.p);
+    if (base.x < -10 || base.x > camera.width + 10 || base.y < -10 || base.y > camera.height + 10) continue;
+    const lean = tuft.angle + tuft.lean + (wind + sway) * 0.25;
+    const len = tuft.length * camera.scale;
+    ctx.moveTo(base.x, base.y);
+    ctx.lineTo(base.x + Math.sin(lean) * len, base.y - Math.cos(lean) * len);
+  }
+  ctx.stroke();
   ctx.restore();
 }
 

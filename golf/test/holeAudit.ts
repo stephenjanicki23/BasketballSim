@@ -89,6 +89,23 @@ function audit(course: Course): void {
     if (long > widest) fail(`hole ${spec.number} green is too big`, `${short.toFixed(0)} x ${long.toFixed(0)} yd — an outlined green complex rather than a putting surface?`);
     if (short < 14) fail(`hole ${spec.number} green is too small`, `${short.toFixed(0)} x ${long.toFixed(0)} yd`);
 
+    // The card yardage is measured to the middle of the green, so the far end of
+    // the line of play has to land on the putting surface. When a traced green is
+    // outlined in the wrong place the hole still measures correctly and still
+    // passes every leg check — it just leaves the green floating off the end of
+    // its own corridor, which is how the 9th at The Ranch went out a dozen yards
+    // beyond where it sits.
+    if (spec.greenShape) {
+      const end = pointAlongPolyline(hole.centerline, hole.centerlineLength).point;
+      const off = hole.green.edgeDistance(end);
+      if (off > 0) {
+        fail(
+          `hole ${spec.number} green is not at the end of the hole`,
+          `the line of play finishes ${off.toFixed(0)} yd off the putting surface — traced in the wrong place?`,
+        );
+      }
+    }
+
     if (spec.par !== 3) {
       const landing = Math.min(290, hole.centerlineLength * 0.62);
       worstFairway = Math.min(worstFairway, hole.fairwayHalfWidth(landing) * 2);

@@ -313,6 +313,12 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     return { shape: shapeFromBlob(blob, 56) };
   });
 
+  // --- Native grass --------------------------------------------------------
+  // Fescue is traced, never generated: it is a thing a photograph shows, and
+  // guessing where a course stopped mowing is how a hole ends up feeling
+  // invented.
+  const fescue = (spec.fescue ?? []).map((zone) => ({ shape: shapeFromPolygon(zone.shape) }));
+
   // --- Desert waste --------------------------------------------------------
   const waste = (spec.waste ?? []).map((w, i) => {
     if (w.shape) return { shape: shapeFromPolygon(w.shape) };
@@ -370,10 +376,13 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   const trees: HoleGeometry['trees'] = [];
   const atLeast = (position: Vec2, gap: number): boolean =>
     trees.every((t) => dist(t.position, position) > gap);
-  // Nothing grows out of a pond. Worth saying because the tree scatter does not
-  // know about hazards, and one trunk standing in the middle of the water on a
-  // forced carry undoes the whole picture.
-  const plantable = (position: Vec2): boolean => !water.some((w) => w.shape.contains(position));
+  // Nothing grows out of a pond, and nothing grows in the fescue either — a
+  // stand of native grass is open ground, and the whole reason the club mows it
+  // that way is that there is nothing there. Worth saying because the tree
+  // scatter does not know about hazards, and one trunk standing in the middle of
+  // the water on a forced carry undoes the whole picture.
+  const plantable = (position: Vec2): boolean =>
+    !water.some((w) => w.shape.contains(position)) && !fescue.some((f) => f.shape.contains(position));
 
   const plant = (along: number, offset: number, radius: number, shade: number) => {
     const { point, tangent } = pointAlongPolyline(centerline, clamp(along, 0, length));
@@ -479,7 +488,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   let bounds = expandBounds(boundsOf(bands.deepRough), 22);
   bounds = unionBounds(bounds, expandBounds(teeBox.bounds, 10));
   bounds = unionBounds(bounds, expandBounds(green.bounds, green.radius * 1.6));
-  for (const area of [...water, ...waste, ...ob, ...paths]) bounds = unionBounds(bounds, expandBounds(area.shape.bounds, 8));
+  for (const area of [...water, ...waste, ...ob, ...paths, ...fescue]) bounds = unionBounds(bounds, expandBounds(area.shape.bounds, 8));
   for (const t of trees) bounds = unionBounds(bounds, expandBounds(boundsOf([t.position]), t.radius + 4));
 
   const built: HoleGeometry = {
@@ -499,6 +508,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     water,
     waste,
     ob,
+    fescue,
     paths,
     trees,
     exactElevationAt: elevationAt,
@@ -685,6 +695,13 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
   if (greenEdge <= FRINGE_WIDTH) {
     info.lie = 'fringe';
     return info;
+  }
+
+  for (const zone of hole.fescue) {
+    if (zone.shape.contains(p)) {
+      info.lie = 'deepRough';
+      return info;
+    }
   }
 
   for (const w of hole.waste) {

@@ -43,6 +43,11 @@ export interface TracedHole {
   waste?: Pixel[][];
   /** Out of bounds: housing, roads, the property line. */
   ob?: Pixel[][];
+  /**
+   * Native grass — fescue, the wispy stuff a New England hillside is cut out
+   * of. Traced where the photograph shows it, never guessed.
+   */
+  fescue?: Pixel[][];
   /** Wooded areas, as boundaries. The trees inside them are procedural. */
   trees?: { shape: Pixel[]; density?: number; canopy?: [number, number] }[];
   /** Cart paths, traced down their middle. */
@@ -186,6 +191,7 @@ export function traceHole(traced: TracedHole, card: CardEntry): HoleSpec {
     water: (traced.water ?? []).map((shape) => ({ along: 0, lateral: 0, size: 0, shape: shapeOf(frame, shape) })),
     waste: (traced.waste ?? []).map((shape) => ({ from: 0, to: 0, side: 1 as const, offset: 0, width: 0, shape: shapeOf(frame, shape) })),
     obZones: (traced.ob ?? []).map((shape) => ({ shape: shapeOf(frame, shape) })),
+    fescue: (traced.fescue ?? []).map((shape) => ({ shape: shapeOf(frame, shape) })),
     treeZones: (traced.trees ?? []).map((zone) => ({
       shape: shapeOf(frame, zone.shape),
       density: zone.density,

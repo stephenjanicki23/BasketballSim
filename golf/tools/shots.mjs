@@ -19,6 +19,7 @@ const NAMES = {
   coastal: 'Coastal Championship',
   desert: 'Desert Classic',
   concord: 'Revere Concord',
+  ranch: 'The Ranch',
 };
 
 const args = process.argv.slice(2);

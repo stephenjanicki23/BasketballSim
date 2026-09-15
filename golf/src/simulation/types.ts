@@ -465,6 +465,12 @@ export interface HoleSpec {
   greenShape?: TracedShape;
   /** Out of bounds: housing, a road, the property line. */
   obZones?: { shape: TracedShape }[];
+  /**
+   * Native grass — fescue, wild meadow, whatever the club calls it. Not rough
+   * that has been left alone: a separate thing, traced where the photograph
+   * shows it, played out of like deep grass and drawn in its own colour.
+   */
+  fescue?: { shape: TracedShape }[];
   /** Stands of trees, traced as an outline and filled at a density. */
   treeZones?: { shape: TracedShape; density?: number; canopy?: [number, number] }[];
   /** Cart paths, traced as their centre line, in yards wide. */
@@ -519,6 +525,9 @@ export interface CourseStyle {
     sand: string;
     water: string;
     waste: string;
+    /** Fescue: the wispy native grass a links or a New England hillside is cut out of. */
+    fescue: string;
+    fescueDark: string;
     tree: string;
     treeDark: string;
     background: string;
@@ -620,6 +629,8 @@ export interface HoleGeometry {
   waste: { shape: Shape }[];
   /** Authored out of bounds — housing, a road — beyond the corridor's own boundary. */
   ob: { shape: Shape }[];
+  /** Native grass, traced. Plays as deep grass and is drawn as itself. */
+  fescue: { shape: Shape }[];
   /** Cart paths, as thin polygons. Firm, fast and legal to play from. */
   paths: { shape: Shape }[];
   trees: { position: Vec2; radius: number; shade: number }[];

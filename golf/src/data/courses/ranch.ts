@@ -461,6 +461,14 @@ const TRACES: Partial<Record<number, TracedHole>> = {
     trees: [
       { shape: [[439, 907], [615, 893], [761, 937], [790, 1010], [629, 1024], [483, 1010]], density: 0.5, canopy: [5, 10] },
     ],
+    // Both sides of the 10th are native grass rather than rough: the lumpy
+    // mound left of the driving zone, the strip below it, and the shelf beyond
+    // the cart path on the right.
+    fescue: [
+      [[595, 1460], [650, 1475], [685, 1540], [680, 1620], [665, 1700], [650, 1780], [630, 1860], [605, 1910], [580, 1890], [568, 1800], [565, 1700], [572, 1590], [580, 1510]],
+      [[578, 1940], [630, 1970], [655, 2050], [650, 2150], [630, 2240], [600, 2300], [565, 2270], [550, 2170], [552, 2050]],
+      [[855, 1760], [900, 1800], [925, 1880], [935, 1980], [920, 2080], [890, 2170], [850, 2210], [825, 2140], [830, 2030], [840, 1910]],
+    ],
     paths: [{ line: [[812, 1171], [878, 1390], [907, 1610], [878, 1829], [819, 2049], [732, 2195], [629, 2283]], width: 3 }],
     widths: [{ at: 0.08, half: 16 }, { at: 0.35, half: 19 }, { at: 0.55, half: 19 }, { at: 0.80, half: 17 }, { at: 1, half: 14 }],
   },
@@ -470,9 +478,12 @@ const TRACES: Partial<Record<number, TracedHole>> = {
     // green below the clubhouse. The derived version bent right, twice.
     playLine: [[755, 2345], [648, 1655], [752, 1108]],
     pin: [752, 1108],
+    // Re-measured: the first pass traced this green a dozen yards beyond where
+    // it sits, which left it floating off the end of its own corridor. The
+    // overlay's marker is the middle of the putting surface, and it is.
     green: [
-      [762, 1039], [783, 1047], [794, 1067], [791, 1092], [773, 1108],
-      [750, 1110], [736, 1094], [733, 1068], [744, 1048]
+      [730, 1094], [740, 1080], [756, 1074], [772, 1079], [784, 1092],
+      [787, 1110], [782, 1128], [768, 1140], [750, 1142], [735, 1133], [728, 1116],
     ],
     bunkers: [
       { shape: [[688, 1578], [726, 1569], [743, 1598], [720, 1627], [688, 1618]], kind: 'fairway' },
@@ -485,11 +496,18 @@ const TRACES: Partial<Record<number, TracedHole>> = {
       { shape: [[790, 1683], [890, 1698], [915, 1902], [900, 2137], [860, 2312], [800, 2371], [775, 2137], [781, 1888]], density: 0.5, canopy: [5, 10] },
       { shape: [[483, 1171], [570, 1150], [592, 1400], [585, 1700], [565, 1950], [540, 2166], [490, 2280], [462, 2000], [468, 1600], [474, 1330]], density: 0.45, canopy: [5, 9] },
     ],
+    // The ground the user corrected me about: what sits right of and short of
+    // this green is native grass, not timber. A broad band wrapping the front
+    // right of the complex, and the hollow cut into the fairway left of it.
+    fescue: [
+      [[703, 1155], [747, 1152], [793, 1145], [843, 1137], [893, 1140], [923, 1148], [930, 1177], [923, 1210], [897, 1240], [860, 1250], [827, 1243], [793, 1233], [767, 1217], [740, 1207], [717, 1193], [700, 1172]],
+      [[620, 1200], [643, 1185], [670, 1183], [693, 1190], [700, 1207], [690, 1230], [667, 1242], [640, 1240], [620, 1223]],
+    ],
     paths: [{ line: [[480, 2078], [520, 1946], [550, 1815], [570, 1683], [580, 1551], [570, 1405], [560, 1288]], width: 3 }],
-    // Wide through the driving zone, but the mown ground runs out fast at the
-    // green: twenty yards right of the pin is fescue, and fescue is not a
-    // bail-out.
-    widths: [{ at: 0.08, half: 19 }, { at: 0.35, half: 22 }, { at: 0.55, half: 22 }, { at: 0.80, half: 19 }, { at: 0.92, half: 11 }, { at: 1, half: 9 }],
+    // Wide the whole way. What takes the ground away at the green is not a
+    // narrowing corridor but the fescue traced below: the mown grass wraps the
+    // left and the back of the green, and the native grass eats the right.
+    widths: [{ at: 0.08, half: 19 }, { at: 0.35, half: 22 }, { at: 0.55, half: 22 }, { at: 0.80, half: 21 }, { at: 1, half: 20 }],
   },
   8: {
     tee: [755, 2347],
@@ -509,6 +527,14 @@ const TRACES: Partial<Record<number, TracedHole>> = {
       { shape: [[837, 1010], [937, 1024], [972, 1317], [978, 1683], [960, 2049], [922, 2283], [849, 2371], [813, 2049], [819, 1610], [828, 1259]], density: 0.5, canopy: [5, 10] },
       { shape: [[521, 1902], [585, 1888], [609, 2049], [597, 2254], [556, 2371], [512, 2283], [503, 2049]], density: 0.5, canopy: [5, 9] },
       { shape: [[615, 966], [732, 948], [819, 972], [813, 1010], [688, 1024], [620, 1007]], density: 0.45, canopy: [4, 9] },
+    ],
+    // The whole 199 yards is a carry over native grass. There is no fairway to
+    // run it up: the mown ground on the left belongs to the corridor's edge,
+    // and everything from thirty yards ahead of the tee to the bunkers short of
+    // the green is fescue. Traced off the outline the user drew on the photo.
+    fescue: [
+      [[790, 1300], [750, 1400], [720, 1480], [698, 1580], [695, 1700], [705, 1820], [725, 1940], [742, 2060], [760, 2180], [785, 2270],
+       [865, 2262], [875, 2160], [865, 2060], [852, 1960], [850, 1860], [858, 1760], [865, 1640], [862, 1520], [850, 1400], [825, 1320]],
     ],
     paths: [{ line: [[585, 2137], [615, 1990], [659, 1829], [688, 1654], [697, 1463], [688, 1288], [697, 1141]], width: 3 }],
     widths: [{ at: 0.06, half: 10 }, { at: 0.35, half: 14 }, { at: 0.60, half: 16 }, { at: 0.85, half: 15 }, { at: 1, half: 15 }],
