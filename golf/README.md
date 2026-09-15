@@ -519,6 +519,11 @@ which the scorecard or the trace checks would notice:
   — the carry on a par 3 — the fairway half-width is zero, and the procedural
   scatter was planting specimen trees three yards off that: an oak in the middle
   of the flight path. They now measure from the corridor, not the fairway.
+- **a green that is not a green.** Outline a green *complex* off a photograph —
+  apron, collar and all — instead of its putting surface and the hole becomes a
+  dartboard. The 9th at The Ranch came back 47 × 55 yards that way and gave up
+  greens in regulation at 94%; a traced green is now held to 46 yards across its
+  longer axis, a grown one to 60.
 - **a tee inside a hazard**, and how narrow the narrowest driving corridor on
   each course is.
 

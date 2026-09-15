@@ -3,9 +3,15 @@
  *
  * The scorecard check says the card is right and test/ranch.ts says the traces
  * are where the printed distances put them. Neither notices sand drawn across a
- * putting surface or an oak standing in the middle of a forced carry — both of
- * which are authoring slips the engine used to carry through to the screen, and
- * both of which read to a player as the course being broken rather than hard.
+ * putting surface, an oak standing in the middle of a forced carry, or a green
+ * traced so generously that nobody can miss it — all of them authoring slips the
+ * engine used to carry through to the screen, and all of them reading to a player
+ * as the course being broken rather than hard.
+ *
+ * The green check is the one that took a player of the course to find: outline a
+ * green *complex* off a photograph rather than its putting surface and the hole
+ * becomes a dartboard. The 9th at The Ranch came back 47 x 55 yards that way and
+ * gave up greens in regulation at 94%.
  *
  *   node tools/tsrun.mjs test/holeAudit.ts [courseId]
  */
@@ -69,6 +75,19 @@ function audit(course: Course): void {
     // The tee itself has to be ground you would tee up on.
     const teeLie = terrainAt(hole, hole.tee).lie;
     if (teeLie === 'water' || teeLie === 'ob') fail(`hole ${spec.number} tees off from ${teeLie}`, 'the tee is inside a hazard');
+
+    // A green is between twenty and forty-odd yards across. Tracing one off a
+    // photograph is where that goes wrong: outline the green *complex* — apron,
+    // collar and all — and the hole turns into a dartboard nobody can miss. The
+    // 9th at The Ranch came back 47 x 55 yards that way, and played it.
+    const { minX, minY, maxX, maxY } = hole.green.bounds;
+    const long = Math.max(maxX - minX, maxY - minY);
+    const short = Math.min(maxX - minX, maxY - minY);
+    // A traced green is a measurement of a putting surface and is held to one; a
+    // grown one comes from `greenSize` and only needs to be sane.
+    const widest = spec.greenShape ? 46 : 60;
+    if (long > widest) fail(`hole ${spec.number} green is too big`, `${short.toFixed(0)} x ${long.toFixed(0)} yd — an outlined green complex rather than a putting surface?`);
+    if (short < 14) fail(`hole ${spec.number} green is too small`, `${short.toFixed(0)} x ${long.toFixed(0)} yd`);
 
     if (spec.par !== 3) {
       const landing = Math.min(290, hole.centerlineLength * 0.62);
