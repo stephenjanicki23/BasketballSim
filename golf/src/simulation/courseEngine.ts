@@ -239,12 +239,17 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   // --- Fairway width -------------------------------------------------------
   const widthPhase = rng.range(0, Math.PI * 2);
   const teeRamp = spec.par === 3 ? 30 : 34;
-  const fairwayStart = spec.par === 3 ? Math.min(70, spec.yards * 0.45) : 18;
+  const shaped = spec.widths !== undefined && spec.widths.length > 0;
+  // A par 3 usually has no fairway — only the carry and the green — so by
+  // default nothing is mown until the shot is most of the way there. A hole
+  // carrying its own width profile is taken at its word instead: if the
+  // photograph shows grass all the way off the tee, the profile says so, and a
+  // hole that really is a carry says that by declaring a half-width of zero.
+  const fairwayStart = spec.par === 3 && !shaped ? Math.min(70, spec.yards * 0.45) : 18;
   const fairwayEnd = length - spec.greenSize * 1.35;
   const landingAt = spec.par === 5 ? length * 0.38 : length * clamp(spec.doglegAt, 0.35, 0.8);
   const baseWidth = spec.fairwayWidth * (spec.par === 3 ? 0.72 : 1);
   const authored = widthProfile(spec, baseWidth);
-  const shaped = spec.widths !== undefined && spec.widths.length > 0;
   const halfWidth = (along: number): number => {
     if (along <= fairwayStart || along >= fairwayEnd + spec.greenSize * 1.1) return 0;
     const open = smoothstep(fairwayStart, fairwayStart + teeRamp, along);

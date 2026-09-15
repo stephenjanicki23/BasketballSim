@@ -72,8 +72,11 @@ for (const [course, hole] of shots) {
   await page.locator('.card-table tbody tr').nth(hole - 1).getByRole('button', { name: 'Select' }).click();
   await page.getByRole('button', { name: `Play hole ${hole}` }).click();
   await page.waitForSelector('.course-canvas');
+  // --bare hides the chrome for the screenshot and then puts it back, because
+  // the chrome includes the button this loop needs to leave the round.
+  let bare = null;
   if (args.includes('--bare')) {
-    await page.addStyleTag({
+    bare = await page.addStyleTag({
       content:
         '.hud, .play__status, .play__log, .play__left, .play__right, .course-view__controls, .course-view__map, button' +
         ' { visibility: hidden !important; } .course-canvas { visibility: visible !important; }',
@@ -88,6 +91,7 @@ for (const [course, hole] of shots) {
   const suffix = args.includes('--debug') ? '-debug' : args.includes('--bare') ? '-bare' : '';
   const path = join(outDir, `${course}-${hole}${suffix}.png`);
   await page.locator('.course-canvas').screenshot({ path });
+  if (bare) await bare.evaluate((node) => node.remove());
   console.log(`  ${path}`);
   const leave = page.getByRole('button', { name: /Leave the round/ }).first();
   if (await leave.isVisible().catch(() => false)) await leave.click();

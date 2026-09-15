@@ -310,7 +310,7 @@ const holes: HoleSpec[] = [
       { along: 198, lateral: 0, size: 6, kind: 'greenside', stretch: 0.6 },
     ],
     water: [],
-    strategy: 'A hundred and eighty-nine downhill through a gap in the trees to a green with sand at every point of the compass except the front. The tee shot is the hole.',
+    strategy: 'A hundred and eighty-nine downhill through a gap in the trees to a narrow green set at an angle, with three bunkers down its left and a wood across the back. Miss it right; there is nothing there but grass.',
   },
   {
     number: 13, name: 'The Long Field', par: 5, yards: 610, bearing: 320, index: 2,
@@ -441,6 +441,71 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  12: {
+    tee: [754, 2357],
+    // 186 printed, 189 on the card, one leg, dead straight. The whole hole is
+    // the tee shot and it is all downhill.
+    playLine: [[754, 2357], [754, 1109]],
+    pin: [754, 1109],
+    // Narrow and deep — sixteen by twenty-five — set at an angle with the wood
+    // right behind it. The back half sits in the shade of that wood on the
+    // photograph, which is what makes this green hard to read off the image.
+    green: [
+      [748, 1040], [775, 1030], [800, 1042], [818, 1065], [825, 1095], [822, 1125],
+      [810, 1155], [790, 1180], [765, 1192], [742, 1185], [727, 1160], [720, 1125], [721, 1090], [731, 1060],
+    ],
+    // All three bunkers are left. The card said sand at every point of the
+    // compass except the front; the photograph says the right side is open and
+    // the left is where you cannot go.
+    bunkers: [
+      {
+        shape: [[585, 1088], [605, 1083], [620, 1095], [628, 1120], [618, 1140], [623, 1160], [613, 1178], [595, 1180], [585, 1160], [580, 1130], [581, 1105]],
+        kind: 'greenside', deep: true,
+      },
+      {
+        shape: [[658, 1220], [666, 1208], [682, 1208], [694, 1220], [690, 1240], [678, 1256], [678, 1272], [668, 1290], [658, 1300], [650, 1286], [652, 1262], [654, 1238]],
+        kind: 'greenside', deep: true,
+      },
+      {
+        shape: [[578, 1233], [595, 1230], [610, 1243], [614, 1263], [605, 1280], [590, 1289], [579, 1280], [574, 1260], [574, 1243]],
+        kind: 'greenside',
+      },
+    ],
+    trees: [
+      // The stand across the back of the green. Its canopy reaches over the back
+      // left corner on the photograph; it is traced to stop at the putting
+      // surface, because a tree drawn on a green is a tree nobody believes.
+      { shape: [[668, 940], [740, 925], [820, 935], [862, 965], [845, 1010], [790, 1025], [730, 1022], [682, 1005], [662, 975]], density: 0.6, canopy: [5, 11] },
+      {
+        shape: [
+          [648, 1060], [640, 1180], [636, 1320], [618, 1460], [606, 1600], [618, 1740],
+          [634, 1880], [628, 2020], [640, 2160], [652, 2300], [658, 2410],
+          [548, 2410], [548, 2300], [548, 2160], [548, 2020], [548, 1880], [548, 1740],
+          [548, 1600], [548, 1460], [552, 1320], [556, 1180], [560, 1060],
+        ],
+        density: 0.48, canopy: [4, 9],
+      },
+      {
+        shape: [
+          [886, 1760], [892, 1900], [898, 2040], [896, 2180], [886, 2320], [878, 2410],
+          [958, 2410], [958, 2320], [958, 2180], [958, 2040], [958, 1900], [958, 1760],
+        ],
+        density: 0.48, canopy: [4, 9],
+      },
+    ],
+    paths: [{
+      line: [[885, 1800], [880, 1870], [878, 1935], [862, 2010], [845, 2100], [822, 2200], [790, 2235], [730, 2248], [678, 2262], [648, 2300]],
+      width: 3,
+    }],
+    // Not a carry: there is mown ground the whole way, with the forward tees
+    // sitting in it. What defends the hole is the width, which never gets past
+    // fifteen yards either side until the green's own apron opens out.
+    widths: [
+      { at: 0.05, half: 11 }, { at: 0.20, half: 13 }, { at: 0.35, half: 12 },
+      { at: 0.50, half: 11 }, { at: 0.65, half: 15 }, { at: 0.78, half: 20 },
+      { at: 0.90, half: 15 }, { at: 1, half: 14 },
+    ],
+  },
   11: {
     tee: [753, 2356],
     // 195 and 195, and the overlay draws it dead straight: the marker sits on
@@ -927,7 +992,11 @@ const card: HoleSpec[] = holes.map((spec) => {
     ...rebuilt,
     groves: rebuilt.treeZones?.length ? undefined : spec.groves,
     landforms: spec.landforms,
-    trees: spec.trees,
+    // Where the photograph says which trees there are, that is all the trees
+    // there are. The procedural scatter plants along the corridor's own edge,
+    // which on a traced hole means timber the picture does not show — and on a
+    // narrow one it means timber standing in the shot.
+    trees: rebuilt.treeZones?.length ? 0 : spec.trees,
     greenSize: rebuilt.greenShape ? rebuilt.greenSize : spec.greenSize,
     bunkers: rebuilt.bunkers.length ? rebuilt.bunkers : spec.bunkers,
     water: rebuilt.water.length ? rebuilt.water : spec.water,
