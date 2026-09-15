@@ -24,6 +24,7 @@ const NAMES = {
   desert: 'Desert Classic',
   concord: 'Revere Concord',
   ranch: 'The Ranch',
+  pebble: 'Pebble Beach Golf Links',
 };
 
 const args = process.argv.slice(2);

@@ -4,10 +4,11 @@ import { DESERT_CLASSIC } from './desert';
 import { WOODLAND_NATIONAL } from './woodland';
 import { REVERE_CONCORD } from './concord';
 import { THE_RANCH } from './ranch';
+import { PEBBLE_BEACH } from './pebble';
 import { withTees } from './tees';
 
-/** Three invented venues and two real ones, each a different examination. */
-const BASE: readonly Course[] = [COASTAL_CHAMPIONSHIP, DESERT_CLASSIC, WOODLAND_NATIONAL, REVERE_CONCORD, THE_RANCH];
+/** Three invented venues and three real ones, each a different examination. */
+const BASE: readonly Course[] = [COASTAL_CHAMPIONSHIP, DESERT_CLASSIC, WOODLAND_NATIONAL, REVERE_CONCORD, THE_RANCH, PEBBLE_BEACH];
 
 /**
  * One entry per venue for the menus — the default tee set — and every other set
@@ -29,4 +30,4 @@ export function teeSetsFor(course: Course): Course[] {
   return COURSE_VARIANTS.filter((option) => (option.baseId ?? option.id) === base);
 }
 
-export { COASTAL_CHAMPIONSHIP, DESERT_CLASSIC, WOODLAND_NATIONAL, REVERE_CONCORD, THE_RANCH };
+export { COASTAL_CHAMPIONSHIP, DESERT_CLASSIC, WOODLAND_NATIONAL, REVERE_CONCORD, THE_RANCH, PEBBLE_BEACH };

@@ -128,10 +128,11 @@ test('driver distances span a tour-realistic range', () => {
 console.log('\nThe courses');
 // ---------------------------------------------------------------------------
 
-test('five courses, eighteen holes each', () => {
-  // Three invented venues carry the tour schedule; the Concord and The Ranch
-  // are the real ones, built from their overhead tours and their own cards.
-  assert.equal(COURSES.length, 5);
+test('six courses, eighteen holes each', () => {
+  // Three invented venues carry the tour schedule; the Concord, The Ranch and
+  // Pebble Beach are the real ones, built from their overhead tours and their
+  // own cards.
+  assert.equal(COURSES.length, 6);
   for (const course of COURSES) {
     assert.equal(course.holes.length, 18);
     assert.equal(new Set(course.holes.map((h) => h.index)).size, 18, `${course.name} stroke indexes`);
