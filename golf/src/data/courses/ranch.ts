@@ -441,6 +441,83 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  11: {
+    tee: [753, 2356],
+    // 195 and 195, and the overlay draws it dead straight: the marker sits on
+    // the line at exactly half way. The corridor bends around it in the
+    // photograph — left through the driving zone, right into the approach — but
+    // the measured line is the measured line, so the width carries that instead.
+    playLine: [[753, 2356], [753, 1732], [753, 1110]],
+    pin: [754, 1110],
+    green: [
+      [732, 1060], [755, 1054], [777, 1060], [791, 1080], [795, 1097], [796, 1120],
+      [791, 1140], [777, 1152], [757, 1157], [737, 1152], [722, 1135], [717, 1112], [718, 1087], [725, 1069],
+    ],
+    // Every bunker on this hole is on one side or the other and none of them is
+    // round: two against the right of the green, one sixty yards short of it on
+    // the same side, and the long S of sand down the left of the driving zone,
+    // which is one bunker on the ground and two shapes here.
+    bunkers: [
+      {
+        shape: [[814, 1094], [824, 1096], [836, 1104], [838, 1112], [830, 1122], [824, 1130], [816, 1134], [808, 1130], [806, 1120], [808, 1108]],
+        kind: 'greenside', deep: true,
+      },
+      {
+        shape: [[823, 1160], [835, 1155], [848, 1163], [850, 1178], [843, 1190], [833, 1200], [823, 1198], [818, 1185], [820, 1170]],
+        kind: 'greenside',
+      },
+      {
+        shape: [[798, 1258], [812, 1256], [824, 1268], [834, 1286], [846, 1296], [862, 1308], [862, 1330], [850, 1330], [838, 1314], [824, 1298], [812, 1292], [800, 1284], [794, 1270]],
+        kind: 'fairway',
+      },
+      {
+        shape: [[717, 1469], [728, 1471], [737, 1485], [746, 1497], [743, 1510], [732, 1525], [723, 1538], [715, 1548], [708, 1555], [700, 1548], [705, 1533], [713, 1515], [715, 1497], [712, 1482]],
+        kind: 'fairway', deep: true,
+      },
+      {
+        shape: [[700, 1567], [713, 1572], [725, 1569], [737, 1572], [738, 1580], [732, 1587], [723, 1590], [728, 1600], [723, 1608], [712, 1607], [705, 1613], [700, 1627], [695, 1632], [690, 1623], [687, 1608], [680, 1597], [683, 1588], [692, 1577]],
+        kind: 'fairway', deep: true,
+      },
+    ],
+    // A wooded corridor, not a links hole: no native grass on this one, timber
+    // both sides. The inner edges were measured off the photograph the same way
+    // as the fairway — out from the line until the grass stops being grass.
+    trees: [
+      { shape: [[645, 1020], [700, 995], [780, 985], [860, 1000], [885, 1035], [800, 1045], [700, 1050], [650, 1045]], density: 0.55, canopy: [5, 10] },
+      {
+        shape: [
+          [676, 1020], [674, 1100], [678, 1180], [670, 1260], [690, 1340], [670, 1420], [658, 1500],
+          [645, 1580], [613, 1660], [592, 1740], [592, 1820], [592, 1900], [588, 1980], [620, 2060],
+          [660, 2140], [665, 2220], [650, 2300], [640, 2380],
+          [524, 2380], [524, 2300], [524, 2220], [524, 2140], [524, 2060], [524, 1980], [524, 1900],
+          [524, 1820], [524, 1740], [532, 1660], [546, 1580], [558, 1500], [570, 1420], [590, 1340],
+          [570, 1260], [578, 1180], [574, 1100], [576, 1020],
+        ],
+        density: 0.5, canopy: [4, 9],
+      },
+      {
+        shape: [
+          [880, 1040], [895, 1120], [905, 1200], [915, 1280], [920, 1360], [912, 1440],
+          [958, 1440], [958, 1360], [958, 1280], [958, 1200], [958, 1120], [958, 1040],
+        ],
+        density: 0.5, canopy: [4, 9],
+      },
+    ],
+    paths: [{
+      line: [
+        [915, 1440], [880, 1500], [858, 1570], [845, 1650], [840, 1730], [838, 1810], [828, 1880],
+        [812, 1950], [790, 2020], [772, 2080], [760, 2150], [745, 2230], [735, 2290],
+      ],
+      width: 3,
+    }],
+    // Narrow off the tee, wide through the driving zone where the sand is, then
+    // squeezed again by the bunkers short of the green.
+    widths: [
+      { at: 0.05, half: 10 }, { at: 0.15, half: 12 }, { at: 0.25, half: 16 },
+      { at: 0.34, half: 28 }, { at: 0.44, half: 30 }, { at: 0.55, half: 22 },
+      { at: 0.65, half: 17 }, { at: 0.75, half: 23 }, { at: 0.85, half: 20 }, { at: 1, half: 17 },
+    ],
+  },
   10: {
     tee: [591, 2347],
     // 229 out to a marker fifty-six yards RIGHT of the line, 207 back left and
