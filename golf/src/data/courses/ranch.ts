@@ -441,6 +441,87 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  13: {
+    tee: [754, 2357],
+    // The overlay draws three dots and two straight chords between them. On this
+    // hole that chord runs down the right-hand EDGE of the fairway for most of
+    // the second half — the ground is left of it and the green is tucked right
+    // — and a corridor centred on it would mow grass where the photograph shows
+    // timber. So the line is traced down the fairway itself, through the tee,
+    // the 291 marker and the pin, which are the three points the overlay
+    // actually measures. The printed legs still come out at 309 and 301 against
+    // the 308 and 302 the card asks for.
+    playLine: [
+      [754, 2357], [736, 2200], [714, 2020], [680, 1880], [650, 1780], [658, 1725],
+      [666, 1600], [675, 1470], [682, 1340], [706, 1220], [754, 1109],
+    ],
+    // The 291 marker is the sixth point; the rest are the fairway's own shape.
+    corners: [5],
+    pin: [754, 1109],
+    green: [
+      [730, 1092], [738, 1077], [752, 1071], [768, 1074], [778, 1086], [781, 1104],
+      [779, 1122], [771, 1138], [757, 1146], [742, 1143], [732, 1130], [728, 1112],
+    ],
+    // One bunker on the whole hole, and it is the sprawl short and left of the
+    // green. Everything else that defends this hole is timber.
+    bunkers: [
+      {
+        shape: [[696, 1130], [698, 1116], [710, 1114], [724, 1118], [728, 1124], [726, 1132], [730, 1144], [734, 1158], [732, 1162], [720, 1162], [712, 1150], [702, 1144]],
+        kind: 'greenside', deep: true,
+      },
+    ],
+    // Woods down both sides the whole way, measured out from the line of play
+    // until the grass stops. The tee shot is played up a lane barely twenty
+    // yards across before the fairway opens out at about two hundred.
+    trees: [
+      {
+        shape: [
+          [701, 1130], [679, 1170], [654, 1210], [642, 1250], [630, 1290],
+          [620, 1330], [620, 1370], [618, 1410], [616, 1450], [614, 1490],
+          [611, 1530], [610, 1570], [610, 1610], [606, 1650], [596, 1690],
+          [586, 1730], [578, 1770], [584, 1810], [608, 1850], [634, 1890],
+          [656, 1930], [667, 1970], [677, 2010], [686, 2050], [693, 2090],
+          [694, 2130], [699, 2170], [703, 2210], [708, 2250], [712, 2290],
+          [717, 2330], [600, 2330], [598, 2290], [594, 2250], [588, 2210],
+          [582, 2170], [576, 2130], [566, 2090], [556, 2050], [546, 2010],
+          [534, 1970], [516, 1930], [494, 1890], [486, 1850], [486, 1810],
+          [486, 1770], [486, 1730], [486, 1690], [486, 1650], [486, 1610],
+          [486, 1570], [486, 1530], [486, 1490], [502, 1450], [498, 1410],
+          [496, 1370], [486, 1330], [490, 1290], [502, 1250], [514, 1210],
+          [546, 1170], [561, 1130],
+        ],
+        density: 0.5, canopy: [4, 10],
+      },
+      {
+        shape: [
+          [787, 1130], [776, 1170], [764, 1210], [757, 1250], [752, 1290],
+          [744, 1330], [740, 1370], [738, 1410], [736, 1450], [734, 1490],
+          [731, 1530], [726, 1570], [721, 1610], [716, 1650], [712, 1690],
+          [709, 1730], [703, 1770], [708, 1810], [714, 1850], [720, 1890],
+          [727, 1930], [737, 1970], [750, 2010], [754, 2050], [754, 2090],
+          [762, 2130], [767, 2170], [771, 2210], [776, 2250], [780, 2290],
+          [785, 2330], [893, 2330], [896, 2290], [886, 2250], [876, 2210],
+          [866, 2170], [864, 2130], [874, 2090], [874, 2050], [870, 2010],
+          [852, 1970], [830, 1930], [820, 1890], [812, 1850], [812, 1810],
+          [810, 1770], [814, 1730], [820, 1690], [826, 1650], [832, 1610],
+          [840, 1570], [846, 1530], [848, 1490], [834, 1450], [834, 1410],
+          [838, 1370], [854, 1330], [858, 1290], [860, 1250], [866, 1210],
+          [882, 1170], [890, 1130],
+        ],
+        density: 0.5, canopy: [4, 10],
+      },
+    ],
+    paths: [{
+      line: [[700, 1890], [730, 1950], [755, 2020], [785, 2095], [800, 2185], [785, 2270], [760, 2330]],
+      width: 3,
+    }],
+    widths: [
+      { at: 0.04, half: 8 }, { at: 0.12, half: 8 }, { at: 0.20, half: 9 },
+      { at: 0.28, half: 12 }, { at: 0.36, half: 12 }, { at: 0.45, half: 20 },
+      { at: 0.55, half: 20 }, { at: 0.65, half: 24 }, { at: 0.75, half: 24 },
+      { at: 0.85, half: 24 }, { at: 0.93, half: 20 }, { at: 1, half: 14 },
+    ],
+  },
   12: {
     tee: [754, 2357],
     // 186 printed, 189 on the card, one leg, dead straight. The whole hole is

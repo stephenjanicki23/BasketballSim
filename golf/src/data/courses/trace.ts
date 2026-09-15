@@ -32,10 +32,20 @@ export interface TracedHole {
   /** Where the pin sits on the image. */
   pin: Pixel;
   /**
-   * The line of play as the tour's own overlay draws it — tee, each corner, pin.
+   * The line of play. Usually this is the tour's own overlay — tee, each corner,
+   * pin — and then every intermediate point is a printed marker. Where the
+   * overlay's straight chords cut across ground the hole does not use, the line
+   * can instead be traced down the fairway itself, with more points than the
+   * overlay has; `corners` then says which of them the markers sit on.
    * Its length is the card yardage, and that sets the scale for everything else.
    */
   playLine: Pixel[];
+  /**
+   * Indices into `playLine` of the points the overlay's printed markers sit on.
+   * Defaults to every intermediate point, which is what an overlay-shaped line
+   * means.
+   */
+  corners?: number[];
   /** The putting surface. */
   green?: Pixel[];
   bunkers?: { shape: Pixel[]; kind?: BunkerSpec['kind']; deep?: boolean }[];
@@ -192,6 +202,7 @@ export function traceHole(traced: TracedHole, card: CardEntry): HoleSpec {
     waste: (traced.waste ?? []).map((shape) => ({ from: 0, to: 0, side: 1 as const, offset: 0, width: 0, shape: shapeOf(frame, shape) })),
     obZones: (traced.ob ?? []).map((shape) => ({ shape: shapeOf(frame, shape) })),
     fescue: (traced.fescue ?? []).map((shape) => ({ shape: shapeOf(frame, shape) })),
+    centrelineCorners: traced.corners ?? traced.playLine.slice(1, -1).map((_, i) => i + 1),
     treeZones: (traced.trees ?? []).map((zone) => ({
       shape: shapeOf(frame, zone.shape),
       density: zone.density,

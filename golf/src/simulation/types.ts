@@ -461,6 +461,12 @@ export interface HoleSpec {
    * normalised to the card yardage, so the scale stays honest.
    */
   centreline?: TracedShape;
+  /**
+   * Which points on the traced centreline the overhead's printed markers sit on.
+   * A line traced down the fairway can have more points than the overlay draws,
+   * and this is how the leg check still knows where a leg ends.
+   */
+  centrelineCorners?: number[];
   /** The putting surface, traced. Replaces the generated blob. */
   greenShape?: TracedShape;
   /** Out of bounds: housing, a road, the property line. */

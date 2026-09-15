@@ -97,8 +97,13 @@ for (const spec of THE_RANCH.holes) {
   const expected = legs.map((leg) => (leg * spec.yards) / walked);
 
   if (traced && legs.length > 1) {
+    // Split the traced line where the overhead's markers sit. On a line traced
+    // down the fairway rather than along the overlay's chords there are more
+    // points than markers, so the hole says which ones are the corners.
     const line = hole.centerline;
-    const built = [polylineLength(line.slice(0, 2)), polylineLength(line.slice(1))];
+    const corners = spec.centrelineCorners ?? line.slice(1, -1).map((_, index) => index + 1);
+    const cuts = [0, ...corners, line.length - 1];
+    const built = cuts.slice(0, -1).map((from, index) => polylineLength(line.slice(from, cuts[index + 1] + 1)));
     row(legs.join(' + '), built.map((value) => value.toFixed(0)).join(' + '));
     built.forEach((value, index) => {
       if (Math.abs(value - expected[index]) > TRACED_LEG_TOLERANCE) {
