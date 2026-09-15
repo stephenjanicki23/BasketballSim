@@ -27,15 +27,16 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st, the 17th and the 18th are traced, not derived.** Their overheads
- *    arrived as images, so those three are read straight off the photograph —
- *    the line of play, the lake that runs the whole left side of the 1st, the
- *    pond that is all of the 17th, the green outlines, the wood on the inside of
- *    the 18th's turn and the stream down its right — and the card sets the
- *    scale, as it does everywhere. They were traced by eye rather than
+ * 3. **The 1st, 2nd, 17th and 18th are traced, not derived.** Their overheads
+ *    arrived as images, so those four are read straight off the photograph — the
+ *    line of play, the lake that runs the whole left side of the 1st, the wooded
+ *    gully on the inside of the 2nd's elbow, the pond that is all of the 17th,
+ *    the green outlines, the stream down the right of the 18th — and the card
+ *    sets the scale, as it does everywhere. They were traced by eye rather than
  *    digitised, so call them accurate to a few yards, not to the yard. The hole
  *    card in the game says which holes these are, because a derived hole is the
- *    right length and the right shape of corner but not the right hole.
+ *    right length and the right shape of corner but not the right hole: the 2nd
+ *    turns 116 yards *left* to its marker, and the derived version turned right.
  * 4. **Elevation is inferred.** Plan-view overheads carry no contours, so the
  *    fall of each hole comes from the site — a property that runs from roughly
  *    250 feet at the entrance to better than 600 at the top of the hill, with
@@ -43,7 +44,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other fifteen the same way, trace its overhead and drop
+ * To finish any of the other fourteen the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -107,7 +108,7 @@ const holes: HoleSpec[] = [
       { along: 390, lateral: -13, size: 5, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'A tee shot to a corner you cannot see round — the timber on the inside is eighty feet tall. Take the 3 wood to the marker and there is a mid-iron up the hill; take the driver at the trees and there is a wedge out sideways.',
+    strategy: 'Hard left off the tee to a marker at 216, then 175 back to the right. The inside of the elbow is a wooded gully rather than a corner you can cut, so the only question is how much of the 216 you want to take on before the fairway runs out.',
   },
   {
     number: 3, name: 'Sodom Hill', par: 4, yards: 424, bearing: 12, index: 3,
@@ -437,6 +438,37 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  2: {
+    tee: [755, 2274],
+    // Out to the left to the marker at 216, and 175 back to the right from it.
+    // The corner stands 116 yards off the tee-to-green line: this is the hole
+    // the printed legs were always describing, and the derived version had it
+    // bending the other way.
+    playLine: [[755, 2274], [300, 1541], [751, 1024]],
+    pin: [751, 1024],
+    green: [
+      [739, 915], [783, 925], [808, 959], [802, 1002], [773, 1033],
+      [732, 1036], [707, 1010], [702, 959], [717, 929],
+    ],
+    bunkers: [
+      { shape: [[626, 1033], [661, 1024], [682, 1051], [661, 1083], [629, 1074]], kind: 'greenside' },
+      { shape: [[591, 1115], [629, 1103], [650, 1130], [626, 1159], [594, 1150]], kind: 'greenside', deep: true },
+      { shape: [[378, 1188], [421, 1179], [442, 1212], [416, 1244], [380, 1232]], kind: 'fairway' },
+      { shape: [[304, 1297], [351, 1288], [369, 1323], [342, 1358], [307, 1346]], kind: 'fairway' },
+      { shape: [[392, 2029], [442, 2017], [462, 2049], [436, 2084], [398, 2072]], kind: 'fairway' },
+    ],
+    trees: [
+      // The gully on the inside of the elbow. It is why the hole is a dogleg
+      // rather than a diagonal: there is nothing to cut across.
+      { shape: [[515, 1463], [644, 1449], [761, 1507], [841, 1639], [834, 1858], [732, 2034], [615, 1946], [527, 1727]], density: 0.6, canopy: [5, 10] },
+      { shape: [[790, 1024], [893, 1086], [915, 1288], [820, 1434], [720, 1317], [732, 1156]], density: 0.5, canopy: [4, 9] },
+      { shape: [[790, 2151], [907, 2195], [937, 2415], [820, 2488], [746, 2342]], density: 0.5, canopy: [4, 9] },
+    ],
+    paths: [{ line: [[688, 2342], [585, 2137], [483, 1902], [398, 1683], [369, 1522], [424, 1361], [512, 1215], [600, 1106]], width: 3 }],
+    // Pinched through the corner: the fairway runs out where the hole turns, so
+    // taking on the 216 has to be precise as well as long.
+    widths: [{ at: 0.08, half: 18 }, { at: 0.34, half: 19 }, { at: 0.52, half: 14 }, { at: 0.64, half: 15 }, { at: 0.82, half: 18 }, { at: 1, half: 16 }],
+  },
   1: {
     tee: [580, 2271],
     // The marker at 298, with 195 left to the green.

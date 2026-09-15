@@ -440,23 +440,25 @@ measurements and which are not:
   that lives in the image rather than in the numbers. Drop a trace into `TRACES` in the
   course file and the photograph replaces it, at the card's own scale, with
   nothing else to change — the 17th and the 18th are the worked examples.
-- **Three holes are traced, not derived** — the 1st, the 17th and the 18th, as
-  their overheads arrive. They are read straight off the photograph: the lake
-  that runs the entire left side of the 1st from two hundred yards out to past
-  the green, the pond that is a hundred and fifty of the 17th's hundred and
-  eighty-two yards, the green outlines, the wood on the inside of the 18th's
-  turn, the stream down its right. Each traced play line runs *through* the
-  marker the overhead prints, which turns the printed leg distances into a test
-  of the trace: the 1st's corner lands at 0.61 of the hole against a printed
-  0.604, the 18th's at 0.59 against 0.603. Traced by eye rather than digitised,
+- **Four holes are traced, not derived** — the 1st, 2nd, 17th and 18th, as their
+  overheads arrive. They are read straight off the photograph: the lake that runs
+  the entire left side of the 1st from two hundred yards out to past the green,
+  the wooded gully on the inside of the 2nd's elbow, the pond that is a hundred
+  and fifty of the 17th's hundred and eighty-two yards, the green outlines, the
+  stream down the right of the 18th. Each traced play line runs *through* the
+  marker the overhead prints, which turns the printed legs into a measurement of
+  the trace: the 2nd comes back out at 221 + 176 against a printed 216 + 175
+  scaled to its card, the 1st at 311 + 203. Traced by eye rather than digitised,
   so they are good to a few yards rather than to the yard; press **D** in a round
   to lay the photograph back over the geometry.
-- **The derived holes are honest about it.** Tracing the 1st showed what a derived
-  hole costs: the real one turns *right* round a lake that takes up half the
-  property, and the derived one turned left round a pond beside the green. Same
-  length, same par, same corner in the same place — a different golf hole. The
-  hole card in the game now says, on a real course, whether the hole in front of
-  you was traced or built from the card.
+- **The derived holes are honest about it.** Tracing showed what a derived hole
+  costs, twice. The real 1st turns *right* round a lake that takes up half the
+  property; the derived one turned left round a pond beside the green. The real
+  2nd is an elbow whose corner stands 116 yards *left* of the tee-to-green line,
+  with a wooded gully on the inside that cannot be cut; the derived one bent 74
+  yards right. Same length, same par, corner in the same place — different golf
+  holes. The hole card in the game now says, on a real course, whether the hole in
+  front of you was traced or built from the card.
 - **Elevation is inferred**, as it was at the Concord: plan-view overheads carry
   no contours. The property runs from about 250 feet to better than 600, so the
   7th climbs 38 feet, and the 10th and the 15th fall 40.
