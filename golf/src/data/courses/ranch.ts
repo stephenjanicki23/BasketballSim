@@ -27,8 +27,8 @@
  *    Which way each hole turns and how hard, where the sand sits and how the
  *    greens are shaped are authored from the club's own description of the
  *    property, and are the part a trace replaces — see `TRACES`.
- * 3. **The 1st to the 5th, and the 17th and 18th, are traced, not derived.**
- *    Their overheads arrived as images, so those seven are read straight off the
+ * 3. **The 1st to the 6th, and the 17th and 18th, are traced, not derived.**
+ *    Their overheads arrived as images, so those eight are read straight off the
  *    photograph — the line of play, the lake that runs the whole left side of the
  *    1st, the wooded gully on the inside of the 2nd's elbow, the chute the 3rd is
  *    played out of, the timber down both sides of the 4th, the pond that is all
@@ -47,7 +47,7 @@
  *    The altitude itself, worth about a percent of carry, is not a guess about
  *    this course but about where in the world it is.
  *
- * To finish any of the other eleven the same way, trace its overhead and drop
+ * To finish any of the other ten the same way, trace its overhead and drop
  * the trace into `TRACES` keyed by hole number: the traced centreline, green,
  * bunkers, water and wooded edges then replace everything derived here, at the
  * card's own scale, with no other change to this file. The 17th and the 18th
@@ -192,7 +192,7 @@ const holes: HoleSpec[] = [
       { along: 372, lateral: 13, size: 5, kind: 'greenside' },
     ],
     water: [],
-    strategy: 'Two hundred and twenty to the corner and a hundred and twenty-seven from it: the hole tells you exactly what to hit and the trees on the inside make sure you do.',
+    strategy: 'Two hundred and twenty to the corner and a hundred and twenty-seven from it. The inside of the turn is sand rather than timber, so the corner can be taken on — but the bunker at the front of it is deep and the second shot from there is blind.',
   },
   {
     number: 7, name: 'The Haul', par: 4, yards: 401, bearing: 26, index: 13,
@@ -441,6 +441,33 @@ const holes: HoleSpec[] = [
  * over the geometry and see where they disagree.
  */
 const TRACES: Partial<Record<number, TracedHole>> = {
+  6: {
+    tee: [755, 2347],
+    // 220 to the corner, 127 from it, and the corner stands sixty-three yards
+    // left of the line. The one hole the derived version already had turning the
+    // right way — it just turned too far.
+    playLine: [[755, 2347], [515, 1539], [751, 1108]],
+    pin: [751, 1108],
+    green: [
+      [758, 1020], [797, 1032], [819, 1065], [814, 1109], [783, 1136],
+      [743, 1132], [720, 1100], [717, 1057], [734, 1030],
+    ],
+    bunkers: [
+      { shape: [[641, 1033], [676, 1024], [694, 1051], [676, 1080], [644, 1074], [629, 1054]], kind: 'greenside' },
+      { shape: [[685, 1092], [717, 1086], [732, 1109], [711, 1130], [685, 1124]], kind: 'greenside', deep: true },
+      // The complex on the inside of the corner: this is what the tee shot is
+      // actually negotiating, and the derived hole had trees there instead.
+      { shape: [[553, 1456], [615, 1442], [656, 1478], [661, 1537], [629, 1578], [583, 1573], [553, 1537], [544, 1493]], kind: 'fairway', deep: true },
+      { shape: [[503, 1712], [585, 1698], [620, 1756], [612, 1844], [556, 1888], [509, 1861], [492, 1785]], kind: 'fairway' },
+    ],
+    trees: [
+      { shape: [[790, 1141], [878, 1171], [937, 1317], [958, 1537], [951, 1829], [922, 2122], [863, 2341], [790, 2415], [761, 2122], [772, 1756], [781, 1463]], density: 0.52, canopy: [5, 10] },
+      { shape: [[334, 1405], [410, 1376], [468, 1463], [483, 1683], [468, 1902], [439, 2122], [383, 2224], [334, 2107], [322, 1756]], density: 0.48, canopy: [5, 10] },
+      { shape: [[688, 937], [790, 919], [849, 966], [834, 1024], [732, 1010], [682, 977]], density: 0.5, canopy: [4, 9] },
+    ],
+    paths: [{ line: [[761, 2137], [688, 2019], [629, 1902], [585, 1756]], width: 3 }],
+    widths: [{ at: 0.08, half: 16 }, { at: 0.40, half: 19 }, { at: 0.58, half: 15 }, { at: 0.70, half: 16 }, { at: 0.88, half: 15 }, { at: 1, half: 15 }],
+  },
   5: {
     tee: [755, 2347],
     // Dead straight, and the ground in between is mown rather than the wetland
