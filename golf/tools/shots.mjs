@@ -18,6 +18,7 @@ import { readFile } from 'node:fs/promises';
 import { join, normalize } from 'node:path';
 import { findChromium } from './chromium.mjs';
 
+/** Course id to the name the Courses screen lists it under. */
 const NAMES = {
   woodland: 'Woodland National',
   coastal: 'Coastal Championship',
@@ -25,6 +26,20 @@ const NAMES = {
   concord: 'Revere Concord',
   ranch: 'The Ranch',
   pebble: 'Pebble Beach Golf Links',
+  kilbrannan: 'Kilbrannan Links',
+  thornmouth: 'Thornmouth Old Links',
+  dunmorra: 'Dun Morra',
+  carrickmoor: 'Carrickmoor',
+  saltmarsh: 'Saltmarsh Point',
+  redbutte: 'Red Butte',
+  vermilion: 'Vermilion Wash',
+  ocotillo: 'Ocotillo Springs',
+  caldera: 'Caldera Ridge',
+  thornwood: 'Thornwood Forest',
+  ashbourne: 'Ashbourne Heath',
+  cascade: 'Cascade Falls',
+  kingsmoor: 'Kingsmoor Abbey',
+  blackwater: 'Blackwater Creek',
 };
 
 const args = process.argv.slice(2);

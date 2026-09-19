@@ -128,11 +128,12 @@ test('driver distances span a tour-realistic range', () => {
 console.log('\nThe courses');
 // ---------------------------------------------------------------------------
 
-test('six courses, eighteen holes each', () => {
-  // Three invented venues carry the tour schedule; the Concord, The Ranch and
-  // Pebble Beach are the real ones, built from their overhead tours and their
-  // own cards.
-  assert.equal(COURSES.length, 6);
+test('twenty courses, eighteen holes each', () => {
+  // Six are authored hole by hole — the Concord, The Ranch and Pebble Beach off
+  // their own overheads and cards — and fourteen are built from a design brief.
+  // Everything below applies to all twenty, which is the point of holding a
+  // generated course to the same rules as a drawn one.
+  assert.equal(COURSES.length, 20);
   for (const course of COURSES) {
     assert.equal(course.holes.length, 18);
     assert.equal(new Set(course.holes.map((h) => h.index)).size, 18, `${course.name} stroke indexes`);
@@ -143,8 +144,15 @@ test('six courses, eighteen holes each', () => {
     between(course.yards, 5600, 7600, `${course.name} yardage`);
     between(course.altitude, 0, 8000, `${course.name} altitude`);
   }
-  const tour = COURSES.filter((course) => SCHEDULE.some((event) => event.courseId === course.id));
-  assert.equal(tour.length, 3, 'the schedule should still be the three tour venues');
+  // A season visits every venue exactly once: twenty weeks, twenty golf courses.
+  // The schedule names a venue by its base id — `concord`, not `concord@black` —
+  // because which set of markers a tournament is played off is the event's
+  // business and not the golf course's.
+  const hosted = SCHEDULE.map((event) => event.courseId);
+  assert.equal(new Set(hosted).size, 20, 'every event should be at a different course');
+  for (const course of COURSES) {
+    assert.ok(hosted.includes(course.baseId ?? course.id), `${course.name} is not on the schedule`);
+  }
 });
 
 test('tracing an image puts the hole where the card says it is', () => {
@@ -554,10 +562,16 @@ console.log('\nThe universe');
 
 const universe = createUniverse('regression');
 
-test('a season is twenty events over three courses, with four majors', () => {
+test('a season is twenty events at twenty courses, with four majors', () => {
   assert.equal(universe.schedule.length, 20);
   assert.equal(universe.schedule.filter((t) => t.tier === 'major').length, 4);
-  assert.equal(new Set(universe.schedule.map((t) => t.courseId)).size, 3);
+  assert.equal(new Set(universe.schedule.map((t) => t.courseId)).size, 20);
+  // The four majors are on four different kinds of golf course, so no one sort
+  // of player can own all of them.
+  const majorStyles = universe.schedule
+    .filter((t) => t.tier === 'major')
+    .map((t) => COURSE_BY_ID[t.courseId].style);
+  assert.ok(new Set(majorStyles).size >= 2, `all four majors are ${majorStyles[0]} courses`);
   assert.equal(universe.golfers.length, TOUR_SIZE);
 });
 

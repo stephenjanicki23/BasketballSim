@@ -5,10 +5,23 @@ import { WOODLAND_NATIONAL } from './woodland';
 import { REVERE_CONCORD } from './concord';
 import { THE_RANCH } from './ranch';
 import { PEBBLE_BEACH } from './pebble';
+import { LINKS_COURSES } from './links';
+import { DESERT_COURSES } from './desertCourses';
+import { PARKLAND_COURSES } from './parkland';
 import { withTees } from './tees';
 
-/** Three invented venues and three real ones, each a different examination. */
-const BASE: readonly Course[] = [COASTAL_CHAMPIONSHIP, DESERT_CLASSIC, WOODLAND_NATIONAL, REVERE_CONCORD, THE_RANCH, PEBBLE_BEACH];
+/**
+ * Twenty venues: one for every week of the season.
+ *
+ * Six are authored hole by hole — three of them traced off real photographs —
+ * and fourteen are built from a design brief by `generate.ts`. Nothing
+ * downstream can tell the difference, and neither can the audit, which is the
+ * point: a generated hole is held to exactly the same rules as a drawn one.
+ */
+const BASE: readonly Course[] = [
+  COASTAL_CHAMPIONSHIP, DESERT_CLASSIC, WOODLAND_NATIONAL, REVERE_CONCORD, THE_RANCH, PEBBLE_BEACH,
+  ...LINKS_COURSES, ...DESERT_COURSES, ...PARKLAND_COURSES,
+];
 
 /**
  * One entry per venue for the menus — the default tee set — and every other set
@@ -31,3 +44,6 @@ export function teeSetsFor(course: Course): Course[] {
 }
 
 export { COASTAL_CHAMPIONSHIP, DESERT_CLASSIC, WOODLAND_NATIONAL, REVERE_CONCORD, THE_RANCH, PEBBLE_BEACH };
+export * from './links';
+export * from './desertCourses';
+export * from './parkland';

@@ -238,7 +238,93 @@ and signature ratings — and the rest are generated onto the same attribute
 system, weighted towards the middle of the tour, because even the last card on
 the money list belongs to somebody who shoots 72 for a living.
 
-## The three courses
+## Twenty courses, four of them majors
+
+A season is twenty weeks and twenty golf courses. Six are authored hole by hole
+— the Coastal Championship, the Desert Classic and Woodland National, plus
+Revere Concord, The Ranch and Pebble Beach traced off real photographs — and
+fourteen are built from a design brief by `src/data/courses/generate.ts`.
+
+### Why generated, and what that does not mean
+
+252 holes of hand-typed geometry is 252 chances to leave sand on a green, and
+the interesting part of a golf course is not in its coordinates anyway. So an
+invented venue is authored as a *brief*: its card, eighteen hole names, and the
+handful of knobs that make one place unlike another — how wide the fairways are,
+how close the trees stand, how big the greens are, how much the land moves, which
+holes have water. Everything geometric is derived from that, deterministically
+from the course id.
+
+What it is not is a lower standard. A generated hole goes through exactly the
+audit a drawn one does — no sand on a green, no water on a green, no tree
+standing in the line of play, a green between 14 and 60 yards across with the
+line of play finishing on it, a tee you can tee up on. `npm test` checks all 360.
+
+The audit earned its keep immediately. The first draft allowed a green radius of
+24 and produced greens 65 yards long that nobody could miss; the second allowed
+19 and produced exactly one at 62, because a blob stretched diagonally has a
+bigger axis-aligned bounding box than either of its own axes. The engine grows a
+green as `blobFrom(centre, r, stretch 1.05–1.45, wobble 0.13)`, so the box runs
+between `1.74·r` and `3.28·r` — which makes 9 to 18 the only legal range, and the
+generator now clamps to it rather than trusting a brief.
+
+### The twenty, and how they play
+
+Measured by playing a full tournament at each with the real 156-player field
+(`node tools/tsrun.mjs test/venueCheck.ts`), relative to par per round:
+
+| week | venue | style | card | plays |
+|---|---|---|---|---|
+| 1 | Vermilion Wash, Arizona | desert | 72 / 7,560 | −0.96 |
+| 3 | Ocotillo Springs, Nevada | desert | 70 / 6,960 | +0.38 |
+| 5 | Caldera Ridge, New Mexico | desert | 72 / 7,420 | −1.97 |
+| 7 | Desert Classic, Vela Verde | desert | 72 / 7,471 | −0.33 |
+| **9** | **Revere Concord — The Desert Championship** | desert | 72 / 6,946 | −1.69 |
+| 11 | Red Butte, Utah | desert | 71 / 7,280 | −0.94 |
+| 13 | Blackwater Creek, Louisiana | parkland | 71 / 7,140 | +2.56 |
+| 15 | The Ranch | parkland | 72 / 7,129 | +0.86 |
+| 17 | Cascade Falls, North Carolina | parkland | 72 / 7,430 | +1.72 |
+| **19** | **Woodland National — The National** | parkland | 72 / 7,175 | +1.70 |
+| 21 | Thornwood Forest, Oregon | parkland | 71 / 7,290 | +3.40 |
+| 23 | Kingsmoor Abbey, Yorkshire | parkland | 71 / 7,020 | +3.06 |
+| 25 | Ashbourne Heath, Surrey | parkland | 70 / 6,900 | +1.82 |
+| **27** | **Kilbrannan Links — The Kilbrannan Open** | links | 71 / 7,180 | +2.32 |
+| 29 | Thornmouth Old Links, Fife | links | 71 / 7,240 | +4.24 |
+| 31 | Carrickmoor, Co. Sligo | links | 72 / 7,060 | +1.48 |
+| 33 | Saltmarsh Point, Norfolk | links | 70 / 6,840 | +5.95 |
+| **35** | **Pebble Beach — The Pebble Beach Championship** | links | 72 / 7,021 | +4.78 |
+| 37 | Dun Morra, Donegal | links | 71 / 7,310 | +4.92 |
+| 39 | Coastal Championship — Tour Championship | links | 71 / 7,167 | +4.61 |
+
+Two of the first drafts were outliers and were measured back in rather than left
+alone. **Saltmarsh Point** played to +7.62 and was won at +8 — tiny greens, tight
+corridors, nine water holes and a links wind turned out to compound rather than
+add, and a regular week nobody breaks par in is not a hard golf course but a
+broken one. It is now +5.95, won at +4, and still the hardest week of the year.
+**Caldera Ridge** played to −1.97 after being −2.73 and won at 27 under, which was
+the easiest week ever played here: 6,800 feet of altitude is worth fourteen per
+cent of carry and a course that short has to defend itself some other way.
+
+### The four majors
+
+Weeks 9, 19, 27 and 35 — far enough apart that a season has four separate peaks,
+and each on a completely different kind of golf course, so no one sort of player
+can own all of them:
+
+- **The Desert Championship**, Revere Concord — 2,600 feet up on the tightest
+  desert course on tour.
+- **The National**, Woodland National — parkland at its most severe: narrow, wet,
+  long, and par is a score.
+- **The Kilbrannan Open**, Kilbrannan Links — the oldest championship in the
+  game. 147 bunkers, no trees, and whatever the weather decides.
+- **The Pebble Beach Championship**, Pebble Beach — the 7th is 106 yards and the
+  8th is the best second shot in golf.
+
+Six invitationals take the top 78 of the world ranking only, which is why a
+created golfer ranked 157th plays fourteen events in their rookie season and has
+to earn the other six.
+
+## The three founding courses
 
 | | Coastal Championship | Desert Classic | Woodland National |
 |---|---|---|---|
@@ -373,7 +459,7 @@ policy that will not start a context, no output device: all of them end up quiet
 instead of broken. The speaker in the top bar toggles it, and the choice is
 remembered.
 
-## The fourth course: Revere Concord
+## A real one: Revere Concord
 
 Three of the venues are invented. The fourth is real — the Concord course at The
 Revere Golf Club in Henderson, Nevada — and it is traced hole by hole from the
@@ -415,7 +501,7 @@ housing has boundaries much closer in than open desert. And a hole can now have
 **no corridor at all** over a stretch: the carry on a desert par 3 is desert, not
 a ribbon of rough with a fairway missing from the middle of it.
 
-## The fifth course: The Ranch
+## A real one: The Ranch
 
 The second real one — The Ranch Golf Club in Southwick, Massachusetts, a dairy
 farm on the shoulder of Sodom Mountain that Damian Pascuzzo turned into golf in
