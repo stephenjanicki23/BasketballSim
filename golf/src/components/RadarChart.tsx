@@ -16,6 +16,13 @@ export function RadarChart({ golfer, size = 260 }: { golfer: Golfer; size?: numb
   const cy = size / 2;
   const radius = size / 2 - 34;
   const min = 35;
+  /**
+   * Room either side for the axis labels, which sit outside the rings and are
+   * anchored outwards. Without it "Conditions" and "Short Game" run off the left
+   * and right of a square viewBox and get clipped — which is invisible at the old
+   * default size and obvious in a narrow panel.
+   */
+  const pad = 42;
 
   const point = (index: number, value: number) => {
     const angle = (index / axes.length) * Math.PI * 2 - Math.PI / 2;
@@ -30,8 +37,14 @@ export function RadarChart({ golfer, size = 260 }: { golfer: Golfer; size?: numb
   const polygon = outline.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
   return (
-    <svg className="radar" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img"
-      aria-label={axes.map((a) => `${a.name} ${groups[a.id]}`).join(', ')}>
+    <svg
+      className="radar"
+      width={size + pad * 2}
+      height={size}
+      viewBox={`${-pad} 0 ${size + pad * 2} ${size}`}
+      role="img"
+      aria-label={axes.map((a) => `${a.name} ${groups[a.id]}`).join(', ')}
+    >
       {[0.25, 0.5, 0.75, 1].map((ring) => (
         <polygon
           key={ring}

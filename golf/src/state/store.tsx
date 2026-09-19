@@ -10,7 +10,7 @@
 
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
-  type ReactNode,
+  type MutableRefObject, type ReactNode,
 } from 'react';
 import {
   type Universe, advanceSeason, createUniverse, currentTournament, golferMap,
@@ -24,13 +24,14 @@ import {
   toPlayerRound,
 } from '../game/session';
 import { conditionsFor, generateWeather } from '../simulation/weatherEngine';
+import { useCareerState, type CareerState } from './useCareer';
 import { createRng } from '../simulation/rng';
 import { COURSE_BY_ID } from '../data/courses';
 import type { Vec2 } from '../simulation/geometry';
 import type { ClubId, Golfer } from '../simulation/types';
 import type { PuttIntentId, ShotTypeId } from '../simulation/config';
 
-export type ScreenId = 'home' | 'play' | 'tournament' | 'players' | 'courses' | 'stats' | 'news';
+export type ScreenId = 'home' | 'play' | 'tournament' | 'players' | 'courses' | 'stats' | 'news' | 'career';
 
 export interface DispersionSettings {
   fifty: boolean;
@@ -81,12 +82,36 @@ interface StoreValue {
   resetUniverse: () => void;
   saveNow: () => void;
   savedGameExists: boolean;
+
+  /** Accounts, the created golfer, XP and the offseason. */
+  career: CareerState;
+  /**
+   * True when the season has rolled over and the player has not been through the
+   * offseason yet. Nothing that plays golf is allowed while it is set: spending the
+   * XP is the gate between one season and the next.
+   */
+  offseasonDue: boolean;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
 
+/**
+ * A ref whose value is built once, on first render, and never again.
+ *
+ * `useRef(createUniverse())` looks equivalent and is not: the argument is an
+ * ordinary expression, so it is evaluated on *every* render and the result thrown
+ * away on all but the first. For a whole 156-player tour and a twenty-event
+ * schedule that is ruinous, and because the value is discarded it is completely
+ * invisible — the worst kind of bug to leave in.
+ */
+function useLazyRef<T>(create: () => T): MutableRefObject<T> {
+  const ref = useRef<T | null>(null);
+  if (ref.current === null) ref.current = create();
+  return ref as MutableRefObject<T>;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }): JSX.Element {
-  const universeRef = useRef<Universe>(loadUniverse() ?? createUniverse());
+  const universeRef = useLazyRef<Universe>(() => loadUniverse() ?? createUniverse());
   const [revision, setRevision] = useState(0);
   const [screen, setScreen] = useState<ScreenId>('home');
   const [session, setSession] = useState<PlaySession | null>(null);
@@ -97,19 +122,57 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   const [savedGameExists, setSavedGameExists] = useState(hasSave());
   const saveTimer = useRef<number | null>(null);
 
+  /**
+   * The career state, held in a ref as well as returned.
+   *
+   * `commit` is created before the career hook and used by it, so it cannot close
+   * over the hook's return value directly. The ref is how the debounced save knows
+   * whether a career is active and therefore where the universe belongs.
+   */
+  const careerRef = useRef<CareerState | null>(null);
+
   const commit = useCallback(() => {
     setRevision((value) => value + 1);
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
+      // A career's universe belongs to the account, not to the browser: it goes
+      // wherever the career does, which may be a server. Without one, the game
+      // saves to localStorage exactly as it always has.
+      if (careerRef.current?.career) {
+        void careerRef.current.saveCareerUniverse();
+        setSavedGameExists(true);
+        return;
+      }
       const result = saveUniverse(universeRef.current);
       setSavedGameExists(result.ok);
       if (!result.ok) setMessage('Could not save — browser storage is unavailable or full.');
     }, 600);
   }, []);
 
+  const career = useCareerState(universeRef, commit, setMessage);
+  careerRef.current = career;
+  const offseasonDue = career.career?.offseasonOpen ?? false;
+
+  /**
+   * Report finished events and closed seasons whenever the universe moves.
+   *
+   * Driven off the revision counter rather than called from each action, because
+   * every path that can finish a tournament — simulating a round, simulating an
+   * event, playing one by hand, running the rest of the season — ends in a commit.
+   * One effect here covers all of them and cannot be forgotten in a new one.
+   */
+  useEffect(() => {
+    void career.syncCareer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revision, career.career?.id]);
+
   /** Run something slow without freezing the first paint of the busy indicator. */
   const runBusy = useCallback(
     (label: string, work: () => void) => {
+      if (careerRef.current?.career?.offseasonOpen) {
+        setMessage('Spend your XP in the offseason before the new season starts.');
+        return;
+      }
       setBusy(label);
       window.setTimeout(() => {
         try {
@@ -226,6 +289,10 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   );
 
   const startTournamentRound = useCallback(() => {
+    if (careerRef.current?.career?.offseasonOpen) {
+      setMessage('Spend your XP in the offseason before the new season starts.');
+      return;
+    }
     const universe = universeRef.current;
     const tournament = currentTournament(universe);
     const id = universe.userGolferId;
@@ -352,8 +419,10 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   }, []);
 
   useEffect(() => {
-    // First run: make sure a universe exists on disk.
-    if (!hasSave()) saveUniverse(universeRef.current);
+    // First run: make sure a universe exists on disk. Skipped once an account is
+    // signed in, because then the account owns the save and the shared
+    // localStorage slot is somebody else's business.
+    if (!hasSave() && !careerRef.current?.account) saveUniverse(universeRef.current);
   }, []);
 
   const value: StoreValue = {
@@ -393,6 +462,8 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     resetUniverse,
     saveNow,
     savedGameExists,
+    career,
+    offseasonDue,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

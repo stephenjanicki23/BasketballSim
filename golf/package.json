@@ -3,22 +3,26 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Golf Universe — a top-down playable golf game wrapped around a 50-player simulated tour",
+  "description": "Golf Universe \u2014 a top-down playable golf game wrapped around a 50-player simulated tour",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "smoke": "npm run build && node tools/smoke.mjs",
     "artifact": "npm run build && node tools/artifact.mjs",
     "calibrate": "node tools/tsrun.mjs test/calibration.ts && node tools/tsrun.mjs test/roundCheck.ts && node tools/tsrun.mjs test/seasonCheck.ts",
-    "test": "node tools/tsrun.mjs test/regression.ts && node tools/tsrun.mjs test/holeAudit.ts && node tools/tsrun.mjs test/scorecard.ts"
+    "test": "node tools/tsrun.mjs test/regression.ts && node tools/tsrun.mjs test/holeAudit.ts && node tools/tsrun.mjs test/scorecard.ts && node tools/tsrun.mjs test/careerBalance.ts && node tools/tsrun.mjs test/accountApi.ts",
+    "server": "node tools/tsrun.mjs server/index.ts",
+    "careers": "node tools/tsrun.mjs test/careerSeasons.ts",
+    "smoke:career": "npm run build && node tools/careerSmoke.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.4",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",

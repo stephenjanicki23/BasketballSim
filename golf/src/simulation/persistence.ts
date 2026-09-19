@@ -45,6 +45,21 @@ export function loadUniverse(): Universe | null {
   try {
     const raw = window.localStorage.getItem(KEY);
     if (!raw) return null;
+    return parseUniverse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read a universe out of a serialised one, wherever it came from.
+ *
+ * Split out from `loadUniverse` because a career's universe arrives from the
+ * account store — possibly over the network — rather than from `localStorage`, and
+ * both paths need exactly the same suspicion of what they are handed.
+ */
+export function parseUniverse(raw: string): Universe | null {
+  try {
     const parsed = JSON.parse(raw) as Universe;
     if (!parsed || parsed.version !== UNIVERSE_VERSION) return null;
     // A save from an older shape would break the engines in confusing ways; a
@@ -55,6 +70,21 @@ export function loadUniverse(): Universe | null {
       if (!tournament.results) tournament.results = {};
       if (!tournament.teeTimes) tournament.teeTimes = [];
       if (!tournament.recaps) tournament.recaps = [];
+    }
+    // Fields the career system added. Defaulted rather than version-gated on
+    // purpose: a save from before careers existed is a perfectly good universe and
+    // throwing somebody's season away to add three empty fields would be rude.
+    if (parsed.createdGolferId === undefined) parsed.createdGolferId = null;
+    if (!Array.isArray(parsed.careerEvents)) parsed.careerEvents = [];
+    if (parsed.careerSeasonReport === undefined) parsed.careerSeasonReport = null;
+    // Season counters added at the same time. An older save has no value for
+    // these, and `undefined++` is NaN, which would quietly poison a scoring
+    // average rather than fail — so fill them in rather than trusting the shape.
+    for (const golfer of parsed.golfers) {
+      if (typeof golfer.season?.top25s !== 'number') golfer.season.top25s = 0;
+      if (typeof golfer.season?.birdies !== 'number') golfer.season.birdies = 0;
+      if (typeof golfer.season?.eagles !== 'number') golfer.season.eagles = 0;
+      if (typeof golfer.season?.bestFinish !== 'number') golfer.season.bestFinish = 0;
     }
     return parsed;
   } catch {

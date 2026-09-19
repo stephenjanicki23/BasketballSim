@@ -27,6 +27,7 @@ import {
 import { developGolfer, type DevelopmentNote } from './developmentEngine';
 import { previewNews, seasonNews, tournamentNews, type NewsItem } from './newsEngine';
 import { currentAbility, emptySeason, scoringAverage } from './golferEngine';
+import { recordedEventFor, seasonReportFor, type RecordedEvent, type SeasonReport } from '../career/universe';
 import type { Golfer, SeasonRecord } from './types';
 
 export const UNIVERSE_VERSION = 5;
@@ -52,6 +53,28 @@ export interface Universe {
   userGolferId: string | null;
   pastSeasons: SeasonSummary[];
   developmentNotes: DevelopmentNote[];
+
+  /**
+   * The created golfer, if an account is playing a career on this universe.
+   *
+   * Distinct from `userGolferId`, which is whoever's rounds the player is hitting
+   * — you can take control of an existing tour professional without having made
+   * one. This one is the golfer whose ratings come from a `Career`, and it is the
+   * one the offseason development engine must leave alone.
+   */
+  createdGolferId: string | null;
+  /**
+   * Finished events waiting to be reported to the career store.
+   *
+   * A queue rather than a call, because the engines are synchronous and awarding
+   * XP is not: the store drains this after each event and, if the server cannot be
+   * reached, the entries stay here and go up with the next save. Submitting the
+   * same event twice is refused by the store, so a retry is always safe.
+   */
+  careerEvents: RecordedEvent[];
+  /** Set when a season rolls over with a created golfer on tour; drained by the store. */
+  careerSeasonReport: SeasonReport | null;
+
   /** Bumped whenever anything changes, so React knows to re-render. */
   revision: number;
 }
@@ -87,6 +110,9 @@ export function createUniverse(seed = 'golf-universe'): Universe {
     userGolferId: null,
     pastSeasons: [],
     developmentNotes: [],
+    createdGolferId: null,
+    careerEvents: [],
+    careerSeasonReport: null,
     revision: 1,
   };
   universe.news.unshift(previewNews(schedule[0], golferMap(universe)));
@@ -177,8 +203,22 @@ export function simulateTournament(universe: Universe, options: AdvanceOptions =
 function finishTournament(universe: Universe, tournament: Tournament): void {
   const golfers = golferMap(universe);
   const previousNumberOne = worldRanking(universe)[0]?.id ?? null;
+
+  // Both of these are changed by applying the results, and both are what the
+  // career's XP depends on — "you finished above your ranking" and "that is a new
+  // career best" are only true against where you stood before the week.
+  const created = universe.createdGolferId ? golfers.get(universe.createdGolferId) : undefined;
+  const before = created
+    ? { worldRank: created.worldRank, bestFinish: created.career.bestFinishRank }
+    : null;
+
   const rows = payout(tournament);
   applyResults(tournament, golfers, rows);
+
+  if (created && before) {
+    const event = recordedEventFor(universe.season, tournament, created.id, before);
+    if (event) universe.careerEvents.push(event);
+  }
   rankWorld(universe.golfers);
   universe.news.unshift(...tournamentNews(tournament, golfers, previousNumberOne));
   universe.eventIndex++;
@@ -269,16 +309,44 @@ export function advanceSeason(universe: Universe): SeasonSummary {
     };
     golfer.history.unshift(record);
     golfer.history = golfer.history.slice(0, 20);
-    notes.push(developGolfer(golfer, rng.fork(golfer.id), record.rank));
+
+    if (golfer.id === universe.createdGolferId) {
+      /**
+       * A created golfer is not developed by this engine, and that is the whole
+       * bargain of the career system: the AI improves because it has potential,
+       * the player improves because they earned it. Running `developGolfer` here
+       * would hand out free rating points, and worse, hand them out with no regard
+       * for the archetype's ceilings.
+       *
+       * So instead the season is written up as a report. The store sends it to the
+       * career store, which pays the season bonus, has the golfer's birthday and
+       * opens the offseason; the new ratings come back the other way through
+       * `syncGolfer`.
+       */
+      universe.careerSeasonReport = seasonReportFor({
+        season: universe.season,
+        golfer,
+        standingsRank: record.rank,
+        top25s: golfer.season.top25s,
+        bestPreviousScoringAverage: bestPreviousAverage(golfer),
+      });
+      golfer.career.seasons++;
+    } else {
+      notes.push(developGolfer(golfer, rng.fork(golfer.id), record.rank));
+    }
     golfer.season = emptySeason();
     golfer.fatigue = 0;
   }
 
-  // Retirements, and a graduate for each one.
+  // Retirements, and a graduate for each one. A created golfer never appears in
+  // `notes`, so they can never be retired out from under their own account.
   const retiring = new Set(notes.filter((n) => n.retired).map((n) => n.golferId));
   universe.golfers = universe.golfers.filter((g) => !retiring.has(g.id));
+  // One extra card is issued when a created golfer is on tour, so making one does
+  // not quietly cost somebody else theirs.
+  const cards = TOUR_SIZE + (universe.createdGolferId ? 1 : 0);
   let index = 0;
-  while (universe.golfers.length < TOUR_SIZE) {
+  while (universe.golfers.length < cards) {
     universe.golfers.push(createRookie(rng.fork(`rookie:${index}`), universe.season + 1, index));
     index++;
   }
@@ -293,6 +361,53 @@ export function advanceSeason(universe: Universe): SeasonSummary {
   universe.news.unshift(previewNews(universe.schedule[0], golferMap(universe)));
   universe.revision++;
   return summary;
+}
+
+/** The best scoring average in any completed season, for the career-best bonus. */
+function bestPreviousAverage(golfer: Golfer): number {
+  const averages = golfer.history.slice(1).map((season) => season.scoringAverage).filter((value) => value > 0);
+  return averages.length ? Math.min(...averages) : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Careers
+// ---------------------------------------------------------------------------
+
+/**
+ * Put a created golfer on tour.
+ *
+ * They arrive as a rookie in every sense: no ranking points, so last in the world,
+ * and no career record. The schedule is rebuilt because the invitational fields are
+ * drawn off the world ranking and a 157th player changes who is in them — and
+ * because a golfer who is not in a tournament's field cannot play it.
+ */
+export function joinTour(universe: Universe, golfer: Golfer): void {
+  if (universe.golfers.some((existing) => existing.id === golfer.id)) return;
+  universe.golfers.push(golfer);
+  universe.createdGolferId = golfer.id;
+  universe.userGolferId = golfer.id;
+  rankWorld(universe.golfers);
+  // Only events not yet under way: a tournament in progress keeps its field.
+  const rng = createRng(`${universe.season}:schedule:${golfer.id}`);
+  universe.schedule = universe.schedule.map((tournament, index) =>
+    index < universe.eventIndex || tournament.status !== 'upcoming'
+      ? tournament
+      : createTournament(tournament, tournament.season, fieldFor(tournament, universe.golfers), rng.fork(tournament.id)),
+  );
+  universe.revision++;
+}
+
+/** Take a created golfer off tour, leaving the universe playable. */
+export function leaveTour(universe: Universe): void {
+  const id = universe.createdGolferId;
+  if (!id) return;
+  universe.golfers = universe.golfers.filter((golfer) => golfer.id !== id);
+  universe.createdGolferId = null;
+  if (universe.userGolferId === id) universe.userGolferId = null;
+  universe.careerEvents = [];
+  universe.careerSeasonReport = null;
+  rankWorld(universe.golfers);
+  universe.revision++;
 }
 
 // ---------------------------------------------------------------------------

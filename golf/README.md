@@ -611,15 +611,246 @@ golf. Lateral sigma went back to where it was, the symmetric longitudinal error
 was cut to make room for the new skewed one, and the mishit rates — the part the
 model was actually missing — stayed raised.
 
+## Create a golfer: accounts, archetypes and a career
+
+The tour simulates itself. This is the other way round — an account, a golfer you
+built, and twenty seasons of trying to make something of them.
+
+### The scale, first, because everything depends on it
+
+The 1–100 the seeds are authored on is not the scale the ratings end up on.
+`compressLevel` squeezes fifty authored levels into a five-point band and the
+spread you see comes from archetype bias and per-skill noise, so measuring the
+156 players who hold a card gives a very different picture from reading the
+seed file (`node tools/tsrun.mjs test/tourProfile.ts` prints it):
+
+| | min | p10 | median | p90 | max |
+|---|---|---|---|---|---|
+| overall ability | 68 | 73 | 76.5 | 80 | 83 |
+| any single rating | 31 | 60 | 77 | 91 | 99 |
+
+**50 is not an average professional on this scale. 77 is.** Every number in the
+career system is set against those figures rather than against a generic 1–100,
+which is why a starting golfer is built to land near ability 77 and not near 50.
+
+### Sixteen lines, not thirty-three ratings
+
+The engine has 33 ratings, which is the right detail for a shot model and far too
+much for a person allocating points before their first tee shot. The 32 trainable
+ones are grouped into 16 **skill lines** — Power, Driving Accuracy, Iron Play,
+Putting Stroke, Reading & Speed, Nerve, Course Management, Weather Play and so on
+— chosen so no two are the same decision with different labels. A line sets every
+rating it owns, with the archetype's own bias deciding which of them it favours
+by a point or two. `launch` is the one rating no line owns: it is a ball-flight
+trait, not something you practise, so the archetype sets it outright.
+
+### Archetypes are the tour's own, with the ceilings evened out
+
+The twelve you can choose are the game's existing `ARCHETYPES` — the same bias
+vectors that make the existing tour's bombers bombers — minus Veteran and Young
+Prospect, which are life stages rather than identities and make no sense as a
+permanent ceiling.
+
+Caps are *derived* from those vectors rather than typed out, so adding an
+archetype gives you its ceilings for nothing. But they are not taken literally,
+and that is the one place the derivation argues with its source. Those vectors
+were written to flavour an AI golfer, where overall strength comes from the seed
+level and the bias only decides shape, so nobody ever had to make them fair —
+and they are not. The Course Manager's is +22 course management against a single
+−8; the Volatile Superstar's is −24 consistency for +12 distance. Read straight
+into player-facing ceilings that makes one a free lunch and the other a
+self-inflicted wound. So each archetype's deviations are scaled to a fixed budget:
+**22 rating points of ceiling above neutral, paid for with 16.5 below it**,
+distributed in the shape of its own bias. The shape stays the game's; the price is
+level.
+
+What that produces:
+
+| archetype | ceilings | and never better than |
+|---|---|---|
+| Complete Player | everything at 82 | — (no weakness, so no peak) |
+| Power Player | Power 97, Fitness 84 | Course Management 75, Driving Accuracy 76 |
+| Bomber | Power 97, Long Irons 86 | Driving Accuracy 72, Chipping 78 |
+| Precision Player | Wedges 88, Approach 88, Driving 87 | Power 66 |
+| Ball Striker | Long Irons 90, Iron Play 89 | Putting 71, Reading 76 |
+| Short Game Wizard | Chipping 91, Bunkers 90, Recovery 88 | Long Irons 70, Power 78 |
+| Elite Putter | Putting 93, Reading 90 | Long Irons 74, Approach 76 |
+| Scrambler | Recovery 92, Bunkers 90 | Approach Control 70, Driving 77 |
+| Course Manager | Course Management 95, Consistency 90 | Power 66 |
+| Grinder | Consistency 92, Fitness 91 | Power 66 |
+| Wind Specialist | Weather 97, Iron Play 87 | Power 66 |
+| Volatile Superstar | Power 96, Putting 90 | Consistency 71, Course Management 77 |
+
+A Short Game Wizard will never be one of the game's better long-iron players, and
+an Elite Putter's stroke can reach 93 when a Ball Striker's tops out at 71. Those
+ceilings hold for the whole career: there is no code path that writes a rating
+directly, because ratings are always recomputed from the lines, so there is
+nothing to exceed a cap *with*.
+
+### The starting budget
+
+350 points, every line starting at 62 and floored at 55, with a point getting
+dearer the higher it goes (1 point of budget up to 70, then 2, then 3, then 5
+above 80) and a ceiling of 82 on where any line may start. Spread evenly that is
+a golfer of about ability 77 — the median of the tour, four to six short of the
+best five players in the world. Spent on three lines instead it is a golfer who is
+top-quartile at those and below average elsewhere, for the same overall standard.
+
+Every line at 82 would cost 672 points, so being good at everything is not on the
+menu; and because the floor is 55 rather than 1, there is no stat to dump to fund
+it. **`node tools/tsrun.mjs test/careerBalance.ts`** generates four builds for
+every archetype — low-end, balanced, specialised and the best legal one — checks
+each against every rule, and tries a dozen ways of cheating creation and spending.
+
+### XP, and what a point costs
+
+XP is earned by playing: a start is worth 100, a made cut 200, a win 1,800, a
+birdie 6, a round of −7 or better 320, and finishing above your own world ranking
+pays by the place. Majors are worth 60% more. Nothing anywhere accepts an *amount*
+of XP — the caller says what happened and the rulebook prices it, so there is no
+number to tamper with, and a week and a season each have a hard ceiling on top.
+
+Costs compound, so progress slows exactly where it should:
+
+| from | XP | and within one point of your ceiling |
+|---|---|---|
+| 62 | 120 | 458 |
+| 70 | 240 | 912 |
+| 80 | 568 | 2,158 |
+| 90 | 1,345 | 5,111 |
+| 95 | 2,070 | 7,866 |
+
+Two curves, answering two questions. The **cost curve** is absolute — a point at
+90 costs five and a half times a point at 70, for everybody. The **soft cap** is
+relative to *your* ceiling, because 88 is an ordinary number for an Elite Putter's
+stroke and a career-defining one for a Ball Striker's, and a soft cap written in
+absolute terms cannot tell the difference. Taking one line from a fresh build to
+its ceiling costs between 19,000 and 47,000 XP depending on how far it reaches;
+taking every line to its ceiling costs over 130,000, which is more than a career.
+
+### The offseason
+
+A season ends, the tour develops itself, and your golfer does not — the AI
+development engine skips created golfers entirely, and that is the bargain: they
+improve because they have potential, you improve because you earned it. What you
+get for free is older. Physical decline starts after 31 and reaches −14 on Power
+and Fitness; Course Management and Nerve climb to +6 with experience. Both are a
+deterministic function of age applied on top of what you bought, never a change to
+it, so what you paid for is always exactly what the ledger says.
+
+Then you spend. The offseason screen shows the season's record, an itemised
+ledger of where the XP came from, what age has taken, and every line with its
+price and its ceiling on the same bar. No line moves more than 6 in one winter,
+and unspent XP carries over. Nothing is committed until you ask, and the backend
+prices the whole basket again before it applies any of it.
+
+### Does any of it survive contact with the tour?
+
+`npm run careers` is the answer: two builds of every archetype, dropped into the
+real 156-player field and made to play a real twenty-event season. On its better
+shape each identity came out like this — a rookie ranked 157th is not in the six
+limited-field invitationals, so a first season is fourteen starts, not twenty:
+
+| archetype | cuts made | best finish | season XP |
+|---|---|---|---|
+| Elite Putter | 79% | 4th | 16,570 |
+| Complete Player | 57% | 8th | 11,664 |
+| Power Player | 57% | 26th | 10,878 |
+| Volatile Superstar | 57% | 8th | 12,946 |
+| Bomber | 50% | 33rd | 9,382 |
+| Precision Player | 50% | 11th | 11,644 |
+| Ball Striker | 50% | 8th | 10,878 |
+| Grinder | 50% | 17th | 11,272 |
+| Short Game Wizard | 43% | 14th | 9,844 |
+| Wind Specialist | 43% | 3rd | 9,876 |
+| Scrambler | 36% | 16th | 8,776 |
+| Course Manager | 36% | 36th | 8,962 |
+
+Every build came out at ability 76 or 77 against a field that runs 68–83, none of
+them won anything, and the best of them contended a handful of times. That is the
+brief: *"I can compete with these guys, but I need to develop my golfer to
+consistently beat them."*
+
+Two things the sweep taught that were not obvious:
+
+- **One season is mostly noise.** The same even-spread recipe produced 21% of cuts
+  for one archetype and 79% for another. The harness's viability check is
+  therefore on the *identity* — its better shape must clear 30% — with a much
+  lower floor per individual build, because a per-build threshold was measuring
+  the shot engine's day-to-day wobble and calling it balance.
+- **Breadth wins at creation; specialisation wins later.** Concentrating the
+  starting budget into three lines and leaving the rest at 74 generally scored
+  *worse* than a flat 77, because scoring is dominated by whatever is weakest.
+  The reward for an archetype is its ceiling, not its start — which gives the
+  career an arc rather than a ramp, and is why every build starts within a point
+  of every other.
+
+### Accounts
+
+Register, sign in, sign out, come back. Passwords are stored as PBKDF2-HMAC-SHA256
+verifiers at 210,000 iterations with a per-account salt, never as text; sessions
+are opaque random tokens with an expiry. The same module runs on both sides, using
+the WebCrypto that Node and the browser both have, so the only security-critical
+code in the project exists once.
+
+Where accounts live depends on how it is run, and the app says which on screen:
+
+- **In the browser** (the default, and what the published build does). Real
+  accounts with hashed passwords and persistent careers, in `localStorage`. An
+  account exists on the browser that made it and nowhere else, and the rules run
+  on the player's own machine — which stops mistakes, not a determined person with
+  developer tools.
+- **On the server** (`npm run server`, then `VITE_GOLF_API=http://localhost:8787
+  npm run dev`). Node's stdlib only — `node:http`, WebCrypto, `node:sqlite` — with
+  bearer tokens, rate-limited login, CORS pinned to configured origins and the
+  database at `GOLF_DATA_DIR`. Careers follow the account across devices, and
+  every rule is enforced somewhere the player cannot reach. A published static
+  build can be pointed at one by setting `window.__GOLF_API__` without rebuilding.
+
+Both run the *same* rulebook out of `src/career/`. The difference is not what the
+rules are, it is where the trust boundary sits.
+
+One honest limit, since requirement 21 asks for a server that trusts nothing. The
+tour is simulated in the browser, so what reaches the store is a claim about a
+week — "I finished third in the Coastal Open". The claims are checked for
+plausibility, priced by the rulebook rather than supplied as a number, capped per
+event and per season, and refused if the same event or season arrives twice. A
+determined player running their own copy can still lie about their results. The
+only real fix is simulating the tour server-side, which a game whose whole season
+runs locally cannot do.
+
+### Where to change the balance
+
+`src/career/config.ts`, and nowhere else. Every number above is in it — the
+starting budget, the floors, the creation cost bands, the cap budget and weakness
+ratio, the XP curve, the soft caps, the per-winter limit, the age model and every
+XP award. Nothing else in the career system hardcodes a threshold.
+
 ## Testing
 
-- `npm test` — 34 regression tests: the shape of the field, every hole building
+- `npm test` — the regression tests (the shape of the field, every hole building
   with a pin on its green, dispersion behaving, lies costing what they should,
   make percentages in the tour band, a full round, a full season, the payout
-  matching the purse, the save round-tripping, and determinism from a seed.
+  matching the purse, the save round-tripping, determinism from a seed), plus
+  `test/careerBalance.ts` and `test/accountApi.ts` below.
 - `npm run smoke` — builds the app, drives it in headless Chromium through every
   screen, plays shots, simulates a season, rolls the year over and reloads,
   failing on any console error.
+- `npm run smoke:career` — the same, for the career: register, build a golfer,
+  play a season, spend the XP, start the next one, sign out, sign back in and
+  reload. `--server` runs it against the real account API over HTTP instead of
+  the browser backend. Screenshots land in `tools/shots/career/`.
+- `test/careerBalance.ts` — four builds for every archetype, checked against every
+  rule, plus seventeen ways of cheating creation and spending that must all fail.
+- `test/accountApi.ts` — the account server end to end over real HTTP: hashed
+  passwords, session tokens, one account not seeing another's career, replayed
+  events and seasons refused, and the archetype ceiling holding against a player
+  with 13,000 XP banked.
+- `npm run careers` — created golfers dropped into the real 156-player field for
+  real tournaments: cuts made, top tens, scoring average and XP earned per
+  season. `--arc 12` plays a twelve-season career and prints its shape.
+- `test/tourProfile.ts` — the distribution of all 33 ratings across the tour,
+  which is where every balance number in the career system comes from.
 - `npm run calibrate` — the reports: club distances and dispersion by player,
   scoring by course and by par, scrambling by lie and distance, a full season
   with standings, statistical leaders and the news wire.

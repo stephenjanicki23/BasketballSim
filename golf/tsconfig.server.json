@@ -1,0 +1,17 @@
+{
+  // The server half of the project: the HTTP API, the rulebook it enforces, and
+  // the password module. Kept separate from tsconfig.json because it runs on node
+  // rather than in a browser — and narrowed to what the server actually imports,
+  // so a stray `window` in a UI module cannot compile into it.
+  //
+  // DOM is in `lib` for one reason: WebCrypto's types (SubtleCrypto, BufferSource)
+  // live there, and the password module deliberately uses the same global
+  // WebCrypto on both sides rather than node:crypto on one and window.crypto on
+  // the other.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["server", "src/career", "src/account/password.ts"]
+}

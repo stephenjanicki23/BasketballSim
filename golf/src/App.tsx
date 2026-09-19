@@ -9,14 +9,17 @@ import { PlayersScreen } from './screens/PlayersScreen';
 import { CoursesScreen } from './screens/CoursesScreen';
 import { StatsScreen } from './screens/StatsScreen';
 import { NewsScreen } from './screens/NewsScreen';
+import { CareerScreen } from './screens/CareerScreen';
 import { PlayerProfile } from './components/PlayerProfile';
 import { useCurrentTournament, useStore, type ScreenId } from './state/store';
 import { COURSE_BY_ID } from './data/courses';
 import { ordinal } from './components/ui';
 import { playSfx, setSoundOn, soundOn } from './audio/sfx';
+import { storedToken } from './account';
 
 const NAV: { id: ScreenId; label: string }[] = [
   { id: 'home', label: 'Home' },
+  { id: 'career', label: 'Career' },
   { id: 'play', label: 'Play' },
   { id: 'tournament', label: 'Tournament' },
   { id: 'players', label: 'Players' },
@@ -27,10 +30,25 @@ const NAV: { id: ScreenId; label: string }[] = [
 
 export function App(): JSX.Element {
   const store = useStore();
-  const { screen, setScreen, universe, session, busy, message, dismissMessage, profileId, golfer, userGolfer, openProfile, resetUniverse, saveNow } = store;
+  const { screen, setScreen, universe, session, busy, message, dismissMessage, profileId, golfer, userGolfer, openProfile, resetUniverse, saveNow, career, offseasonDue } = store;
   const tournament = useCurrentTournament();
   const profile = profileId ? golfer(profileId) : null;
   const [sound, setSound] = useState(soundOn());
+
+  // The offseason is a gate rather than a suggestion: until the XP is dealt with
+  // there is no next season to look at, so the career screen takes over.
+  useEffect(() => {
+    if (offseasonDue && screen !== 'career') setScreen('career');
+  }, [offseasonDue, screen, setScreen]);
+
+  /**
+   * On a reload with a signed-in account there is a moment before the career's own
+   * universe has been fetched, and during it the store is holding the *guest*
+   * universe — a different tour, with no created golfer in it. Showing that for a
+   * second or two is worse than showing nothing, because it looks exactly like the
+   * career has been lost. So cover it.
+   */
+  const restoring = career.starting && storedToken() !== null;
 
   // The play screen sizes the course to whatever the chrome leaves behind, and
   // the chrome is not a fixed height: the nav wraps on a phone, the banner comes
@@ -69,6 +87,7 @@ export function App(): JSX.Element {
             >
               {item.label}
               {item.id === 'play' && session && <span className="dot" />}
+              {item.id === 'career' && (offseasonDue || (career.account && !career.career)) && <span className="dot" />}
             </button>
           ))}
         </nav>
@@ -78,12 +97,15 @@ export function App(): JSX.Element {
               <span className="flag">{userGolfer.flag}</span>
               <span>
                 <strong>{userGolfer.name}</strong>
-                <small>{ordinal(userGolfer.worldRank)} in the world</small>
+                <small>
+                  {ordinal(userGolfer.worldRank)} in the world
+                  {career.career ? ` · ${career.career.availableXp.toLocaleString()} XP` : ''}
+                </small>
               </span>
             </button>
           ) : (
-            <button type="button" className="ghost" onClick={() => setScreen('players')}>
-              Choose a golfer
+            <button type="button" className="ghost" onClick={() => setScreen('career')}>
+              Create a golfer
             </button>
           )}
           <button
@@ -114,9 +136,19 @@ export function App(): JSX.Element {
         </div>
       </header>
 
-      {!userGolfer && screen !== 'players' && (
+      {offseasonDue && screen === 'career' && (
+        <div className="banner banner--urgent">
+          The season is over. Spend your XP and start the {universe.season} season.
+        </div>
+      )}
+
+      {!userGolfer && screen !== 'career' && screen !== 'players' && (
         <div className="banner">
-          Pick a golfer to control and you can play their tournament rounds shot by shot. Until then, everything simulates.
+          Create your own golfer and play a career — an archetype, a ceiling, and XP earned a season at a time. Or
+          take control of one of the tour&apos;s professionals and play their rounds.
+          <button type="button" className="ghost ghost--small" onClick={() => setScreen('career')}>
+            Create a golfer
+          </button>
           <button type="button" className="ghost ghost--small" onClick={() => setScreen('players')}>
             Open the player list
           </button>
@@ -133,13 +165,14 @@ export function App(): JSX.Element {
         {screen === 'courses' && <CoursesScreen />}
         {screen === 'stats' && <StatsScreen />}
         {screen === 'news' && <NewsScreen />}
+        {screen === 'career' && <CareerScreen />}
       </main>
 
-      {busy && (
+      {(busy || restoring) && (
         <div className="busy" role="status">
           <div className="busy__box">
             <div className="busy__spinner" />
-            <p>{busy}</p>
+            <p>{busy ?? 'Restoring your career…'}</p>
           </div>
         </div>
       )}

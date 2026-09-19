@@ -558,8 +558,12 @@ export function applyResults(
       golfer.career.top10s++;
       golfer.season.top10s++;
     }
+    if (row.position >= 1 && row.position <= 25) golfer.season.top25s++;
     if (row.position >= 1 && (golfer.career.bestFinishRank === 0 || row.position < golfer.career.bestFinishRank)) {
       golfer.career.bestFinishRank = row.position;
+    }
+    if (row.position >= 1 && (golfer.season.bestFinish === 0 || row.position < golfer.season.bestFinish)) {
+      golfer.season.bestFinish = row.position;
     }
 
     for (const round of rounds) {
@@ -584,6 +588,8 @@ export function applyResults(
       golfer.career.scrambleAttempts += s.scrambleAttempts;
       golfer.career.eagles += s.eagles;
       golfer.career.birdies += s.birdies;
+      golfer.season.eagles += s.eagles;
+      golfer.season.birdies += s.birdies;
       golfer.career.pars += s.pars;
       golfer.career.bogeys += s.bogeys;
       golfer.career.doubles += s.doubles;

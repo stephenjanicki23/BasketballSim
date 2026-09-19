@@ -296,10 +296,15 @@ export interface Golfer {
     events: number;
     wins: number;
     top10s: number;
+    top25s: number;
     cutsMade: number;
     rounds: number;
     strokes: number;
     parTotal: number;
+    birdies: number;
+    eagles: number;
+    /** Best finishing position this season, or 0 if no cut has been made. */
+    bestFinish: number;
   };
   history: SeasonRecord[];
   /** Ranking points, decayed each event — the basis of the world ranking. */

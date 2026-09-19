@@ -17,3 +17,8 @@ golf/dist/
 # Composed from dist/ by tools/artifact.mjs when publishing.
 golf/artifact/
 golf/tsconfig.tsbuildinfo
+
+# The account server's SQLite database. Point GOLF_DATA_DIR elsewhere in production.
+golf/.data/
+# Screenshots from tools/careerSmoke.mjs and tools/shots.mjs.
+golf/tools/shots/

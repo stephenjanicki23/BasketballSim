@@ -536,7 +536,10 @@ export function emptyCareer(): Golfer['career'] {
 }
 
 export function emptySeason(): Golfer['season'] {
-  return { points: 0, earnings: 0, events: 0, wins: 0, top10s: 0, cutsMade: 0, rounds: 0, strokes: 0, parTotal: 0 };
+  return {
+    points: 0, earnings: 0, events: 0, wins: 0, top10s: 0, top25s: 0, cutsMade: 0,
+    rounds: 0, strokes: 0, parTotal: 0, birdies: 0, eagles: 0, bestFinish: 0,
+  };
 }
 
 /** Blend two ratings, used by development and by course fit. */

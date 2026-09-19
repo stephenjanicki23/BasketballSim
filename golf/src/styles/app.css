@@ -505,6 +505,7 @@ tr.cut { opacity: 0.5; }
 }
 .profile__radar { display: flex; justify-content: center; }
 
+.radar { max-width: 100%; height: auto; display: block; margin: 0 auto; }
 .radar__ring { fill: none; stroke: #253038; }
 .radar__axis { stroke: #1f2a31; }
 .radar__label { fill: var(--text-dim); font-size: 9.5px; }
@@ -768,4 +769,270 @@ tr.cut { opacity: 0.5; }
 @media (max-width: 620px) {
   /* At this width the name of the game is not worth a row of the screen. */
   .topbar__brand strong { display: none; }
+}
+
+/* ===========================================================================
+ * Career: accounts, creating a golfer, and the offseason.
+ *
+ * Same idiom as the rest of the game — dense, dark, data first — with one
+ * departure: the skill bars get more room than a stat row would, because on this
+ * screen the distance between a number and its ceiling *is* the information.
+ * =========================================================================== */
+
+.career { display: flex; flex-direction: column; gap: 14px; }
+
+.career__gate { max-width: 520px; margin: 0 auto; width: 100%; }
+
+.career__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+  align-items: start;
+}
+.career__main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.career__side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 8px; }
+
+.career__identity { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+.career__identity h3 { margin: 0 0 4px; }
+
+.career__storage {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.career__storage strong { color: var(--text); }
+
+/* --- forms ---------------------------------------------------------------- */
+
+.form { display: flex; flex-direction: column; gap: 12px; }
+.form--grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.form__field { display: flex; flex-direction: column; gap: 4px; }
+.form__field > span { color: var(--text-dim); font-size: 12px; }
+.form__field > span em { color: var(--text-faint); font-style: normal; }
+.form__field input, .form__field select { width: 100%; }
+.form__field input[aria-invalid='true'] { border-color: var(--bad); }
+.form__error { color: var(--bad); font-size: 12px; font-style: normal; }
+.form__hint { color: var(--text-faint); font-size: 12px; font-style: normal; }
+.form__errors {
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+  background: rgba(212, 105, 95, 0.09);
+  padding: 8px 11px;
+}
+.form__errors p { margin: 2px 0; color: var(--over); font-size: 12px; }
+.form__errors--warn { border-color: var(--warn); background: rgba(224, 160, 95, 0.09); }
+.form__errors--warn p { color: var(--warn); }
+.form__errors--warn strong { color: #f0c894; }
+
+/* --- the four steps ------------------------------------------------------- */
+
+.steps { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.steps__item button {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-panel); border-color: var(--line-soft); color: var(--text-dim);
+}
+.steps__item--active button { color: var(--text); border-color: var(--accent-dim); background: var(--bg-raised); }
+.steps__number {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--line); color: var(--text-dim); font-size: 11px;
+}
+.steps__item--active .steps__number { background: var(--accent-dim); color: #08130b; }
+
+/* --- archetype cards ------------------------------------------------------ */
+
+.archetypes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+.archetype {
+  display: flex; flex-direction: column; gap: 7px;
+  text-align: left; padding: 11px 12px;
+  background: var(--bg-panel); border: 1px solid var(--line-soft); border-radius: var(--radius);
+}
+.archetype:hover { border-color: #35434f; }
+.archetype--selected { border-color: var(--accent); background: var(--bg-raised); }
+.archetype header { display: flex; flex-direction: column; gap: 2px; }
+.archetype header strong { font-size: 14px; }
+.archetype header em { color: var(--accent); font-style: normal; font-size: 12px; }
+.archetype p { margin: 0; color: var(--text-dim); font-size: 12px; }
+.archetype__caps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.archetype__cap {
+  font-size: 11px; padding: 2px 6px; border-radius: 4px;
+  background: var(--bg-input); color: var(--text-dim); border: 1px solid var(--line-soft);
+}
+.archetype__cap b { color: var(--text); }
+.archetype__cap--up { border-color: rgba(98, 201, 140, 0.4); }
+.archetype__cap--up b { color: var(--under); }
+.archetype__cap--down { border-color: rgba(212, 105, 95, 0.4); }
+.archetype__cap--down b { color: var(--over); }
+
+/* --- skill bars ----------------------------------------------------------- */
+
+.skillgroup { margin-bottom: 14px; }
+.skillgroup h3 {
+  margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-faint); font-weight: 600;
+}
+
+.skillbar { margin-bottom: 11px; }
+.skillbar__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.skillbar__name { font-size: 12px; }
+.skillbar__numbers { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+.skillbar__numbers strong { font-size: 13px; }
+.skillbar__pending { color: var(--accent); font-style: normal; font-size: 11px; }
+.skillbar__cap { color: var(--text-faint); font-size: 11px; }
+.skillbar--maxed .skillbar__cap { color: var(--accent); }
+
+.skillbar__track {
+  position: relative;
+  height: 14px; margin-top: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.skillbar__fill { position: absolute; inset: 0 auto 0 0; border-radius: 7px 0 0 7px; }
+/* The room still available under the ceiling. */
+.skillbar__headroom {
+  position: absolute; top: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    135deg, rgba(230, 236, 241, 0.09) 0 3px, transparent 3px 6px
+  );
+}
+.skillbar__delta { position: absolute; top: 0; bottom: 0; background: rgba(98, 201, 140, 0.35); }
+.skillbar__ceiling { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--text-dim); }
+.skillbar__origin { position: absolute; top: 3px; bottom: 3px; width: 1px; background: rgba(230, 236, 241, 0.35); }
+.skillbar__input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; opacity: 0; cursor: ew-resize;
+}
+.skillbar__input:focus-visible { opacity: 0.001; outline: none; }
+.skillbar__track:focus-within { border-color: var(--accent); }
+.skillbar__hint { margin: 3px 0 0; color: var(--text-faint); font-size: 11px; }
+
+/* --- points and XP -------------------------------------------------------- */
+
+.points { color: var(--text-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+.points strong { color: var(--accent); font-size: 15px; }
+.points--spent, .points--spent strong { color: var(--text-faint); }
+
+.points-readout {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 8px 0; border-bottom: 1px solid var(--line-soft); margin-bottom: 8px;
+}
+.points-readout span { color: var(--text-dim); font-size: 12px; }
+.points-readout strong { font-size: 18px; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.preview-lines { display: flex; flex-direction: column; gap: 2px; }
+.preview-lines__row {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 12px; padding: 2px 0;
+}
+.preview-lines__row span:first-child { color: var(--text-dim); }
+.preview-lines__value { display: flex; gap: 6px; font-variant-numeric: tabular-nums; }
+.preview-lines__value em { color: var(--text-faint); font-style: normal; }
+
+.putting-styles { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.putting-styles h3 { margin: 0 0 4px; font-size: 12px; }
+.putting-styles .chip-button { margin: 0 4px 4px 0; }
+
+.review { display: flex; flex-direction: column; gap: 14px; }
+.review__who { display: flex; gap: 14px; align-items: flex-start; }
+.review__who h3 { margin: 0 0 4px; font-size: 17px; }
+.review__who p { margin: 0 0 3px; color: var(--text-dim); }
+.review__shape {
+  display: grid; grid-template-columns: 150px minmax(0, 1fr);
+  gap: 5px 12px; margin: 0;
+}
+.review__shape dt { color: var(--text-faint); font-size: 12px; }
+.review__shape dd { margin: 0; font-size: 12px; }
+
+/* --- the offseason -------------------------------------------------------- */
+
+.xp-banner {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; margin: 14px 0;
+  padding: 12px; border: 1px solid var(--accent-dim); border-radius: var(--radius);
+  background: rgba(98, 201, 140, 0.06);
+}
+.xp-banner > div { display: flex; flex-direction: column; gap: 2px; }
+.xp-banner span { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.xp-banner strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.xp-banner__available { color: var(--accent); }
+
+.ledger { margin-top: 10px; }
+.ledger summary { cursor: pointer; color: var(--text-dim); font-size: 12px; }
+.ledger ul { list-style: none; margin: 8px 0 0; padding: 0; }
+.ledger li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 3px 0; font-size: 12px; border-bottom: 1px solid var(--line-soft);
+}
+.ledger li b { font-variant-numeric: tabular-nums; }
+
+.agenotes { margin-top: 14px; }
+.agenotes h3 { margin: 0 0 5px; font-size: 12px; }
+.agenotes ul { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 12px; }
+
+.upgrade { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.upgrade__buttons { display: flex; align-items: center; gap: 5px; padding-top: 14px; }
+.upgrade__buttons button { width: 26px; padding: 3px 0; text-align: center; }
+.upgrade__count {
+  min-width: 26px; text-align: center; font-size: 12px;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.upgrade__cost {
+  min-width: 96px; text-align: right; font-size: 11px;
+  color: var(--text-faint); font-variant-numeric: tabular-nums;
+}
+
+.xp-summary { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.xp-summary > div { display: flex; justify-content: space-between; font-size: 12px; }
+.xp-summary span { color: var(--text-dim); }
+.xp-summary b { font-variant-numeric: tabular-nums; }
+.xp-summary--bad b { color: var(--bad); }
+
+.basket { list-style: none; margin: 0 0 12px; padding: 0; }
+.basket li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px; padding: 3px 0; font-size: 12px; border-bottom: 1px solid var(--line-soft);
+}
+.basket em { color: var(--accent); font-style: normal; font-variant-numeric: tabular-nums; }
+.basket b { font-variant-numeric: tabular-nums; color: var(--text-dim); }
+
+.drift { list-style: none; margin: 0; padding: 0; }
+.drift li {
+  display: grid; grid-template-columns: minmax(0, 1fr) 38px auto;
+  gap: 8px; padding: 3px 0; font-size: 12px;
+}
+.drift b { text-align: right; font-variant-numeric: tabular-nums; }
+.drift em { color: var(--text-faint); font-style: normal; }
+.drift--down b { color: var(--over); }
+.drift--up b { color: var(--under); }
+
+.progress-log { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
+.progress-log li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px; padding: 3px 0; font-size: 12px; border-bottom: 1px solid var(--line-soft);
+}
+.progress-log em { color: var(--accent); font-style: normal; font-variant-numeric: tabular-nums; }
+.progress-log b { color: var(--text-faint); font-weight: 400; font-variant-numeric: tabular-nums; }
+
+/* Opaque, not translucent: the banner sits inside the sticky chrome, so anything
+   see-through lets the scrolled page read straight through it. */
+.banner--urgent { border-color: var(--accent-dim); background: #1e3a2b; color: #cfe9d9; }
+
+.hit--wide { width: 100%; }
+
+@media (max-width: 900px) {
+  .career__split { grid-template-columns: minmax(0, 1fr); }
+  .career__side { position: static; }
+  .upgrade { grid-template-columns: minmax(0, 1fr); }
+  .upgrade__buttons { padding-top: 0; }
+  .review__shape { grid-template-columns: minmax(0, 1fr); }
 }
