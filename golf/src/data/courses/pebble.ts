@@ -62,6 +62,14 @@ const holes: HoleSpec[] = [
       { along: 366, lateral: 15, size: 5, kind: 'greenside' },
     ],
     water: [],
+    // From the photograph: this hole runs between the Lodge's cottages and the
+    // Del Monte Forest houses, and there is no water anywhere near it. None is
+    // drawn.
+    scenery: [
+      { kind: 'houses', side: 1, from: 40, to: 378, depth: 120 },
+      { kind: 'houses', side: -1, from: 0, to: 180, depth: 90 },
+      { kind: 'woodland', side: -1, from: 200, to: 378, depth: 80, gap: 10 },
+    ],
     strategy: 'A three hundred and seventy-eight yard opener played out of a chute between the cottages, bending right at the sand to a small green ringed by it. Nobody warms up here; the tee shot has to be straight from the first swing of the day.',
   },
   {
@@ -76,6 +84,10 @@ const holes: HoleSpec[] = [
       { along: 486, lateral: 14, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'woodland', side: -1, from: 40, to: 502, depth: 90 },
+      { kind: 'houses', side: 1, from: 200, to: 502, depth: 80, gap: 8 },
+    ],
     strategy: 'Reachable, and the reward for taking it on is a green sitting beyond a barranca that swallows anything short. Laying up leaves a wedge; going for it leaves either an eagle putt or a drop.',
   },
   {
@@ -91,6 +103,10 @@ const holes: HoleSpec[] = [
       { along: 384, lateral: 13, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'woodland', side: -1, from: 0, to: 390, depth: 90 },
+      { kind: 'woodland', side: 1, from: 100, to: 390, depth: 80 },
+    ],
     strategy: 'The corner is cut over sand and long grass. Take it on and a wedge is left; play out to the right and the approach is blind over the shoulder of the dune.',
   },
   {
@@ -104,6 +120,14 @@ const holes: HoleSpec[] = [
       { along: 322, lateral: 11, size: 4, kind: 'greenside' },
     ],
     water: [],
+    // The first hole on the cliff. Beach then ocean, both of them beyond the
+    // boundary: the hole's own hazards are still the two bunkers and nothing
+    // else.
+    scenery: [
+      { kind: 'beach', side: 1, from: 120, to: 331, depth: 24 },
+      { kind: 'ocean', side: 1, from: 110, to: 331, depth: 180, gap: 24 },
+      { kind: 'woodland', side: -1, from: 0, to: 331, depth: 80 },
+    ],
     strategy: 'Three hundred and thirty-one yards, the shortest par 4 out here, and the first hole that runs along the cliff. The green is tiny and the ocean is right: a long iron off the tee and a wedge is the whole hole.',
   },
   {
@@ -117,6 +141,10 @@ const holes: HoleSpec[] = [
       { along: 186, lateral: 13, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'ocean', side: 1, from: 20, to: 195, depth: 170, gap: 18 },
+      { kind: 'woodland', side: -1, from: 0, to: 195, depth: 80 },
+    ],
     strategy: 'A hundred and ninety-five uphill to a green cut into the hillside above Stillwater Cove. Wind off the water and a shot that has to be flighted: the miss is long, and long is gone.',
   },
   {
@@ -130,6 +158,11 @@ const holes: HoleSpec[] = [
       { along: 500, lateral: -14, size: 6, kind: 'greenside', deep: true },
     ],
     water: [],
+    scenery: [
+      { kind: 'beach', side: 1, from: 280, to: 523, depth: 20 },
+      { kind: 'ocean', side: 1, from: 160, to: 523, depth: 190, gap: 20 },
+      { kind: 'meadow', side: -1, from: 0, to: 523, depth: 70 },
+    ],
     strategy: 'The second shot climbs fifty feet onto the headland with the bay hard on the right the whole way. Get up and the rest of the hole is simple; come up short and the ball rolls back down the face.',
   },
   {
@@ -144,6 +177,13 @@ const holes: HoleSpec[] = [
       { along: 108, lateral: 0, size: 4, kind: 'greenside' },
     ],
     water: [],
+    // A hundred and six yards to a green on a rock, with the Pacific round three
+    // sides of it. All of it is scenery; the hole's trouble is its own sand.
+    scenery: [
+      { kind: 'ocean', side: 0, from: 0, to: 0, depth: 200, gap: 6 },
+      { kind: 'ocean', side: 1, from: 0, to: 106, depth: 170, gap: 4 },
+      { kind: 'ocean', side: -1, from: 30, to: 106, depth: 150, gap: 20 },
+    ],
     strategy: 'A hundred and six yards straight downhill to a green on a rock in the Pacific, with sand on every side of it. A wedge in calm air, a punched 7 iron when it blows.',
   },
   {
@@ -159,6 +199,10 @@ const holes: HoleSpec[] = [
       { along: 420, lateral: 0, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'ocean', side: 1, from: 190, to: 428, depth: 190, gap: 6 },
+      { kind: 'meadow', side: -1, from: 0, to: 428, depth: 70 },
+    ],
     strategy: 'A blind tee shot to the edge of the cliff, and then the second shot: a long iron across a chasm of ocean to a green propped on the far rim. The most demanding approach on the property.',
   },
   {
@@ -172,6 +216,11 @@ const holes: HoleSpec[] = [
       { along: 486, lateral: -14, size: 6, kind: 'greenside', deep: true },
     ],
     water: [],
+    scenery: [
+      { kind: 'beach', side: 1, from: 120, to: 505, depth: 22 },
+      { kind: 'ocean', side: 1, from: 60, to: 505, depth: 190, gap: 22 },
+      { kind: 'meadow', side: -1, from: 0, to: 505, depth: 70 },
+    ],
     strategy: 'Five hundred and five yards as a par 4, running downhill along the cliff with the whole hole tilting toward the ocean on the right. A four here is worth more than a birdie almost anywhere else.',
   },
   {
@@ -185,6 +234,11 @@ const holes: HoleSpec[] = [
       { along: 476, lateral: -13, size: 5, kind: 'greenside', deep: true },
     ],
     water: [],
+    scenery: [
+      { kind: 'beach', side: 1, from: 100, to: 495, depth: 26 },
+      { kind: 'ocean', side: 1, from: 80, to: 495, depth: 185, gap: 26 },
+      { kind: 'houses', side: -1, from: 0, to: 495, depth: 80, gap: 6 },
+    ],
     strategy: 'The same test as the 9th and a little shorter, with the beach itself waiting right of the green. The fairway falls away toward the sea from about two hundred and fifty yards out.',
   },
   {
@@ -198,6 +252,10 @@ const holes: HoleSpec[] = [
       { along: 378, lateral: 13, size: 5, kind: 'greenside', deep: true },
     ],
     water: [],
+    scenery: [
+      { kind: 'woodland', side: -1, from: 0, to: 390, depth: 90 },
+      { kind: 'houses', side: 1, from: 120, to: 390, depth: 80, gap: 8 },
+    ],
     strategy: 'Back inland and uphill, and the relief of a hole with no ocean on it. The green sits above the approach and runs away at the back.',
   },
   {
@@ -212,6 +270,10 @@ const holes: HoleSpec[] = [
       { along: 206, lateral: 0, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'woodland', side: -1, from: 0, to: 202, depth: 80 },
+      { kind: 'woodland', side: 1, from: 0, to: 202, depth: 80 },
+    ],
     strategy: 'Two hundred and two yards to a narrow green set diagonally with sand short, left and right. Anything less than the perfect number leaves a bunker shot to a surface that falls away.',
   },
   {
@@ -225,6 +287,10 @@ const holes: HoleSpec[] = [
       { along: 428, lateral: 14, size: 5, kind: 'greenside', deep: true },
     ],
     water: [],
+    scenery: [
+      { kind: 'woodland', side: 1, from: 0, to: 445, depth: 90 },
+      { kind: 'houses', side: -1, from: 150, to: 445, depth: 80, gap: 8 },
+    ],
     strategy: 'Four hundred and forty-five into the prevailing wind, with sand down the left at the end of the drive and a green that will not hold a long iron.',
   },
   {
@@ -238,6 +304,10 @@ const holes: HoleSpec[] = [
       { along: 556, lateral: 14, size: 6, kind: 'greenside', deep: true },
     ],
     water: [],
+    scenery: [
+      { kind: 'woodland', side: -1, from: 0, to: 580, depth: 100 },
+      { kind: 'houses', side: 1, from: 240, to: 580, depth: 90, gap: 8 },
+    ],
     strategy: 'Five hundred and eighty uphill, bending right, to the most severely pitched green on the course. The third shot has to finish below the hole or the putt is unplayable.',
   },
   {
@@ -251,6 +321,10 @@ const holes: HoleSpec[] = [
       { along: 386, lateral: 13, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'houses', side: -1, from: 0, to: 397, depth: 90 },
+      { kind: 'woodland', side: 1, from: 0, to: 397, depth: 80 },
+    ],
     strategy: 'A tight drive between trees and out of bounds, then a short iron to a green defended on both sides. The tee shot is the hole.',
   },
   {
@@ -264,6 +338,10 @@ const holes: HoleSpec[] = [
       { along: 388, lateral: -13, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'woodland', side: -1, from: 0, to: 403, depth: 100 },
+      { kind: 'woodland', side: 1, from: 100, to: 403, depth: 70 },
+    ],
     strategy: 'The last inland hole, turning left round a stand of cypress with sand at the outside of the corner. Play it as a three-shot par 4 and it is straightforward; try to cut it and it is not.',
   },
   {
@@ -278,6 +356,11 @@ const holes: HoleSpec[] = [
       { along: 214, lateral: -8, size: 5, kind: 'greenside' },
     ],
     water: [],
+    scenery: [
+      { kind: 'ocean', side: 0, from: 0, to: 0, depth: 190, gap: 10 },
+      { kind: 'ocean', side: -1, from: 50, to: 208, depth: 150, gap: 12 },
+      { kind: 'meadow', side: 1, from: 0, to: 208, depth: 70 },
+    ],
     strategy: 'Two hundred and eight yards across the wind to a green shaped like an hourglass, pinched in the middle, with the ocean behind it. Two pins, two completely different shots.',
   },
   {
@@ -293,6 +376,12 @@ const holes: HoleSpec[] = [
     ],
     water: [
       { along: 270, lateral: -70, size: 70, strip: { from: 60, to: 520, side: -1, offset: 26, width: 90 } },
+    ],
+    // Carmel Bay. The playable water down the left is the strip on this hole's
+    // own spec; this band is the rest of the ocean beyond it.
+    scenery: [
+      { kind: 'ocean', side: -1, from: 0, to: 543, depth: 200 },
+      { kind: 'houses', side: 1, from: 120, to: 543, depth: 90, gap: 8 },
     ],
     strategy: 'Five hundred and forty-three yards with Carmel Bay down the entire left side and two trees in the middle of the fairway. The safe line is right, and right brings the bunker and a longer third.',
   },
@@ -439,6 +528,9 @@ const card: HoleSpec[] = holes.map((spec) => {
     ...rebuilt,
     groves: rebuilt.treeZones?.length ? undefined : spec.groves,
     landforms: spec.landforms,
+    // The view is authored on the card, never traced: a photograph of a hole
+    // does not tell you what is past the edge of it.
+    scenery: spec.scenery,
     trees: rebuilt.treeZones?.length ? 0 : spec.trees,
     greenSize: rebuilt.greenShape ? rebuilt.greenSize : spec.greenSize,
     bunkers: rebuilt.bunkers.length ? rebuilt.bunkers : spec.bunkers,

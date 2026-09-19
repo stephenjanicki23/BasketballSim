@@ -499,6 +499,123 @@ function add2(origin: Vec2, along: Vec2, a: number, across: Vec2, l: number): Ve
   return { x: origin.x + along.x * a + across.x * l, y: origin.y + along.y * a + across.y * l };
 }
 
+interface SceneryLayer {
+  /** Little marks — wave crests, canopies, roofs — placed once per hole. */
+  marks: { p: Vec2; a: number; r: number; k: number }[];
+}
+
+const sceneryCache = new Map<string, SceneryLayer>();
+
+function sceneryMarks(hole: HoleGeometry): SceneryLayer {
+  const key = `${hole.course.id}:${hole.spec.number}`;
+  const cached = sceneryCache.get(key);
+  if (cached) return cached;
+  const rng = createRng(`${key}:scenery`);
+  const marks: SceneryLayer['marks'] = [];
+  hole.scenery.forEach((band, index) => {
+    const { minX, minY, maxX, maxY } = band.shape.bounds;
+    const area = (maxX - minX) * (maxY - minY);
+    // Woods and housing want a few big marks; water wants many small ones.
+    const per = band.kind === 'ocean' ? 260 : band.kind === 'beach' ? 900 : 420;
+    const tries = Math.min(900, Math.round(area / per));
+    for (let i = 0; i < tries; i++) {
+      const p = { x: rng.range(minX, maxX), y: rng.range(minY, maxY) };
+      if (!band.shape.contains(p)) continue;
+      marks.push({ p, a: rng.range(0, Math.PI * 2), r: rng.range(0.6, 1.5), k: index });
+    }
+  });
+  const layer = { marks };
+  sceneryCache.set(key, layer);
+  return layer;
+}
+
+/**
+ * The view past the edges of the hole.
+ *
+ * Drawn first, under everything, and never anything else: these shapes are
+ * built outside the out-of-bounds line and the simulation has never heard of
+ * them. Nothing here can be played from, and drawing the sea beside a hole adds
+ * no water to it.
+ */
+function drawScenery(ctx: CanvasRenderingContext2D, options: RenderOptions): void {
+  const { camera, hole } = options;
+  if (!hole.scenery.length) return;
+  const palette = hole.style.palette;
+  const marks = camera.scale > 0.18 ? sceneryMarks(hole).marks : [];
+  hole.scenery.forEach((band, index) => {
+    const outline = band.shape.outline;
+    path(ctx, camera, outline);
+    ctx.fillStyle =
+      band.kind === 'ocean' ? palette.oceanDeep
+      : band.kind === 'beach' ? palette.sand
+      : band.kind === 'woodland' ? palette.treeDark
+      : band.kind === 'houses' ? palette.ob
+      : palette.fescue;
+    ctx.fill();
+
+    // The edge nearest the golf course: surf on a shore, a mown line on a
+    // meadow, nothing much on a wood.
+    if (band.kind === 'ocean' || band.kind === 'beach') {
+      ctx.save();
+      path(ctx, camera, outline);
+      ctx.clip();
+      ctx.strokeStyle = band.kind === 'ocean' ? palette.water : palette.fringe;
+      ctx.lineWidth = Math.min(14, Math.max(2, 4 * camera.scale));
+      ctx.globalAlpha = 0.55;
+      path(ctx, camera, outline);
+      ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    if (!marks.length) return;
+    ctx.save();
+    path(ctx, camera, outline);
+    ctx.clip();
+    for (const mark of marks) {
+      if (mark.k !== index) continue;
+      const p = toScreen(camera, mark.p);
+      if (p.x < -40 || p.x > camera.width + 40 || p.y < -40 || p.y > camera.height + 40) continue;
+      const size = mark.r * camera.scale;
+      if (band.kind === 'ocean') {
+        // Swell: short crests lying across the run of the water.
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.lineWidth = Math.max(0.6, size * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(p.x - size * 5, p.y);
+        ctx.lineTo(p.x + size * 5, p.y);
+        ctx.stroke();
+      } else if (band.kind === 'beach') {
+        ctx.fillStyle = 'rgba(120,100,70,0.16)';
+        ctx.fillRect(p.x, p.y, Math.max(1, size), Math.max(1, size));
+      } else if (band.kind === 'woodland') {
+        ctx.fillStyle = mark.r > 1.1 ? palette.tree : palette.treeDark;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(1.5, size * 4), 0, Math.PI * 2);
+        ctx.fill();
+      } else if (band.kind === 'houses') {
+        // Roofs, square to nothing in particular, the way a hillside estate is.
+        const w = Math.max(2, size * 6);
+        const h = Math.max(2, size * 4);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(mark.a * 0.25);
+        ctx.fillStyle = mark.r > 1.05 ? palette.roof : palette.roofDark;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = palette.fescueDark;
+        ctx.lineWidth = Math.max(0.5, size * 0.45);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + Math.sin(mark.a) * size * 2.5, p.y - Math.cos(mark.a) * size * 2.5);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main draw
 // ---------------------------------------------------------------------------
@@ -511,6 +628,9 @@ export function drawHole(ctx: CanvasRenderingContext2D, options: RenderOptions):
   ctx.clearRect(0, 0, camera.width, camera.height);
   ctx.fillStyle = palette.background;
   ctx.fillRect(0, 0, camera.width, camera.height);
+
+  // --- The view ------------------------------------------------------------
+  drawScenery(ctx, options);
 
   // --- Grass bands, widest first ------------------------------------------
   const bands: [readonly Vec2[], string][] = [

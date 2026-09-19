@@ -397,6 +397,31 @@ export interface GroveSpec {
   canopy?: [number, number];
 }
 
+/** What a band of scenery is made of. */
+export type SceneryKind = 'ocean' | 'beach' | 'woodland' | 'houses' | 'meadow';
+
+/**
+ * A band of scenery beside or beyond a hole.
+ *
+ * This is the view, not the golf course. Scenery is built strictly OUTSIDE the
+ * out-of-bounds line — ground a ball cannot be played from however it got there
+ * — and `terrainAt` never looks at it, the lie grid never contains it and no
+ * shot can finish in it. Drawing the Pacific beside a cliff hole therefore adds
+ * no water to that hole: its hazards are exactly what its spec says they are.
+ */
+export interface SceneryBand {
+  kind: SceneryKind;
+  /** Which side of the line of play: -1 left, 1 right, 0 across the far end. */
+  side: -1 | 0 | 1;
+  /** Yards from the tee along the line of play. Ignored when `side` is 0. */
+  from: number;
+  to: number;
+  /** How deep the band is, in yards. */
+  depth: number;
+  /** Extra yards beyond the boundary before the band starts. */
+  gap?: number;
+}
+
 /**
  * A ridge, hollow, plateau or mound laid over the tee-to-green slope. `rise` is
  * feet (negative digs a hollow), `length` how many yards of the hole it covers,
@@ -472,6 +497,11 @@ export interface HoleSpec {
   /** Out of bounds: housing, a road, the property line. */
   obZones?: { shape: TracedShape }[];
   /**
+   * Scenery: what you can see past the edge of the golf course. Purely
+   * decorative — see `SceneryBand`.
+   */
+  scenery?: SceneryBand[];
+  /**
    * Native grass — fescue, wild meadow, whatever the club calls it. Not rough
    * that has been left alone: a separate thing, traced where the photograph
    * shows it, played out of like deep grass and drawn in its own colour.
@@ -538,6 +568,11 @@ export interface CourseStyle {
     treeDark: string;
     background: string;
     ob: string;
+    /** Deep water, for the sea beyond a cliff. Scenery only. */
+    oceanDeep: string;
+    /** Roofs, for the houses a course is routed between. Scenery only. */
+    roof: string;
+    roofDark: string;
   };
   /** What lies outside the corridor. */
   surround: 'deepRough' | 'waste' | 'recovery';
@@ -639,6 +674,11 @@ export interface HoleGeometry {
   fescue: { shape: Shape }[];
   /** Cart paths, as thin polygons. Firm, fast and legal to play from. */
   paths: { shape: Shape }[];
+  /**
+   * The view past the edges of the hole. Decoration: built outside the
+   * out-of-bounds line, never consulted by terrainAt, never in the lie grid.
+   */
+  scenery: { kind: SceneryKind; shape: Shape }[];
   trees: { position: Vec2; radius: number; shade: number }[];
   /** Elevation in feet, relative to the tee — interpolated, and what callers use. */
   elevationAt: (p: Vec2) => number;

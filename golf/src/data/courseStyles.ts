@@ -35,6 +35,9 @@ export const COURSE_STYLES: Record<CourseStyleId, CourseStyle> = {
       treeDark: '#3b5230',
       background: '#54693a',
       ob: '#3f5230',
+      oceanDeep: '#1d4c6b',
+      roof: '#9a7f6d',
+      roofDark: '#6f5a4c',
     },
   },
   desert: {
@@ -65,6 +68,9 @@ export const COURSE_STYLES: Record<CourseStyleId, CourseStyle> = {
       treeDark: '#44603a',
       background: '#b08e62',
       ob: '#9a7a52',
+      oceanDeep: '#1f5170',
+      roof: '#b39271',
+      roofDark: '#8a6b50',
     },
   },
   parkland: {
@@ -95,6 +101,9 @@ export const COURSE_STYLES: Record<CourseStyleId, CourseStyle> = {
       treeDark: '#20431f',
       background: '#36572e',
       ob: '#2c4a25',
+      oceanDeep: '#1a4258',
+      roof: '#8d7a68',
+      roofDark: '#635447',
     },
   },
 };

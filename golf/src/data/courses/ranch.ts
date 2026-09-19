@@ -1341,6 +1341,9 @@ const card: HoleSpec[] = holes.map((spec) => {
     ...rebuilt,
     groves: rebuilt.treeZones?.length ? undefined : spec.groves,
     landforms: spec.landforms,
+    // The view is authored on the card, never traced: a photograph of a hole
+    // does not tell you what is past the edge of it.
+    scenery: spec.scenery,
     // Where the photograph says which trees there are, that is all the trees
     // there are. The procedural scatter plants along the corridor's own edge,
     // which on a traced hole means timber the picture does not show — and on a

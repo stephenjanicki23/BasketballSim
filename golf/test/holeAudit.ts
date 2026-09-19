@@ -18,7 +18,8 @@
 import { COURSES, COURSE_BY_ID } from '../src/data/courses';
 import { buildHole, terrainAt } from '../src/simulation/courseEngine';
 import { dist, pointAlongPolyline, type Vec2 } from '../src/simulation/geometry';
-import type { Course, HoleGeometry } from '../src/simulation/types';
+import { createRng } from '../src/simulation/rng';
+import type { Course, HoleGeometry, LieType } from '../src/simulation/types';
 
 let failures = 0;
 const fail = (what: string, detail: string): void => {
@@ -71,6 +72,36 @@ function audit(course: Course): void {
     const limit = spec.par === 3 ? hole.centerlineLength * 0.8 : 60;
     const blocked = blockedAt(hole, limit);
     if (blocked !== null) fail(`hole ${spec.number} has a tree in the line of play`, `${blocked} yards from the tee`);
+
+    // Scenery is the view, not the course. It never reaches terrainAt, so it
+    // cannot change a lie — but it must not be DRAWN over ground anyone plays
+    // from either, or the sea beside a cliff hole looks like a hazard on it.
+    // Everything beyond the corridor's last band is the surround or out of
+    // bounds; nothing mown, and no hazard, may have scenery on it.
+    // What counts as off the course: out of bounds, the surround beyond the last
+    // mown band, and under a tree out there — which is the wood being drawn.
+    // Everything else is ground somebody plays a shot from, and the view has no
+    // business on it.
+    const OFF_COURSE = new Set<LieType>([
+      'ob', 'recovery', course.style === 'desert' ? 'waste' : 'deepRough',
+    ]);
+    for (const band of hole.scenery) {
+      const { minX, minY, maxX, maxY } = band.shape.bounds;
+      const inside: Vec2[] = [];
+      const rng = createRng(`${course.id}:${spec.number}:scenery-audit`);
+      for (let i = 0; i < 1200 && inside.length < 200; i++) {
+        const p = { x: rng.range(minX, maxX), y: rng.range(minY, maxY) };
+        if (band.shape.contains(p)) inside.push(p);
+      }
+      const onCourse = inside.filter((p) => !OFF_COURSE.has(terrainAt(hole, p).lie));
+      if (onCourse.length > 0) {
+        const worst = terrainAt(hole, onCourse[0]).lie;
+        fail(
+          `hole ${spec.number} has ${band.kind} scenery on ground you play from`,
+          `${onCourse.length} of ${inside.length} sampled points are ${worst} — scenery belongs past the last band`,
+        );
+      }
+    }
 
     // The tee itself has to be ground you would tee up on.
     const teeLie = terrainAt(hole, hole.tee).lie;

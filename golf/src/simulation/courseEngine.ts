@@ -333,6 +333,72 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
 
   // --- Authored out of bounds and cart paths --------------------------------
   const ob = (spec.obZones ?? []).map((zone) => ({ shape: shapeFromPolygon(zone.shape) }));
+
+  // --- Scenery -------------------------------------------------------------
+  // The view, not the golf course. Every band is pushed out past the
+  // out-of-bounds line before it is built, so it sits on ground a ball could
+  // not be played from however it got there. Nothing below is ever consulted by
+  // terrainAt, and none of it reaches the lie grid: drawing the sea beside a
+  // cliff hole adds no water to that hole.
+  const sceneryEdge = (from: number, to: number): number => {
+    const bands = style.bands;
+    const rough = bands.firstCut + bands.lightRough + bands.heavyRough + bands.deepRough;
+    let widest = 0;
+    const steps = Math.max(2, Math.round((to - from) / 20));
+    for (let i = 0; i <= steps; i++) {
+      widest = Math.max(widest, halfWidth(clamp(lerp(from, to, i / steps), 0, length)));
+    }
+    // Half way across the surround. Beyond every mown cut and every hazard, but
+    // near enough that the view is in the picture rather than over the horizon:
+    // scenery you cannot see is not scenery.
+    return widest + rough + (course.surroundWidth ?? style.surroundWidth) * 0.5 + 4;
+  };
+  // A hole with its own water down one side — the 18th at Pebble — needs the
+  // view pushed out past that too, or the bay and the ocean overlap.
+  const waterReach = (side: -1 | 1): number => {
+    let reach = 0;
+    for (const w of water) {
+      for (const p of w.shape.outline) {
+        const proj = projectToPolyline(centerline, p);
+        if (Math.sign(proj.lateral) === side) reach = Math.max(reach, Math.abs(proj.lateral));
+      }
+    }
+    return reach;
+  };
+  // Only the inner strip of a band is allowed to widen the hole's bounds: the
+  // camera frames those, and a two-hundred-yard ocean would push the whole hole
+  // into the distance. Forty yards is enough to see the water without losing
+  // the golf.
+  const SCENERY_IN_FRAME = 55;
+  const scenery = (spec.scenery ?? []).map((band, index) => {
+    const seed = `${course.id}:${spec.number}:scenery:${index}`;
+    if (band.side === 0) {
+      // A cap across the far end: the sea behind a green, read straight off the
+      // final tangent rather than wrapped along the centreline.
+      const near = greenCenter;
+      const out = finalTangent;
+      const across = perp(finalTangent);
+      // Far enough behind the green that the last band of rough has run out:
+      // the green's own apron reaches a long way, and scenery drawn inside it
+      // would be scenery you could putt from.
+      const bands = style.bands;
+      const rough = bands.firstCut + bands.lightRough + bands.heavyRough + bands.deepRough;
+      const start = spec.greenSize + rough * 2.2 + 8 + (band.gap ?? 0);
+      const half = sceneryEdge(length * 0.9, length) + spec.greenSize;
+      const corner = (a: number, l: number) => add(near, add(scale(out, a), scale(across, l)));
+      const cap = (depth: number) => shapeFromPolygon([
+        corner(start, -half), corner(start, half),
+        corner(start + depth, half), corner(start + depth, -half),
+      ]);
+      return { kind: band.kind, shape: cap(band.depth), near: cap(Math.min(band.depth, SCENERY_IN_FRAME)) };
+    }
+    const side: -1 | 1 = band.side === -1 ? -1 : 1;
+    const offset = Math.max(sceneryEdge(band.from, band.to), waterReach(side) + 5) + (band.gap ?? 0);
+    const strip = (depth: number) => shapeFromPolygon(
+      stripPolygon(centerline, clamp(band.from, 0, length), clamp(band.to, 0, length), side, offset, depth, seed, 0.06),
+    );
+    return { kind: band.kind, shape: strip(band.depth), near: strip(Math.min(band.depth, SCENERY_IN_FRAME)) };
+  });
   const paths = (spec.cartPaths ?? []).map((path) => ({
     shape: shapeFromPolygon(thickenLine(path.line, (path.width ?? 3) / 2)),
   }));
@@ -495,6 +561,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
   bounds = unionBounds(bounds, expandBounds(green.bounds, green.radius * 1.6));
   for (const area of [...water, ...waste, ...ob, ...paths, ...fescue]) bounds = unionBounds(bounds, expandBounds(area.shape.bounds, 8));
   for (const t of trees) bounds = unionBounds(bounds, expandBounds(boundsOf([t.position]), t.radius + 4));
+  for (const band of scenery) bounds = unionBounds(bounds, band.near.bounds);
 
   const built: HoleGeometry = {
     spec,
@@ -514,6 +581,7 @@ export function buildHole(course: Course, spec: HoleSpec): HoleGeometry {
     waste,
     ob,
     fescue,
+    scenery: scenery.map(({ kind, shape }) => ({ kind, shape })),
     paths,
     trees,
     exactElevationAt: elevationAt,
@@ -740,8 +808,18 @@ export function terrainAt(hole: HoleGeometry, p: Vec2, options?: { onTee?: boole
     bands.firstCut + bands.lightRough + bands.heavyRough + bands.deepRough,
   ];
   // Behind the tee or long past the green there is no mown grass to speak of.
-  const outsidePlay = proj.along <= 1 || proj.along >= hole.centerlineLength - 1;
-  const shift = outsidePlay ? Math.max(0, Math.min(24, Math.abs(proj.along <= 1 ? -proj.along : proj.along - hole.centerlineLength))) : 0;
+  // projectToPolyline clamps `along` to the line, so how far past the end a
+  // point actually lies has to be measured against the end's own tangent —
+  // without that the corridor ran on for ever and a ball two hundred yards
+  // through the green sat in the first cut.
+  const atEnd = proj.along >= hole.centerlineLength - 1;
+  const outsidePlay = proj.along <= 1 || atEnd;
+  let shift = 0;
+  if (outsidePlay) {
+    const end = pointAlongPolyline(hole.centerline, atEnd ? hole.centerlineLength : 0);
+    const over = (p.x - end.point.x) * end.tangent.x + (p.y - end.point.y) * end.tangent.y;
+    shift = Math.max(0, Math.min(24, atEnd ? over : -over));
+  }
   // A green complex has its own apron: collar, then greenside rough that gets
   // deeper the further you are from the putting surface. Without this, the
   // fairway has already tapered to nothing by the green and every missed green
