@@ -20,8 +20,8 @@ import { ROUNDS, recordRound, type Tournament } from '../simulation/tournamentEn
 import { clearSave, hasSave, loadUniverse, saveUniverse } from '../simulation/persistence';
 import {
   type PlaySession, conditionsForSession, createSession, hit, nextHole, nudgeAim,
-  nudgeDistance, puttWith, selectClub, selectShotType, setTarget, settle, standingFor, takeCaddieLine,
-  toPlayerRound,
+  nudgeDistance, puttWith, restoreSession, selectClub, selectShotType, setTarget, settle, standingFor,
+  simulateRestOfRound, takeCaddieLine, toPlayerRound, toSavedSession,
 } from '../game/session';
 import { conditionsFor, generateWeather } from '../simulation/weatherEngine';
 import { useCareerState, type CareerState } from './useCareer';
@@ -64,7 +64,12 @@ interface StoreValue {
 
   startPractice: (courseId: string, hole: number | null) => void;
   startTournamentRound: () => void;
+  /** Step away from the round. It stays saved and resumes where it was. */
+  leaveSession: () => void;
+  /** Throw a practice round away. Refused for a tournament round. */
   abandonSession: () => void;
+  /** Keep the holes already played and let the caddie finish the rest. */
+  simulateRestOfSessionRound: () => void;
   finishSessionRound: () => void;
 
   aim: (point: Vec2) => void;
@@ -131,6 +136,37 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
    */
   const careerRef = useRef<CareerState | null>(null);
 
+  /**
+   * Write the universe out now, rather than in six hundred milliseconds.
+   *
+   * The debounce below is right for the fifty saves a simulated season
+   * generates and wrong for a shot: between resolving a drive and drawing it,
+   * the outcome is known to the program and not yet on disk, and a reload in
+   * that window is a free re-try. `localStorage.setItem` is synchronous, so
+   * calling this before the ball is drawn moving closes the window entirely.
+   *
+   * Against the account server the write is a request rather than an
+   * assignment, so a player who kills the tab inside the round trip can still
+   * lose the shot. Saving locally is not an option there — the career's universe
+   * lives on the server — so the honest position is that the remote window is
+   * one request long, and the local one does not exist.
+   */
+  const commitNow = useCallback(() => {
+    setRevision((value) => value + 1);
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (careerRef.current?.career) {
+      void careerRef.current.saveCareerUniverse();
+      setSavedGameExists(true);
+      return;
+    }
+    const result = saveUniverse(universeRef.current);
+    setSavedGameExists(result.ok);
+    if (!result.ok) setMessage('Could not save — browser storage is unavailable or full.');
+  }, []);
+
   const commit = useCallback(() => {
     setRevision((value) => value + 1);
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
@@ -167,12 +203,30 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   }, [revision, career.career?.id]);
 
   /** Run something slow without freezing the first paint of the busy indicator. */
+  /**
+   * A tournament round you started has to be finished before the tour moves on.
+   *
+   * Without this the whole exercise is decorative: leave a round three over
+   * after five holes, simulate the event, and the simulation plays those five
+   * holes again for you. That is a do-over with a button on it — worse than the
+   * reload, because it looks sanctioned.
+   */
+  const roundInHand = (): boolean => {
+    const saved = sessionRef.current ?? universeRef.current.session;
+    if (!saved || saved.mode !== 'tournament') return false;
+    setMessage(
+      'You have a tournament round in progress. Finish it, or let the caddie play the rest of it — the holes you played stand either way.',
+    );
+    return true;
+  };
+
   const runBusy = useCallback(
     (label: string, work: () => void) => {
       if (careerRef.current?.career?.offseasonOpen) {
         setMessage('Spend your XP in the offseason before the new season starts.');
         return;
       }
+      if (roundInHand()) return;
       setBusy(label);
       window.setTimeout(() => {
         try {
@@ -228,6 +282,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
    * the news wire move while it runs instead of the window going grey.
    */
   const simulateRestOfSeason = useCallback(() => {
+    if (roundInHand()) return;
     const step = () => {
       const universe = universeRef.current;
       if (seasonComplete(universe)) {
@@ -262,9 +317,102 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
 
   // --- Playing -------------------------------------------------------------
 
+  /**
+   * The live session, mirrored into a ref.
+   *
+   * The updater form of `setSession` cannot be used for anything that has to
+   * touch the universe as well, because React is free to call an updater twice
+   * and a save is not a pure function. Reading the current round from here
+   * instead keeps the two writes — React state and the save file — in one place
+   * and in one order.
+   */
+  const sessionRef = useRef<PlaySession | null>(null);
+  sessionRef.current = session;
+
+  /**
+   * Move the round on, and put it in the save file.
+   *
+   * `flush` is the whole anti-reload mechanism, and it is deliberately not on by
+   * default: nudging the aim a yard left does not need a megabyte written to
+   * disk, and resolving a shot does — before the ball is drawn moving, so the
+   * outcome is never knowable and unrecorded at the same time.
+   */
+  const applySession = useCallback(
+    (next: PlaySession | null, flush = false) => {
+      sessionRef.current = next;
+      setSession(next);
+      universeRef.current.session = next ? toSavedSession(next) : null;
+      if (flush) commitNow();
+    },
+    [commitNow],
+  );
+
+  const withGolfer = useCallback(
+    (update: (session: PlaySession, player: Golfer) => PlaySession, flush = false) => {
+      const current = sessionRef.current;
+      if (!current) return;
+      const player = universeRef.current.golfers.find((g) => g.id === current.golferId);
+      if (!player) return;
+      applySession(update(current, player), flush);
+    },
+    [applySession],
+  );
+
+  // Aiming changes nothing that can be gamed by reloading, so they update the
+  // snapshot in memory and leave the write to the ordinary debounce.
+
+  /**
+   * Pick a saved round back up.
+   *
+   * Restoring is not simply reading the object back: a round saved while the ball
+   * was in the air comes back as a shot that has already happened, and
+   * `restoreSession` settles it rather than offering it again.
+   */
+  const resumeSavedRound = useCallback(
+    (navigate = true): boolean => {
+      const universe = universeRef.current;
+      const saved = universe.session;
+      if (!saved) return false;
+      const player = universe.golfers.find((g) => g.id === saved.golferId);
+      if (!player || !COURSE_BY_ID[saved.courseId]) {
+        // The golfer retired, or the venue is gone. Nothing to resume into.
+        universe.session = null;
+        commitNow();
+        return false;
+      }
+      applySession(restoreSession(saved, player), true);
+      if (navigate) setScreen('play');
+      return true;
+    },
+    [applySession, commitNow],
+  );
+
+  /**
+   * Put a saved round back in hand when the game opens.
+   *
+   * Without navigating: being dropped onto the course the instant the page loads
+   * is startling, and the round announcing itself on the home screen and in the
+   * Play tab says the same thing more politely. What matters is that the round is
+   * *live* again rather than waiting to be re-started — the shots are already
+   * played either way.
+   *
+   * It runs again when a career signs in, because that swaps the whole universe
+   * for the account's own, and its round is a different round.
+   */
+  useEffect(() => {
+    if (universeRef.current.session && !sessionRef.current) resumeSavedRound(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [career.career?.id, career.starting]);
+
   const startPractice = useCallback(
     (courseId: string, hole: number | null) => {
       const universe = universeRef.current;
+      // A tournament round has to be dealt with before anything else is played.
+      if (roundInHand()) return;
+      if (universe.session) {
+        resumeSavedRound();
+        return;
+      }
       const chosen = universe.userGolferId ?? universe.golfers[0].id;
       const player = universe.golfers.find((g) => g.id === chosen)!;
       const course = COURSE_BY_ID[courseId];
@@ -272,7 +420,9 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       // way to think the game is easy: the tour plays in whatever turns up.
       const seed = `practice:${Date.now()}`;
       const conditions = conditionsFor(generateWeather(course, createRng(seed)), seed);
-      setSession(
+      // Saved from the first tee, not from the first shot: a round that only
+      // becomes real once you have hit one is a round you can restart for free.
+      applySession(
         createSession({
           mode: 'practice',
           golfer: player,
@@ -282,10 +432,11 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
           conditions,
           seed: `practice:${player.id}:${courseId}:${hole ?? 'all'}:${Date.now()}`,
         }),
+        true,
       );
       setScreen('play');
     },
-    [],
+    [applySession, resumeSavedRound],
   );
 
   const startTournamentRound = useCallback(() => {
@@ -294,6 +445,17 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
       return;
     }
     const universe = universeRef.current;
+    // A tournament round already under way is picked up where it was, never
+    // started again. This is the other half of saving every shot: persisting the
+    // round is no use if the player can ask for a fresh one off the first tee.
+    //
+    // A saved *practice* round is a different matter — there is nothing at stake
+    // in it and nothing to gain by dropping it — so it gives way rather than
+    // standing in the way of a tournament.
+    if (universe.session?.mode === 'tournament') {
+      resumeSavedRound();
+      return;
+    }
     const tournament = currentTournament(universe);
     const id = universe.userGolferId;
     if (!tournament || !id) return;
@@ -307,7 +469,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     }
     const conditions = conditionsForSession(tournament, round);
     player.fatigue = Math.max(0, player.fatigue - 26);
-    setSession(
+    applySession(
       createSession({
         mode: 'tournament',
         golfer: player,
@@ -317,51 +479,81 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
         seed: `${tournament.id}:${round}:${player.id}`,
         standing: standingFor(tournament, id, tournament.field.length),
       }),
+      true,
     );
     setScreen('play');
-  }, []);
+  }, [applySession, resumeSavedRound]);
 
-  const abandonSession = useCallback(() => {
+  /**
+   * Step away from the round without ending it. It stays in the save file and
+   * comes back exactly as it was, which is the point.
+   */
+  const leaveSession = useCallback(() => {
+    commitNow();
     setSession(null);
+    sessionRef.current = null;
     setScreen('home');
-  }, []);
+  }, [commitNow]);
+
+  /**
+   * Throw the round away.
+   *
+   * Allowed for practice, where there is nothing at stake and a half-finished
+   * round is just clutter. Refused for a tournament round, because "abandon" and
+   * "start again" would be the same button and the whole exercise would be
+   * pointless.
+   */
+  const abandonSession = useCallback(() => {
+    const current = sessionRef.current ?? universeRef.current.session;
+    if (current && current.mode === 'tournament') {
+      setMessage('A tournament round cannot be abandoned — it is saved shot by shot. Finish it, or leave and come back to it.');
+      return;
+    }
+    applySession(null, true);
+    setScreen('home');
+  }, [applySession]);
+
+  /**
+   * Let the caddie finish the round.
+   *
+   * The counterpart to refusing to simulate past a round in progress: the holes
+   * already played stand shot for shot, and the rest are played by the engine
+   * that plays everybody else. Nothing about it is an advantage, which is what
+   * makes it a safe way out rather than a loophole.
+   */
+  const simulateRestOfSessionRound = useCallback(() => {
+    const current = sessionRef.current;
+    if (!current || current.status === 'roundComplete') return;
+    const player = universeRef.current.golfers.find((g) => g.id === current.golferId);
+    if (!player) return;
+    applySession(simulateRestOfRound(current, player), true);
+  }, [applySession]);
 
   /** Write the played round into the tournament and simulate the rest of the field. */
   const finishSessionRound = useCallback(() => {
-    const current = session;
+    const current = sessionRef.current;
     if (!current) return;
     if (current.mode !== 'tournament') {
-      setSession(null);
+      applySession(null, true);
       setScreen('home');
       return;
     }
     const universe = universeRef.current;
     const tournament = currentTournament(universe);
     if (!tournament) {
-      setSession(null);
+      applySession(null, true);
       return;
     }
     runBusy(`Scoring round ${current.round} of the ${tournament.name}…`, () => {
       recordRound(tournament, current.golferId, current.round, toPlayerRound(current));
       simulateNextRound(universe, { skipGolferId: current.golferId, fast: true });
     });
-    setSession(null);
+    // The round is on the card now, so the saved copy has done its job.
+    applySession(null, true);
     setScreen('tournament');
-  }, [session, runBusy]);
+  }, [runBusy, applySession]);
 
   // --- Session actions -----------------------------------------------------
-
-  const withGolfer = useCallback(
-    (update: (session: PlaySession, player: Golfer) => PlaySession) => {
-      setSession((current) => {
-        if (!current) return current;
-        const player = universeRef.current.golfers.find((g) => g.id === current.golferId);
-        if (!player) return current;
-        return update(current, player);
-      });
-    },
-    [],
-  );
 
   const aim = useCallback((point: Vec2) => withGolfer((s, g) => setTarget(s, g, point)), [withGolfer]);
   const pickClub = useCallback((club: ClubId) => withGolfer((s, g) => selectClub(s, g, club)), [withGolfer]);
@@ -370,24 +562,29 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
   const nudgeLength = useCallback((yards: number) => withGolfer((s) => nudgeDistance(s, yards)), [withGolfer]);
   const caddieLine = useCallback(() => withGolfer((s, g) => takeCaddieLine(s, g)), [withGolfer]);
 
+  /**
+   * Play the shot, and write it down before anybody sees where it went.
+   *
+   * `hit` resolves the whole thing — the ball has moved, the lie is set and the
+   * stroke is on the card — and only then hands back a session marked
+   * `animating` for the UI to draw. So the save that follows it here happens
+   * before the first frame of ball flight, which is the property that makes
+   * reloading useless as a way of un-hitting a drive.
+   */
   const playShot = useCallback(() => {
-    withGolfer((s, g) => {
-      if (s.status !== 'aiming') return s;
-      return hit(s, g).session;
-    });
+    withGolfer((s, g) => (s.status === 'aiming' ? hit(s, g).session : s), true);
   }, [withGolfer]);
 
   const playPutt = useCallback(
     (intent: PuttIntentId) => {
-      withGolfer((s, g) => (s.status === 'aiming' ? puttWith(s, g, intent).session : s));
+      withGolfer((s, g) => (s.status === 'aiming' ? puttWith(s, g, intent).session : s), true);
     },
     [withGolfer],
   );
 
   const completeAnimation = useCallback(() => {
-    withGolfer((s, g) => (s.status === 'animating' ? settle(s, g) : s));
-    commit();
-  }, [withGolfer, commit]);
+    withGolfer((s, g) => (s.status === 'animating' ? settle(s, g) : s), true);
+  }, [withGolfer]);
 
   const advanceHole = useCallback(() => {
     withGolfer((s, g) => {
@@ -398,7 +595,7 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
           ? standingFor(tournament, s.golferId, tournament.field.length)
           : undefined;
       return nextHole(s, g, standing);
-    });
+    }, true);
   }, [withGolfer]);
 
   // --- Housekeeping --------------------------------------------------------
@@ -447,7 +644,9 @@ export function StoreProvider({ children }: { children: ReactNode }): JSX.Elemen
     rollSeason,
     startPractice,
     startTournamentRound,
+    leaveSession,
     abandonSession,
+    simulateRestOfSessionRound,
     finishSessionRound,
     aim,
     pickClub,

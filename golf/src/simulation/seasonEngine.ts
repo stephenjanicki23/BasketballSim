@@ -28,6 +28,7 @@ import { developGolfer, type DevelopmentNote } from './developmentEngine';
 import { previewNews, seasonNews, tournamentNews, type NewsItem } from './newsEngine';
 import { currentAbility, emptySeason, scoringAverage } from './golferEngine';
 import { recordedEventFor, seasonReportFor, type RecordedEvent, type SeasonReport } from '../career/universe';
+import type { SavedSession } from '../game/session';
 import type { Golfer, SeasonRecord } from './types';
 
 export const UNIVERSE_VERSION = 5;
@@ -75,6 +76,20 @@ export interface Universe {
   /** Set when a season rolls over with a created golfer on tour; drained by the store. */
   careerSeasonReport: SeasonReport | null;
 
+  /**
+   * The round being played by hand, shot by shot, if there is one.
+   *
+   * It lives in the universe rather than in React state for one reason: a shot
+   * has to be on disk before the player can see where the ball finished. A round
+   * held only in memory can be thrown away by reloading the page, which turns a
+   * bad drive into a free re-try — and the whole point of playing your own shots
+   * is that you have to live with them.
+   *
+   * Written the instant `hit` returns and before the ball is drawn moving, so
+   * there is no window in which the outcome is known and unrecorded.
+   */
+  session: SavedSession | null;
+
   /** Bumped whenever anything changes, so React knows to re-render. */
   revision: number;
 }
@@ -113,6 +128,7 @@ export function createUniverse(seed = 'golf-universe'): Universe {
     createdGolferId: null,
     careerEvents: [],
     careerSeasonReport: null,
+    session: null,
     revision: 1,
   };
   universe.news.unshift(previewNews(schedule[0], golferMap(universe)));

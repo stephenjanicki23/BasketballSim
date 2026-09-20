@@ -129,7 +129,7 @@ await step('whole-hole view and zones', async () => {
 });
 
 await step('leave the round', async () => {
-  const leave = page.getByRole('button', { name: 'Leave the round' });
+  const leave = page.getByRole('button', { name: /Save and leave/ });
   if (await leave.isVisible().catch(() => false)) await leave.click();
   else await page.getByRole('button', { name: 'Home', exact: true }).first().click();
 });
@@ -141,7 +141,14 @@ await step('play a tournament round and post it', async () => {
     await play.click();
     await page.waitForSelector('.course-canvas');
     await page.screenshot({ path: 'dist/smoke-tournament.png' });
-    await page.getByRole('button', { name: 'Leave the round' }).click();
+    // Every shot of a tournament round is saved, so the tour will not move on
+    // until it is finished. Hand the rest to the caddie rather than walking away
+    // from it, which is what a player would have to do too.
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: /Let the caddie finish/ }).click();
+    await page.waitForTimeout(1500);
+    await page.getByRole('button', { name: /Post the score/ }).click();
+    await page.waitForTimeout(1500);
   }
 });
 

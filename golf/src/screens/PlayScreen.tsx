@@ -13,7 +13,7 @@ import { Panel, Stat, toPar, toParClass, yards } from '../components/ui';
 import { useStore } from '../state/store';
 import { COURSE_BY_ID } from '../data/courses';
 import { LIES } from '../simulation/config';
-import { currentPlan, holesPlayed, ordinal, roundToPar, scoreName, sessionHole } from '../game/session';
+import { allShots, currentPlan, holesPlayed, ordinal, roundToPar, scoreName, sessionHole } from '../game/session';
 import { choosePuttIntent } from '../simulation/puttingEngine';
 import { sessionContext } from '../game/session';
 import { describeWeather } from '../simulation/weatherEngine';
@@ -29,7 +29,8 @@ export function PlayScreen(): JSX.Element {
   const store = useStore();
   const {
     session, golfer: lookup, zones, playShot, playPutt, completeAnimation, advanceHole,
-    finishSessionRound, abandonSession, aim, openProfile, caddieLine, pickClub, pickShotType,
+    finishSessionRound, leaveSession, abandonSession, simulateRestOfSessionRound,
+    aim, openProfile, caddieLine, pickClub, pickShotType,
   } = store;
 
   // On a phone the panels are a drawer rather than a scroll: the course fills
@@ -135,6 +136,7 @@ export function PlayScreen(): JSX.Element {
   const toPinYards = dist(session.ball, hole.pin);
   const lie = LIES[session.lie];
   const putting = session.lie === 'green';
+  const ledger = allShots(session);
   const par = hole.spec.par;
   const holeToPar = session.strokesThisHole > 0 ? session.strokesThisHole - par : 0;
 
@@ -254,6 +256,29 @@ export function PlayScreen(): JSX.Element {
           </div>
         )}
 
+        {/*
+          * The round's ledger. Every shot, in order, kept across holes and kept
+          * across a reload — which is the whole point of it existing, so it is
+          * worth being able to look at rather than only trusting.
+          */}
+        <details className="roundcard">
+          <summary>
+            Round card — {ledger.length} shot{ledger.length === 1 ? '' : 's'} played and saved
+          </summary>
+          <ol className="roundcard__list">
+            {[...ledger].reverse().map((shot, index) => (
+              <li key={`${shot.hole}-${shot.stroke}-${index}`}>
+                <span className="roundcard__hole">{shot.hole}</span>
+                <span className="roundcard__stroke">{shot.stroke}</span>
+                <span className="roundcard__club">{shot.shotType === 'putt' ? 'Putter' : shot.club}</span>
+                <span className="roundcard__result">{shot.quality}</span>
+                <span className="roundcard__lie">{shot.holed ? 'in the hole' : LIES[shot.lieAfter].short}</span>
+              </li>
+            ))}
+            {ledger.length === 0 && <li className="roundcard__empty">Nothing played yet.</li>}
+          </ol>
+        </details>
+
         <div className="play__log">
           {session.log.length === 0 ? (
             <p className="empty">
@@ -286,9 +311,35 @@ export function PlayScreen(): JSX.Element {
         ) : (
           <ShotControls session={session} golfer={golfer} plan={plan.plan} />
         )}
-        <button type="button" className="ghost ghost--wide" onClick={abandonSession}>
-          Leave the round
+        {/*
+          * Leaving is not quitting. Every shot is already in the save file, so
+          * walking away and coming back puts the ball exactly where it finished —
+          * and the wording says so, because a button labelled "leave" that
+          * silently binned a 3-under round would be worse than the exploit it is
+          * here to close.
+          */}
+        <button type="button" className="ghost ghost--wide" onClick={leaveSession}>
+          Save and leave — the round resumes where it is
         </button>
+        {session.mode === 'practice' ? (
+          <button type="button" className="ghost ghost--wide" onClick={abandonSession}>
+            Abandon this practice round
+          </button>
+        ) : (
+          session.status !== 'roundComplete' && (
+            <button
+              type="button"
+              className="ghost ghost--wide"
+              onClick={() => {
+                if (window.confirm('Let the caddie play the rest of the round? The holes you have played already stand.')) {
+                  simulateRestOfSessionRound();
+                }
+              }}
+            >
+              Let the caddie finish the round
+            </button>
+          )
+        )}
       </aside>
     </div>
   );

@@ -77,6 +77,11 @@ export function parseUniverse(raw: string): Universe | null {
     if (parsed.createdGolferId === undefined) parsed.createdGolferId = null;
     if (!Array.isArray(parsed.careerEvents)) parsed.careerEvents = [];
     if (parsed.careerSeasonReport === undefined) parsed.careerSeasonReport = null;
+    if (parsed.session === undefined) parsed.session = null;
+    // A saved round is only meaningful on a course that still exists. One saved
+    // against a venue that has since left the schedule is dropped rather than
+    // restored into a course lookup that will return undefined.
+    if (parsed.session && !parsed.session.courseId) parsed.session = null;
     // Season counters added at the same time. An older save has no value for
     // these, and `undefined++` is NaN, which would quietly poison a scoring
     // average rather than fail — so fill them in rather than trusting the shape.

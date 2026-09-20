@@ -238,6 +238,64 @@ and signature ratings — and the rest are generated onto the same attribute
 system, weighted towards the middle of the tour, because even the last card on
 the money list belongs to somebody who shoots 72 for a living.
 
+## Every shot is saved, so you have to live with it
+
+A round played shot by shot used to exist only in memory. Hit a drive out of
+bounds, reload the page, and the round was gone — which meant you could start it
+again and play that tee shot differently. The whole point of hitting your own
+shots is that you cannot do that.
+
+So the round in hand lives in the save file, and the moment that matters is not
+the end of the hole but the instant the shot resolves. `hit` does all of the work
+before it hands anything back to the screen: the ball has moved, the lie is set
+and the stroke is on the card, and only then is the session marked `animating`
+for the UI to draw. The save happens *there*, before the first frame of ball
+flight — so there is no window in which the program knows where the ball finished
+and the disk does not. `localStorage.setItem` is synchronous, so for the browser
+backend that window is exactly zero long. Against the account server it is one
+request long, which is the honest position rather than a claim of zero.
+
+`node tools/shotSaveTest.mjs` proves it rather than asserting it: it plays real
+shots, reads the save file while the ball is still in the air, reloads the page,
+and checks that the round comes back with the same shots, the same hole and the
+ball on the same blade of grass.
+
+### The round card
+
+`shots` on a session is the hole in hand and is cleared at each tee, which is
+right for the panel that draws it and useless as a record. So there is a second,
+round-long ledger that is never cleared — every shot, with the hole it was played
+on — and it is on the play screen under **Round card**. The holes the caddie
+plays go into it too, marked as his, because "every shot is saved" would be a
+half-truth otherwise.
+
+### The two ways round it, and why neither works any more
+
+Saving the round is no use on its own; both of the ways around it had to close as
+well, and each needed something in return.
+
+**Starting again.** A tournament round already under way resumes rather than
+restarting, and the button says so — *Resume round 1 — 7th hole, +2*. A practice
+round gives way to a tournament, because there is nothing at stake in one.
+
+**Simulating past it.** Leaving a bad round and simulating the event would have
+replayed those holes for you: a do-over with a button on it, worse than the
+reload because it looks sanctioned. So the tour will not move on while a
+tournament round is unfinished.
+
+That would be a trap on its own — a round that cannot be restarted, cannot be
+abandoned and cannot be skipped — so there is a way out that costs rather than
+pays: **let the caddie finish the round**. The holes you played stand shot for
+shot, and the rest are played by the same engine, at the same pressure, in the
+same weather, seeded off the session so it cannot be re-rolled either. A ruined
+front nine is still a ruined front nine.
+
+None of this is proof against somebody editing their own save file by hand. It is
+a single-player game on the player's own machine; the account server moves the
+rules somewhere they cannot reach, but the tour is still simulated in the browser.
+What it does close is the only thing anybody would actually do by accident or on
+impulse, which is press reload.
+
 ## Twenty courses, four of them majors
 
 A season is twenty weeks and twenty golf courses. Six are authored hole by hole
@@ -922,6 +980,10 @@ XP award. Nothing else in the career system hardcodes a threshold.
 - `npm run smoke` — builds the app, drives it in headless Chromium through every
   screen, plays shots, simulates a season, rolls the year over and reloads,
   failing on any console error.
+- `npm run smoke:shots` — plays real shots in a tournament round, reads the save
+  file mid-flight, reloads the page and checks the round came back identical;
+  then tries both ways round it (restarting, and simulating past it) and checks
+  that neither works.
 - `npm run smoke:career` — the same, for the career: register, build a golfer,
   play a season, spend the XP, start the next one, sign out, sign back in and
   reload. `--server` runs it against the real account API over HTTP instead of

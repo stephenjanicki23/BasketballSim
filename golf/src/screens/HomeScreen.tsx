@@ -2,6 +2,7 @@
 
 import { Leaderboard } from '../components/Leaderboard';
 import { Empty, Panel, Stat, money, ordinal, toPar } from '../components/ui';
+import { sessionProgress } from '../game/session';
 import { useCurrentTournament, useGolferIndex, useStore } from '../state/store';
 import { COURSE_BY_ID } from '../data/courses';
 import { describeWeather } from '../simulation/weatherEngine';
@@ -18,6 +19,16 @@ export function HomeScreen(): JSX.Element {
   const points = pointsStandings(universe).slice(0, 10);
   const ranking = worldRanking(universe).slice(0, 10);
   const news = universe.news.slice(0, 5);
+
+  /**
+   * A round already under way, if there is one. Shown rather than hidden because
+   * the alternative — a button that says "Play round 1" and quietly drops you
+   * onto the 7th tee three over — is exactly the sort of thing that makes a
+   * player think the game has lost their score.
+   */
+  const saved = universe.session
+    ? { round: universe.session.round, ...sessionProgress(universe.session) }
+    : null;
 
   return (
     <div className="screen home">
@@ -57,7 +68,9 @@ export function HomeScreen(): JSX.Element {
                 </span>
                 {tournament.roundsPlayed < ROUNDS && (
                   <button type="button" className="hit hit--small" onClick={startTournamentRound}>
-                    Play round {tournament.roundsPlayed + 1}
+                    {saved
+                      ? `Resume round ${saved.round} — ${ordinal(saved.hole)} hole, ${toPar(saved.toPar)}`
+                      : `Play round ${tournament.roundsPlayed + 1}`}
                   </button>
                 )}
               </div>

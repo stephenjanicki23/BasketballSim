@@ -32,7 +32,7 @@ import {
   type DailyTouch, addPuttingStats, bagFor, clubForDistance, dailyTouch, emptyPuttingStats,
   fatigueForHole,
 } from '../simulation/golferEngine';
-import { chooseShot } from '../simulation/holeEngine';
+import { chooseShot, playHole, type HoleOutcome } from '../simulation/holeEngine';
 import { conditionsFor } from '../simulation/weatherEngine';
 import { COURSE_BY_ID } from '../data/courses';
 import { CUT_SIZE, pressureFor, type RoundStats, type Tournament } from '../simulation/tournamentEngine';
@@ -56,6 +56,12 @@ export interface ShotRecord {
   holed: boolean;
   quality: string;
   note: string;
+}
+
+/** A shot, with the hole it was played on, for the round-long ledger. */
+export interface RoundShot extends ShotRecord {
+  hole: number;
+  par: 3 | 4 | 5;
 }
 
 export interface FlightAnimation {
@@ -91,7 +97,19 @@ export interface PlaySession {
 
   holeScores: (number | null)[];
   stats: RoundStats;
+  /** The shots played on the hole in hand. Cleared when you walk to the next tee. */
   shots: ShotRecord[];
+  /**
+   * Every shot of the round, in order, and never cleared.
+   *
+   * `shots` is the current hole's card and is reset at each tee, which is right
+   * for the panel that draws it and wrong as a record: by the 18th there would be
+   * no evidence that the first seventeen holes were ever played, only their
+   * totals. This is the evidence. It goes into the save file with everything
+   * else, so a round that is reloaded is a round you can still account for shot
+   * by shot.
+   */
+  roundShots: RoundShot[];
   log: string[];
 
   club: ClubId;
@@ -230,6 +248,7 @@ export function createSession(setup: SessionSetup): PlaySession {
     holeScores: new Array(18).fill(null),
     stats: emptyRoundStats(),
     shots: [],
+    roundShots: [],
     log: [],
     club: 'D',
     shotType: 'full',
@@ -263,6 +282,13 @@ export function startHole(
   holeNumber: number,
   standing?: SessionSetup['standing'],
 ): PlaySession {
+  // The hole just finished is folded into the round's ledger before its own card
+  // is cleared. Doing it here rather than in `completeHole` means it happens
+  // exactly once per hole and on the one path that can possibly discard `shots`.
+  const finished = session.shots.length
+    ? session.shots.map((shot) => ({ ...shot, hole: session.holeNumber, par: sessionHole(session).spec.par }))
+    : [];
+
   const next: PlaySession = {
     ...session,
     holeNumber,
@@ -277,6 +303,7 @@ export function startHole(
     fairwayHit: null,
     driveDistance: null,
     shots: [],
+    roundShots: [...session.roundShots, ...finished],
     status: 'aiming',
     animation: null,
     lastResult: null,
@@ -719,4 +746,171 @@ export function standingFor(tournament: Tournament, golferId: string, fieldSize:
 
 export function conditionsForSession(tournament: Tournament, round: number): Conditions {
   return conditionsFor(tournament.weather[round - 1], `${tournament.id}:${round}`);
+}
+
+// ---------------------------------------------------------------------------
+// Saving a round in progress
+// ---------------------------------------------------------------------------
+
+/**
+ * A round, as it goes into the save file.
+ *
+ * Everything in a `PlaySession` is already plain data except the flight
+ * animation, which is a few hundred interpolated points describing a ball that
+ * has already landed. It is rebuilt from nothing on the next shot and is worth
+ * nothing on disk, so it is the one thing dropped.
+ */
+export type SavedSession = Omit<PlaySession, 'animation'> & { animation: null };
+
+export function toSavedSession(session: PlaySession): SavedSession {
+  return { ...session, animation: null };
+}
+
+/**
+ * Pick a saved round back up.
+ *
+ * The one case worth thinking about is a session saved mid-flight. `hit` resolves
+ * the whole shot before it returns — the ball has moved, the lie is set and the
+ * stroke is on the card — and `animating` only means the UI has not finished
+ * drawing it. So a round restored in that state is not an unfinished shot to
+ * replay; it is a finished shot whose animation nobody is going to watch, and
+ * settling it immediately is both correct and the only honest option. Leaving it
+ * replayable would be precisely the hole this is meant to close.
+ */
+export function restoreSession(saved: SavedSession, golfer: Golfer): PlaySession {
+  const session: PlaySession = { ...saved, animation: null };
+  if (session.status === 'animating') return settle(session, golfer);
+  return session;
+}
+
+/**
+ * Every shot of the round so far, including the hole being played.
+ *
+ * The ledger only gains a hole's shots when you walk to the next tee, so on the
+ * hole in hand the two have to be read together. Anything asking "what has this
+ * player actually done today" wants this rather than either half.
+ */
+export function allShots(session: Pick<PlaySession, 'roundShots' | 'shots' | 'holeNumber' | 'courseId'>): RoundShot[] {
+  const par = COURSE_BY_ID[session.courseId]?.holes[session.holeNumber - 1]?.par ?? 4;
+  return [
+    ...session.roundShots,
+    ...session.shots.map((shot) => ({ ...shot, hole: session.holeNumber, par: par as 3 | 4 | 5 })),
+  ];
+}
+
+/** How far into the round a saved session is, for the UI. */
+export function sessionProgress(saved: SavedSession): { hole: number; strokes: number; toPar: number } {
+  const course = COURSE_BY_ID[saved.courseId];
+  let strokes = 0;
+  let par = 0;
+  saved.holeScores.forEach((score, index) => {
+    if (score === null) return;
+    strokes += score;
+    par += course?.holes[index]?.par ?? 4;
+  });
+  return { hole: saved.holeNumber, strokes, toPar: strokes - par };
+}
+
+/**
+ * Hand the rest of the round to the caddie.
+ *
+ * Needed because saving every shot creates a trap it would otherwise be unfair
+ * to leave a player in. A tournament round cannot be restarted and cannot be
+ * abandoned, so without this a player who starts one and does not want to finish
+ * it by hand has no way forward at all. Simulating past it is not an option
+ * either — that would be a sanctioned do-over, which is exactly the thing being
+ * closed.
+ *
+ * So the holes already played stand, shot for shot, and the remaining ones are
+ * played by the same engine that plays the other 156 golfers, at the same
+ * pressure and in the same weather. There is nothing to gain by using it: a
+ * ruined front nine is still a ruined front nine.
+ */
+export function simulateRestOfRound(session: PlaySession, golfer: Golfer): PlaySession {
+  let next: PlaySession = { ...session };
+  const remaining = session.holesToPlay.slice(session.holeIndex);
+  if (remaining.length === 0) return { ...next, status: 'roundComplete' };
+
+  for (const [offset, holeNumber] of remaining.entries()) {
+    // The same pin the player has been putting to all round, not the default one.
+    const base = holeGeometry(COURSE_BY_ID[session.courseId], holeNumber);
+    const hole = withPin(base, pinForRound(base, session.round));
+    const outcome = playHole({
+      hole,
+      golfer,
+      conditions: session.conditions,
+      // Seeded off the session rather than the clock, so simulating the rest of
+      // a round is as reproducible as playing it — and cannot be re-rolled by
+      // reloading either.
+      rng: createRng(`${session.seed}:auto:${holeNumber}`),
+      pressure: session.pressure,
+      fast: true,
+      shotSeed: holeNumber * 11 + session.round * 3,
+      touch: session.touch,
+      situation: { ...session.situation, holesRemaining: remaining.length - offset },
+    });
+
+    // The hole in hand is already part-played; its strokes so far are sunk and
+    // the simulated hole replaces what is left of it.
+    const played = offset === 0 ? session.strokesThisHole : 0;
+    const strokes = Math.max(outcome.strokes, played + (played > 0 ? 1 : 0));
+
+    next.holeScores = [...next.holeScores];
+    next.holeScores[holeNumber - 1] = strokes;
+    // The caddie's shots go into the ledger too. "Every shot is saved" would be a
+    // half-truth if the holes somebody else played on your behalf left no record
+    // of what happened on them.
+    next.roundShots = [
+      ...next.roundShots,
+      ...(offset === 0 ? session.shots.map((shot) => ({ ...shot, hole: holeNumber, par: hole.spec.par })) : []),
+      ...outcome.shots.map((shot) => ({
+        ...shot,
+        puttIntent: shot.puttIntent as PuttIntentId | undefined,
+        hole: holeNumber,
+        par: hole.spec.par,
+        note: shot.note ? `${shot.note} (played by the caddie)` : 'Played by the caddie.',
+      })),
+    ];
+    next.stats = foldHoleStats(next.stats, outcome, strokes);
+    next.log = [...next.log, `— the caddie played the ${ordinal(holeNumber)}: ${strokes} (par ${hole.spec.par}).`];
+  }
+
+  next.shots = [];
+  next.holeIndex = session.holesToPlay.length - 1;
+  next.holeNumber = session.holesToPlay[next.holeIndex];
+  next.status = 'roundComplete';
+  next.animation = null;
+  return next;
+}
+
+/** Fold a simulated hole into the round's running statistics. */
+function foldHoleStats(stats: RoundStats, outcome: HoleOutcome, strokes: number): RoundStats {
+  const next: RoundStats = {
+    ...stats,
+    putting: { ...stats.putting, madeByBand: [...stats.putting.madeByBand], attemptsByBand: [...stats.putting.attemptsByBand] },
+  };
+  next.putts += outcome.putts;
+  next.penalties += outcome.penalties;
+  next.girAttempts++;
+  if (outcome.gir) next.girHit++;
+  if (outcome.fairwayHit !== null) {
+    next.fairwayAttempts++;
+    if (outcome.fairwayHit) next.fairwaysHit++;
+  }
+  if (outcome.driveDistance !== null) {
+    next.driveTotal += outcome.driveDistance;
+    next.drives++;
+  }
+  if (outcome.scrambled !== null) {
+    next.scrambleAttempts++;
+    if (outcome.scrambled) next.scrambleSaves++;
+  }
+  const toPar = strokes - outcome.par;
+  if (toPar <= -2) next.eagles++;
+  else if (toPar === -1) next.birdies++;
+  else if (toPar === 0) next.pars++;
+  else if (toPar === 1) next.bogeys++;
+  else next.doubles++;
+  addPuttingStats(next.putting, outcome.putting);
+  return next;
 }

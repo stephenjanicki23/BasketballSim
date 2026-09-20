@@ -15,7 +15,8 @@
     "test": "node tools/tsrun.mjs test/regression.ts && node tools/tsrun.mjs test/holeAudit.ts && node tools/tsrun.mjs test/scorecard.ts && node tools/tsrun.mjs test/careerBalance.ts && node tools/tsrun.mjs test/accountApi.ts",
     "server": "node tools/tsrun.mjs server/index.ts",
     "careers": "node tools/tsrun.mjs test/careerSeasons.ts",
-    "smoke:career": "npm run build && node tools/careerSmoke.mjs"
+    "smoke:career": "npm run build && node tools/careerSmoke.mjs",
+    "smoke:shots": "npm run build && node tools/shotSaveTest.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

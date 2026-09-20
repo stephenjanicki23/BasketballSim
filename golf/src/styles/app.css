@@ -1036,3 +1036,40 @@ tr.cut { opacity: 0.5; }
   .upgrade__buttons { padding-top: 0; }
   .review__shape { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The round's shot ledger, on the play screen. */
+.roundcard {
+  margin: 8px 0 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+.roundcard summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.roundcard[open] summary { border-bottom: 1px solid var(--line-soft); color: var(--text); }
+.roundcard__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 10px 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.roundcard__list li {
+  display: grid;
+  grid-template-columns: 22px 20px 44px minmax(0, 1fr) 70px;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-variant-numeric: tabular-nums;
+}
+.roundcard__hole { color: var(--text-faint); }
+.roundcard__stroke { color: var(--text-dim); }
+.roundcard__club { color: var(--text); }
+.roundcard__result { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roundcard__lie { color: var(--text-faint); text-align: right; }
+.roundcard__empty { color: var(--text-faint); grid-template-columns: 1fr; }
