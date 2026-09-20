@@ -16,6 +16,7 @@
     "server": "node tools/tsrun.mjs server/index.ts",
     "careers": "node tools/tsrun.mjs test/careerSeasons.ts",
     "smoke:career": "npm run build && node tools/careerSmoke.mjs",
+    "smoke:flight": "npm run build && node tools/flightShots.mjs",
     "smoke:shots": "npm run build && node tools/shotSaveTest.mjs"
   },
   "dependencies": {

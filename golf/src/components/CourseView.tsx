@@ -13,6 +13,7 @@ import { drawHole, drawHoleMap, type DebugOptions } from './render/holeRenderer'
 import { type Vec2, dist, norm, sub } from '../simulation/geometry';
 import { dispersionContour, sigmaForShare, type ShotPlan } from '../simulation/shotEngine';
 import type { GreenRead } from '../simulation/puttingEngine';
+import { apexFeet, sampleFlight, type FlightSample } from './render/flight';
 import type { FlightAnimation } from '../game/session';
 import type { HoleGeometry } from '../simulation/types';
 
@@ -58,8 +59,8 @@ export function CourseView(props: CourseViewProps): JSX.Element {
   const dragRef = useRef<{ x: number; y: number; pan: Vec2 } | null>(null);
   const timeRef = useRef(0);
   const animStartRef = useRef<number | null>(null);
-  const [flight, setFlight] = useState<{ x: number; y: number; h: number } | null>(null);
-  const [trail, setTrail] = useState<{ x: number; y: number; h: number }[] | null>(null);
+  const animDoneRef = useRef(false);
+  const shotRef = useRef<FlightSample | null>(null);
 
   // --- Sizing --------------------------------------------------------------
   useEffect(() => {
@@ -91,15 +92,23 @@ export function CourseView(props: CourseViewProps): JSX.Element {
       );
     } else if (puttingView) {
       points.push(...hole.green.outline, hole.pin);
+    } else if (animation && animation.path.length > 0) {
+      // While a shot is in the air the frame belongs to the shot: where it was
+      // struck, and where it comes to rest. `hit` has already moved the ball by
+      // the time the first frame is drawn, so framing the ball would sit on the
+      // landing and miss the flight entirely — which is the whole thing worth
+      // watching.
+      points.push(animation.path[0], animation.rollPath[animation.rollPath.length - 1]);
+      if (target) points.push(target);
     } else {
       points.push(hole.pin);
       if (target) points.push(target);
       if (plan) points.push(...dispersionContour(plan, sigmaForShare(0.9), 16));
-      if (animation && animation.path.length > 0) {
-        points.push(animation.path[animation.path.length - 1]);
-      }
     }
-    const margin = puttingView ? 6 : wholeHole ? 20 : 26;
+    // A ball in the air is drawn above where it actually is, so the frame has to
+    // leave room overhead or the apex of a driver clips off the top.
+    const lift = animation ? apexFeet(animation) / 3 * 0.34 : 0;
+    const margin = (puttingView ? 6 : wholeHole ? 20 : 26) + lift;
     const base = fitCamera(points, size.width, size.height, {
       rotation,
       margin,
@@ -115,55 +124,15 @@ export function CourseView(props: CourseViewProps): JSX.Element {
   }, [ball, hole, target, plan, animation, size, rotation, manual, puttingView, wholeHole]);
 
   // --- Animation -----------------------------------------------------------
+  // The shot is sampled inside the draw loop rather than pushed through React
+  // state: a new ball position sixty times a second would be sixty renders a
+  // second, and the animation would stutter under the cost of the re-renders it
+  // was asking for. These refs are the handoff.
   useEffect(() => {
-    if (!animation) {
-      animStartRef.current = null;
-      setFlight(null);
-      setTrail(null);
-      return;
-    }
     animStartRef.current = null;
-    let raf = 0;
-    const step = (now: number) => {
-      if (animStartRef.current === null) animStartRef.current = now;
-      const elapsed = (now - animStartRef.current) / 1000;
-      const duration = animation.duration;
-      const t = Math.min(1, elapsed / duration);
-
-      if (animation.putt) {
-        const points = animation.putt;
-        const index = Math.min(points.length - 1, Math.floor(t * (points.length - 1)));
-        const point = points[index];
-        setFlight({ x: point.x, y: point.y, h: 0 });
-        setTrail(points.slice(0, index + 1).map((p) => ({ x: p.x, y: p.y, h: 0 })));
-      } else {
-        // Two phases: flight, then the roll-out.
-        const flightShare = 0.78;
-        if (t < flightShare) {
-          const ft = t / flightShare;
-          const points = animation.path;
-          const index = Math.min(points.length - 1, Math.floor(ft * (points.length - 1)));
-          setFlight(points[index]);
-          setTrail(points.slice(0, index + 1));
-        } else {
-          const rt = (t - flightShare) / (1 - flightShare);
-          const from = animation.rollPath[0];
-          const to = animation.rollPath[animation.rollPath.length - 1];
-          const eased = 1 - Math.pow(1 - rt, 2.2);
-          setFlight({ x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased, h: 0 });
-          setTrail(animation.path);
-        }
-      }
-
-      if (t >= 1) {
-        onAnimationDone();
-        return;
-      }
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [animation, onAnimationDone]);
+    animDoneRef.current = false;
+    shotRef.current = null;
+  }, [animation]);
 
   // --- Draw loop -----------------------------------------------------------
   useEffect(() => {
@@ -178,8 +147,19 @@ export function CourseView(props: CourseViewProps): JSX.Element {
     if (!ctx) return;
 
     let raf = 0;
+    let reported = false;
     const render = (now: number) => {
       timeRef.current = now / 1000;
+      if (animation) {
+        if (animStartRef.current === null) animStartRef.current = now;
+        const sample = sampleFlight(animation, (now - animStartRef.current) / 1000);
+        shotRef.current = sample;
+        // The last frame is drawn before the session is told to settle the ball,
+        // so the shot never blinks out one frame short of where it finished.
+        if (sample.done) animDoneRef.current = true;
+      } else {
+        shotRef.current = null;
+      }
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       drawHole(ctx, {
         hole,
@@ -188,8 +168,7 @@ export function CourseView(props: CourseViewProps): JSX.Element {
         target: interactive || animation ? target : null,
         plan: animation ? null : plan,
         putt: animation ? null : putt,
-        flight,
-        trail,
+        shot: shotRef.current,
         shotLines,
         showDispersion,
         showZones,
@@ -200,13 +179,19 @@ export function CourseView(props: CourseViewProps): JSX.Element {
         hoverTarget: hover,
         debug,
       });
+      if (animDoneRef.current && !reported) {
+        reported = true;
+        onAnimationDone();
+        return;
+      }
       raf = requestAnimationFrame(render);
     };
     raf = requestAnimationFrame(render);
     return () => cancelAnimationFrame(raf);
   }, [
-    hole, camera, ball, target, plan, putt, flight, trail, shotLines, showDispersion,
+    hole, camera, ball, target, plan, putt, shotLines, showDispersion,
     showZones, windFrom, windSpeed, puttingView, hover, size, interactive, animation, debug,
+    onAnimationDone,
   ]);
 
   // --- Hole map inset ------------------------------------------------------

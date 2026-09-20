@@ -137,6 +137,13 @@ export function PlayScreen(): JSX.Element {
   const lie = LIES[session.lie];
   const putting = session.lie === 'green';
   const ledger = allShots(session);
+  // `hit` records the stroke before the first frame of ball flight, so the shot
+  // in the air is already in `session.shots`. Drawing its line would put a
+  // dotted spoiler from the tee to the landing on screen before the ball gets
+  // there, which is exactly what there is to watch.
+  const shotLines = session.shots
+    .slice(0, session.status === 'animating' ? -1 : undefined)
+    .map((shot) => ({ from: shot.from, to: shot.to }));
   const par = hole.spec.par;
   const holeToPar = session.strokesThisHole > 0 ? session.strokesThisHole - par : 0;
 
@@ -181,7 +188,7 @@ export function PlayScreen(): JSX.Element {
           target={session.target}
           plan={plan.kind === 'swing' ? plan.plan : null}
           putt={plan.kind === 'putt' ? plan.decision.read : null}
-          shotLines={session.shots.map((shot) => ({ from: shot.from, to: shot.to }))}
+          shotLines={shotLines}
           animation={session.animation}
           onAnimationDone={completeAnimation}
           onAim={aim}

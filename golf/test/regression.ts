@@ -28,6 +28,8 @@ import { playHole } from '../src/simulation/holeEngine';
 import { createRng } from '../src/simulation/rng';
 import { add, dist, pointAlongPolyline, polylineLength, scale, vec } from '../src/simulation/geometry';
 import { courseFit } from '../src/simulation/courseFit';
+import { sampleFlight } from '../src/components/render/flight';
+import type { FlightAnimation } from '../src/game/session';
 import {
   advanceSeason, createUniverse, currentTournament, seasonComplete, simulateNextRound,
   simulateTournament,
@@ -744,6 +746,105 @@ test('the same seed builds the same universe', () => {
   simulateTournament(b, { fast: true });
   assert.equal(a.schedule[0].winnerId, b.schedule[0].winnerId);
   assert.equal(a.schedule[0].leaderboard[0].total, b.schedule[0].leaderboard[0].total);
+});
+
+// ---------------------------------------------------------------------------
+// The shot animation. It draws nothing here — the sampler is the part that has
+// to be right, because a shot that snaps between path points or slides to a stop
+// at a constant speed reads as a bug however well the course is drawn.
+
+function flight(carryYards: number, apexFeet: number, rollYards: number, seconds: number): FlightAnimation {
+  const steps = 26;
+  const path: { x: number; y: number; h: number }[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    path.push({ x: 0, y: carryYards * t, h: apexFeet * 4 * Math.pow(t, 0.92) * (1 - t) });
+  }
+  return {
+    path,
+    rollPath: [{ x: 0, y: carryYards }, { x: 0, y: carryYards + rollYards }],
+    duration: seconds,
+    putt: null,
+  };
+}
+
+function samples(animation: FlightAnimation, fps = 60): ReturnType<typeof sampleFlight>[] {
+  const out: ReturnType<typeof sampleFlight>[] = [];
+  const frames = Math.ceil(animation.duration * fps);
+  for (let i = 0; i <= frames; i++) out.push(sampleFlight(animation, i / fps));
+  return out;
+}
+
+test('the ball flies from the strike to where it lands and stops there', () => {
+  const animation = flight(290, 108, 16, 3.4);
+  const frames = samples(animation);
+  assert.ok(frames.length > 100, 'too few frames to judge');
+
+  // Always moving forward, never backward, never standing still.
+  for (let i = 1; i < frames.length; i++) {
+    const step = frames[i].position.y - frames[i - 1].position.y;
+    assert.ok(step >= -1e-9, `the ball went backwards at frame ${i}`);
+    if (frames[i].phase === 'flight') {
+      assert.ok(step > 0.02, `the ball snapped between path points at frame ${i} (step ${step.toFixed(4)})`);
+    }
+  }
+
+  // And it comes to rest exactly where the simulation put it.
+  const last = frames[frames.length - 1];
+  assert.ok(last.done, 'the animation never reported itself finished');
+  assert.equal(last.position.h, 0, 'the ball finished in the air');
+  assert.ok(Math.abs(last.position.y - 306) < 0.5, `the ball rested at ${last.position.y.toFixed(1)}, not 306`);
+});
+
+test('the shot climbs to its apex and comes back down', () => {
+  const animation = flight(290, 108, 16, 3.4);
+  const frames = samples(animation);
+  const airborne = frames.filter((f) => f.phase === 'flight');
+  const peak = airborne.reduce((best, f) => (f.position.h > best.position.h ? f : best), airborne[0]);
+
+  // The flight curve peaks a touch above the club's nominal apex, at 1.057x.
+  assert.ok(peak.position.h > 108, `the apex sampled only ${peak.position.h.toFixed(1)}ft of 114`);
+  assert.equal(peak.apex, airborne[0].apex, 'the apex moved during the shot');
+  assert.ok(peak.apex > 110 && peak.apex < 116, `apex reported as ${peak.apex.toFixed(1)}ft`);
+
+  // The height goes up, then down, and only once each way: the ball drawn bigger
+  // at the apex depends on there being exactly one apex to be biggest at.
+  let turns = 0;
+  for (let i = 2; i < airborne.length; i++) {
+    const before = airborne[i - 1].position.h - airborne[i - 2].position.h;
+    const after = airborne[i].position.h - airborne[i - 1].position.h;
+    if (before > 0 && after < 0) turns++;
+  }
+  assert.ok(turns <= 1, `the flight turned over ${turns} times`);
+  assert.ok(airborne[airborne.length - 1].position.h < peak.position.h * 0.35, 'the ball never came down');
+});
+
+test('a running shot skips before it settles, a dead one does not', () => {
+  const hot = samples(flight(240, 92, 18, 3.0)).filter((f) => f.sinceLanding !== null);
+  assert.ok(hot.some((f) => f.position.h > 3), 'a shot running eighteen yards never bounced');
+  assert.ok(hot[hot.length - 1].position.h === 0, 'the bounce never settled');
+
+  const dead = samples(flight(120, 96, 0.2, 2.0)).filter((f) => f.sinceLanding !== null);
+  assert.ok(dead.every((f) => f.position.h === 0), 'a wedge that stopped dead hopped anyway');
+
+  // The pitch mark is the landing point, not the resting point.
+  assert.ok(hot[0].landing, 'no pitch mark was reported');
+  assert.ok(Math.abs((hot[0].landing as { y: number }).y - 240) < 0.001, 'the pitch mark is not where the ball landed');
+});
+
+test('a putt dies rather than sliding at a constant speed', () => {
+  const putt: FlightAnimation = {
+    path: [],
+    rollPath: [],
+    duration: 1.4,
+    putt: Array.from({ length: 27 }, (_, i) => ({ x: 0, y: (i / 26) * 24 })),
+  };
+  const frames = samples(putt);
+  const early = frames[Math.round(frames.length * 0.1)].position.y - frames[0].position.y;
+  const late = frames[frames.length - 1].position.y - frames[Math.round(frames.length * 0.9)].position.y;
+  assert.ok(early > late * 2, `the putt did not slow down (${early.toFixed(2)} then ${late.toFixed(2)})`);
+  assert.ok(frames.every((f) => f.position.h === 0), 'the putt left the ground');
+  assert.ok(Math.abs(frames[frames.length - 1].position.y - 24) < 0.2, 'the putt stopped short of its own path');
 });
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@
  */
 
 import { type Camera, toScreen } from './camera';
+import type { FlightSample } from './flight';
 import { type Vec2, pointAlongPolyline } from '../../simulation/geometry';
 import { createRng } from '../../simulation/rng';
 import { dispersionContour, sigmaForShare, type ShotPlan } from '../../simulation/shotEngine';
@@ -25,10 +26,8 @@ export interface RenderOptions {
   target: Vec2 | null;
   plan: ShotPlan | null;
   putt: GreenRead | null;
-  /** Ball position during an animation, with height in feet. */
-  flight: { x: number; y: number; h: number } | null;
-  /** The traced path so far. */
-  trail: { x: number; y: number; h: number }[] | null;
+  /** The shot in the air, sampled for this frame. Null when nothing is moving. */
+  shot: FlightSample | null;
   /** Previous shots on this hole. */
   shotLines: { from: Vec2; to: Vec2 }[];
   showDispersion: boolean;
@@ -1303,14 +1302,20 @@ function drawAimLine(ctx: CanvasRenderingContext2D, options: RenderOptions): voi
   const a = toScreen(camera, ball);
   const b = toScreen(camera, target);
   ctx.save();
-  ctx.setLineDash([7, 6]);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.62)';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  // While a shot is in the air the line would run from where the ball has
+  // already finished back to where it was aimed, which reads as nonsense
+  // crossing the flight. The crosshair on its own still says where it was meant
+  // to go, which is the half worth watching the shot against.
+  if (!options.shot) {
+    ctx.setLineDash([7, 6]);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.62)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   // Target crosshair.
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
   ctx.lineWidth = 1.8;
@@ -1461,46 +1466,110 @@ function drawPin(ctx: CanvasRenderingContext2D, options: RenderOptions): void {
   ctx.restore();
 }
 
+/**
+ * Up-screen pixels the ball is drawn above its own ground position. Height has
+ * nowhere to go in a plan view, so it is spent on the one axis the eye already
+ * reads as "off the ground", and the shadow left behind carries the rest.
+ */
+function flightLift(camera: Camera, feet: number): number {
+  return Math.min(camera.height * 0.32, (feet / 3) * camera.scale * 0.26);
+}
+
 function drawBallAndFlight(ctx: CanvasRenderingContext2D, options: RenderOptions): void {
-  const { camera, ball, flight, trail } = options;
+  const { camera, ball, shot } = options;
   ctx.save();
 
+  const position = shot ? shot.position : { x: ball.x, y: ball.y, h: 0 };
+  // Height as a share of this shot's own apex, so a lob wedge peaks as clearly
+  // as a driver does rather than looking like a flat little skim beside it.
+  const apex = shot && shot.apex > 4 ? shot.apex : 0;
+  const climb = apex > 0 ? Math.max(0, Math.min(1, position.h / apex)) : 0;
+
+  // --- The arc flown so far ------------------------------------------------
+  // Drawn segment by segment so it fades and thins behind the ball: the eye
+  // follows the bright head of the trail instead of reading the whole line at
+  // once, and the curve up the screen is the shot's height over time.
+  const trail = shot ? shot.trail : null;
   if (trail && trail.length > 1) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    trail.forEach((point, index) => {
+    const screens = trail.map((point) => {
       const screen = toScreen(camera, point);
-      const lift = point.h * camera.scale * 0.055;
-      if (index === 0) ctx.moveTo(screen.x, screen.y - lift);
-      else ctx.lineTo(screen.x, screen.y - lift);
+      return { x: screen.x, y: screen.y - flightLift(camera, point.h) };
     });
+    ctx.lineCap = 'round';
+    for (let i = 1; i < screens.length; i++) {
+      const age = i / (screens.length - 1);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${(0.08 + 0.52 * age).toFixed(3)})`;
+      ctx.lineWidth = 0.8 + 1.9 * age;
+      ctx.beginPath();
+      ctx.moveTo(screens[i - 1].x, screens[i - 1].y);
+      ctx.lineTo(screens[i].x, screens[i].y);
+      ctx.stroke();
+    }
+  }
+
+  const screen = toScreen(camera, position);
+  const lift = flightLift(camera, position.h);
+
+  // --- The pitch mark ------------------------------------------------------
+  // A ring thrown out where the ball first came down, which fades as the ball
+  // runs away from it. It is the moment the shot stops being a guess.
+  if (shot && shot.landing && shot.sinceLanding !== null && shot.sinceLanding < 0.5) {
+    const age = shot.sinceLanding / 0.5;
+    const mark = toScreen(camera, shot.landing);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${(0.45 * (1 - age)).toFixed(3)})`;
+    ctx.lineWidth = 1.6 * (1 - age) + 0.4;
+    ctx.beginPath();
+    ctx.arc(mark.x, mark.y, 2 + 13 * age, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  const position = flight ?? { x: ball.x, y: ball.y, h: 0 };
-  const screen = toScreen(camera, position);
-  const lift = position.h * camera.scale * 0.055;
-
-  // Shadow on the ground, thrown by the same sun as everything else: it runs
-  // away from the ball as the shot climbs and comes back to meet it on landing,
-  // which is most of what tells you how high the ball is.
+  // --- Shadow --------------------------------------------------------------
+  // Thrown by the same sun as everything else: it runs away from the ball as
+  // the shot climbs and comes back to meet it on landing, which is most of what
+  // tells you how high the ball is.
   const heightYards = position.h / 3;
-  const cast = shadowOffset(camera, heightYards * 0.8);
-  const spread = 1 + Math.min(1.4, heightYards * 0.05);
-  ctx.fillStyle = `rgba(0, 0, 0, ${0.36 / spread})`;
+  const cast = shadowOffset(camera, heightYards * 0.45);
+  const spread = 1 + Math.min(1.7, heightYards * 0.055);
+  ctx.fillStyle = `rgba(14, 26, 14, ${(0.36 / Math.sqrt(spread)).toFixed(3)})`;
   ctx.beginPath();
   ctx.ellipse(screen.x + cast.x, screen.y + cast.y, 3.4 * spread, 2.1 * spread, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // The ball itself.
-  const radius = 3.6 + Math.min(3, position.h * 0.012);
+  // --- The ball ------------------------------------------------------------
+  // It grows towards the apex and shrinks back down to meet the ground, which
+  // is how a ball coming at you over a fairway actually reads.
+  const radius = 3.4 + 4.3 * climb;
+  const cx = screen.x;
+  const cy = screen.y - lift;
+
+  if (climb > 0.06) {
+    // A little sky haze around a ball that is properly up in the air.
+    const halo = ctx.createRadialGradient(cx, cy, radius * 0.6, cx, cy, radius * 2.4);
+    halo.addColorStop(0, `rgba(255, 255, 255, ${(0.3 * climb).toFixed(3)})`);
+    halo.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(screen.x, screen.y - lift, radius, 0, Math.PI * 2);
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(40, 50, 40, 0.6)';
-  ctx.lineWidth = 1;
+  // A dimpled ball in sunlight is brightest towards the sun and shaded away
+  // from it; one pass of each is enough at this size.
+  const shade = ctx.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
+  shade.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+  shade.addColorStop(1, 'rgba(126, 140, 122, 0.3)');
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(36, 48, 36, 0.45)';
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 }
