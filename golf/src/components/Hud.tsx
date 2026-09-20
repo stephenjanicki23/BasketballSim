@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { CLUB_BY_ID, LIES, PUTT_INTENTS, SHOT_TYPES } from '../simulation/config';
 import { availableShotTypes, legalClubs } from '../simulation/shotEngine';
+import { lieStateFor } from '../simulation/lieState';
 import { bagFor } from '../simulation/golferEngine';
 import { windComponents } from '../simulation/weatherEngine';
 import { sessionContext, roundToPar, type PlaySession } from '../game/session';
@@ -58,6 +59,9 @@ export function Hud(props: HudProps): JSX.Element {
   const aiming = session.status === 'aiming';
   const putting = session.lie === 'green';
   const lie = LIES[session.lie];
+  const lieState = lieStateFor(session.lie, session.ball, {
+    weather: session.conditions.weather,
+  });
   const club = CLUB_BY_ID[session.club];
   const bag = bagFor(golfer);
   const toPin = dist(session.ball, hole.pin);
@@ -157,7 +161,7 @@ export function Hud(props: HudProps): JSX.Element {
         {putting ? null : (
           <div className="hud__chip hud__chip--lie hud__chip--static">
             <span className="hud__name">{lie.short.toUpperCase()}</span>
-            <span className="hud__sub">{Math.round(lie.distance * 100)}%</span>
+            <span className="hud__sub">{lieState ? `${Math.round(lieState.quality * 100)}% lie` : lie.name}</span>
           </div>
         )}
       </div>

@@ -8,8 +8,9 @@
  * the reward is worth it.
  */
 
-import { CLUB_BY_ID, LIES, SHOT_TYPES } from '../simulation/config';
+import { CLUB_BY_ID, SHOT_TYPES } from '../simulation/config';
 import { availableShotTypes, legalClubs, sigmaForShare, strikeCost } from '../simulation/shotEngine';
+import { lieLabel } from '../simulation/lieState';
 import { bagFor } from '../simulation/golferEngine';
 import { sessionContext, type PlaySession } from '../game/session';
 import type { ShotPlan } from '../simulation/shotEngine';
@@ -33,7 +34,6 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
   const ctx = sessionContext(session, golfer);
   const bag = bagFor(golfer);
   const distanceToTarget = dist(session.ball, session.target);
-  const lie = LIES[session.lie];
   const disabled = session.status !== 'aiming';
 
   const clubs = legalClubs(ctx);
@@ -125,7 +125,11 @@ export function ShotControls({ session, golfer, plan }: { session: PlaySession; 
           })}
         </div>
         <p className="hint">
-          {lie.name}: distance ×{lie.distance.toFixed(2)}, dispersion ×{lie.accuracy.toFixed(2)}. {lie.note}
+          {lieLabel(plan.lieState)} — {Math.round(plan.lieState.quality * 100)}% lie,{' '}
+          {plan.lieState.surface.grassHeight > 0.05
+            ? `${plan.lieState.surface.grassHeight.toFixed(1)}\u2033 grass`
+            : `${plan.lieState.surface.sandDepth.toFixed(1)}\u2033 sand`}
+          . {plan.lieState.note}
         </p>
       </Panel>
 

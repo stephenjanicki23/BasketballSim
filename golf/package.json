@@ -12,9 +12,10 @@
     "smoke": "npm run build && node tools/smoke.mjs",
     "artifact": "npm run build && node tools/artifact.mjs",
     "calibrate": "node tools/tsrun.mjs test/calibration.ts && node tools/tsrun.mjs test/roundCheck.ts && node tools/tsrun.mjs test/seasonCheck.ts",
-    "test": "node tools/tsrun.mjs test/regression.ts && node tools/tsrun.mjs test/holeAudit.ts && node tools/tsrun.mjs test/scorecard.ts && node tools/tsrun.mjs test/careerBalance.ts && node tools/tsrun.mjs test/accountApi.ts",
+    "test": "node tools/tsrun.mjs test/regression.ts && node tools/tsrun.mjs test/physics.ts && node tools/tsrun.mjs test/holeAudit.ts && node tools/tsrun.mjs test/scorecard.ts && node tools/tsrun.mjs test/careerBalance.ts && node tools/tsrun.mjs test/accountApi.ts",
     "server": "node tools/tsrun.mjs server/index.ts",
     "careers": "node tools/tsrun.mjs test/careerSeasons.ts",
+    "physics": "node tools/tsrun.mjs test/physics.ts",
     "smoke:career": "npm run build && node tools/careerSmoke.mjs",
     "smoke:flight": "npm run build && node tools/flightShots.mjs",
     "smoke:shots": "npm run build && node tools/shotSaveTest.mjs"

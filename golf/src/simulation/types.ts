@@ -38,12 +38,18 @@ export interface ClubDefinition {
   baseLongSigma: number;
   /** 1σ lateral error in yards for a rating-50 golfer. */
   baseLatSigma: number;
-  /** Apex height in feet at neutral launch — drives wind exposure and stopping power. */
-  apex: number;
-  /** Backspin in rpm at neutral strike — drives how the ball reacts on the green. */
+  /**
+   * Launch conditions for a middled strike by a reference tour player. These
+   * three, and nothing else, decide what the trajectory looks like: the flight
+   * model integrates them, and apex, descent angle and carry all fall out of
+   * that rather than being written down separately.
+   */
+  /** Launch angle in degrees. */
+  launch: number;
+  /** Ball speed in mph. */
+  ballSpeed: number;
+  /** Backspin in rpm. */
   spin: number;
-  /** Descent angle in degrees; steep clubs stop, shallow clubs run. */
-  descent: number;
   /** Which rating governs the club's direction. */
   accuracySkill: RatingKey;
 }
@@ -69,26 +75,18 @@ export type LieType =
   | 'water'
   | 'ob';
 
+/**
+ * What a lie is *called*, and nothing else.
+ *
+ * Every number that used to live here — carry, spin, dispersion, roll, mishits —
+ * is now derived from the material the ball is on and the state it is sitting
+ * in, in `surfaces.ts` and `impact.ts`. This is the UI's name for a place on
+ * the golf course, not a set of penalties.
+ */
 export interface LieProfile {
   id: LieType;
   name: string;
   short: string;
-  /** Multiplier on carry distance. */
-  distance: number;
-  /** Multiplier on lateral dispersion — above 1 means a wider miss. */
-  accuracy: number;
-  /** Multiplier on carry dispersion. */
-  distanceControl: number;
-  /** Multiplier on how far the ball runs after landing from here (flyers, no spin). */
-  rollAfter: number;
-  /** Multiplier on backspin, so a rough lie can't stop the ball on a firm green. */
-  spin: number;
-  /** Chance of a genuinely poor strike before skill is applied. */
-  mishit: number;
-  /** Longest club that can realistically be used, by carry ratio; 1 means anything. */
-  maxCarryRatio: number;
-  /** Systematic push/pull in yards per 100 yards of shot, e.g. a ball above your feet. */
-  directionalBias: number;
   /** Which rating helps most out of this lie. */
   skill?: RatingKey;
   /** Flavour text for the UI. */

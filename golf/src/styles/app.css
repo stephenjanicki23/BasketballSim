@@ -1073,3 +1073,66 @@ tr.cut { opacity: 0.5; }
 .roundcard__result { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .roundcard__lie { color: var(--text-faint); text-align: right; }
 .roundcard__empty { color: var(--text-faint); grid-template-columns: 1fr; }
+
+/* --- Physics debug panel (development view, opened with P) --------------- */
+.physics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+.physics section h4 {
+  margin: 0 0 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.physics__rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.physics__rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.physics__rows dt {
+  color: var(--text-dim);
+}
+.physics__rows dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.physics__modifiers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.physics__modifiers li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.physics__modifiers em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.physics__modifiers .is-cost em {
+  color: var(--over);
+}
+.physics__modifiers .is-gain em {
+  color: var(--under);
+}
+.physics__clean {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}

@@ -20,6 +20,7 @@ import { describeWeather } from '../simulation/weatherEngine';
 import { dist } from '../simulation/geometry';
 import { benchmarkRound } from '../simulation/benchmark';
 import { DebugPanel } from '../components/DebugPanel';
+import { PhysicsPanel } from '../components/PhysicsPanel';
 import { Hud } from '../components/Hud';
 import type { DebugOptions } from '../components/render/holeRenderer';
 import { roundTotal } from '../game/session';
@@ -49,6 +50,18 @@ export function PlayScreen(): JSX.Element {
   // A development view, off by default and opened with D: the photograph a hole
   // was traced from, laid over the geometry the engine plays on.
   const [debug, setDebug] = useState<DebugOptions | null>(null);
+  // A second development view, opened with P: what the surface physics did to
+  // this shot, and every modifier it applied.
+  const [physics, setPhysics] = useState(false);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== 'p' && event.key !== 'P') return;
+      if (event.target instanceof HTMLInputElement) return;
+      setPhysics((current) => !current);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
   const reference = hole?.spec.reference?.image ?? null;
   useEffect(() => {
     if (!debug || !reference || debug.image) return;
@@ -240,6 +253,10 @@ export function PlayScreen(): JSX.Element {
 
         {debug && hole && (
           <DebugPanel hole={hole} debug={debug} onChange={setDebug} onClose={() => setDebug(null)} />
+        )}
+
+        {physics && plan.kind === 'swing' && (
+          <PhysicsPanel plan={plan.plan} onClose={() => setPhysics(false)} />
         )}
 
         {session.status === 'roundComplete' && (

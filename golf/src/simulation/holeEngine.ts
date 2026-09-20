@@ -15,11 +15,12 @@
 
 import { type Vec2, add, dist, norm, perp, pointAlongPolyline, scale, sub } from './geometry';
 import { type Rng, clamp } from './rng';
-import { CLUB_BY_ID, LIES, type ShotTypeId } from './config';
+import { CLUB_BY_ID, type ShotTypeId } from './config';
 import {
   type ShotContext,
   type ShotPlan,
   legalClubs,
+  lieFor,
   planShot,
   reachTable,
   resolveShot,
@@ -152,6 +153,11 @@ function candidatesFor(ctx: ShotContext, fast: boolean): Candidate[] {
       candidates.push({ club: 'LW', shotType: 'flop', target: hole.pin });
       candidates.push({ club: '9i', shotType: 'chip', target: hole.pin });
     }
+    // Off a tight lie with a lot of green to work with, the low one is often the
+    // percentage play: land it early and let the ground take it to the hole.
+    if (toPin <= 40 && (ctx.lie === 'fringe' || ctx.lie === 'fairway' || ctx.lie === 'firstCut')) {
+      candidates.push({ club: fast ? '9i' : '8i', shotType: 'bumpRun', target: hole.pin });
+    }
     // Play to the fat of the green rather than at a tucked flag.
     candidates.push({ club: toPin <= 22 ? 'SW' : 'GW', shotType: toPin <= 22 ? 'chip' : 'pitch', target: hole.greenCenter });
     return candidates;
@@ -204,10 +210,18 @@ function candidatesFor(ctx: ShotContext, fast: boolean): Candidate[] {
 
   if (!fast && ctx.conditions.weather.windSpeed > 15 && chosen.length > 0) {
     candidates.push({ club: chosen[0], shotType: 'punch', target: hole.pin });
+    // A knockdown is the shot most tour players actually hit into a breeze:
+    // three-quarters of a swing, flighted down, without giving up the control a
+    // full punch costs.
+    candidates.push({ club: chosen[0], shotType: 'knockdown', target: hole.pin });
+  }
+  // Under branches there is only one shot, and it is not a full swing.
+  if (!fast && (ctx.lie === 'recovery' || ctx.lie === 'pineStraw') && chosen.length > 0) {
+    candidates.push({ club: chosen[0], shotType: 'recovery', target: hole.greenCenter });
   }
 
   // Cannot get there, or in trouble: lay up to a comfortable number.
-  if (!canReach || LIES[ctx.lie].maxCarryRatio < 0.8) {
+  if (!canReach || lieFor(ctx).surface.maxCarryRatio < 0.8) {
     const layupDistance = Math.max(60, toPin - 100);
     const layup = add(ball, scale(lineToPin, layupDistance));
     const longest = sorted.reduce((best, entry) => (entry[1] > best[1] ? entry : best), sorted[0]);
